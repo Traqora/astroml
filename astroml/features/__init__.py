@@ -3,5 +3,6 @@
 Expose feature computation utilities here.
 """
 from . import imbalance
+from .asset_encoder import AssetEncoder
 
-__all__ = ["imbalance"]
+__all__ = ["imbalance", "AssetEncoder"]

@@ -2,6 +2,26 @@
 
 Expose data integrity and leakage detection utilities here.
 """
-from . import leakage
+# Import validation modules for hash-based deduplication and integrity
+from . import dedupe
+from . import hashing
+from . import integrity
+from . import validator
 
-__all__ = ["leakage"]
+# Try to import leakage (may fail if numpy is not installed)
+try:
+    from . import leakage
+    __all__ = [
+        "leakage",
+        "dedupe",
+        "hashing",
+        "validator",
+        "integrity",
+    ]
+except ImportError:
+    __all__ = [
+        "dedupe",
+        "hashing",
+        "validator",
+        "integrity",
+    ]

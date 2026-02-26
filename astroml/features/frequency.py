@@ -130,6 +130,97 @@ def _extract_daily_counts(
 
 
 
+def compute_frequency_metrics(
+    df: pd.DataFrame,
+    timestamp_col: str = "created_at",
+    account_col: str = "account_id",
+) -> pd.DataFrame:
+    """Compute transaction frequency metrics for each account in a DataFrame.
+
+    For each unique account, three temporal frequency metrics are computed
+    over the account's active window (first to last transaction date,
+    inclusive):
+
+    - **mean_tx_per_day**: mean number of transactions per calendar day
+    - **std_tx_per_day**: sample standard deviation (ddof=1) of daily counts
+    - **burstiness**: normalised clustering metric ``(σ - μ) / (σ + μ)``
+
+    Args:
+        df: Transaction DataFrame. Must contain *timestamp_col* and
+            *account_col*; extra columns are ignored.
+        timestamp_col: Name of the column containing transaction timestamps.
+            Accepted types: ``datetime64`` or numeric (Unix epoch seconds).
+            Defaults to ``"created_at"``.
+        account_col: Name of the column containing account identifiers.
+            Values may be any hashable type (str, int, …).
+            Defaults to ``"account_id"``.
+
+    Returns:
+        DataFrame with one row per unique account and columns:
+
+        - ``account``          – account identifier (original type preserved)
+        - ``mean_tx_per_day``  – mean daily transaction count (float)
+        - ``std_tx_per_day``   – sample std of daily counts; 0.0 for
+          single-day windows (float)
+        - ``burstiness``       – burstiness in ``[-1, 1]`` (float)
+
+        Returns an empty DataFrame with those columns when *df* is empty.
+
+    Notes:
+        - Uses ``ddof=1`` (sample standard deviation). Returns ``std=0.0``
+          for accounts whose entire history falls within a single calendar
+          day (only one data point, so sample std is undefined).
+        - Numeric timestamps are treated as Unix epoch **seconds** and
+          converted via ``pd.to_datetime(..., unit="s")``.
+        - The original account identifier type (str, int, …) is preserved
+          in the ``account`` output column.
+        - Each row in *df* counts as one transaction; duplicate rows are
+          each counted separately.
+
+    Examples:
+        >>> import pandas as pd
+        >>> df = pd.DataFrame({
+        ...     "account_id": ["alice", "alice", "bob"],
+        ...     "created_at": pd.to_datetime(["2024-01-01", "2024-01-02",
+        ...                                   "2024-01-01"]),
+        ... })
+        >>> compute_frequency_metrics(df)
+          account  mean_tx_per_day  std_tx_per_day  burstiness
+        0   alice              1.0             0.0        -1.0
+        1     bob              1.0             0.0        -1.0
+    """
+    _validate_dataframe(df, timestamp_col, account_col)
+
+    _SCHEMA = ["account", "mean_tx_per_day", "std_tx_per_day", "burstiness"]
+
+    if df.empty:
+        return pd.DataFrame(columns=_SCHEMA)
+
+    # Convert Unix epoch seconds to datetime if needed
+    working = df
+    if pd.api.types.is_numeric_dtype(df[timestamp_col]):
+        working = df.copy()
+        working[timestamp_col] = pd.to_datetime(working[timestamp_col], unit="s")
+
+    records: list[Dict] = []
+    for account, group in working.groupby(account_col):
+        daily_counts = _extract_daily_counts(group[timestamp_col])
+        mean = float(np.mean(daily_counts))
+        # ddof=1 requires at least 2 data points; single-day window → std=0.0
+        std = float(np.std(daily_counts, ddof=1)) if len(daily_counts) > 1 else 0.0
+        burstiness = _compute_burstiness(mean, std)
+        records.append(
+            {
+                "account": account,
+                "mean_tx_per_day": mean,
+                "std_tx_per_day": std,
+                "burstiness": burstiness,
+            }
+        )
+
+    return pd.DataFrame(records)
+
+
 def _compute_burstiness(mean: float, std: float) -> float:
     """Calculate burstiness metric from mean and standard deviation.
 

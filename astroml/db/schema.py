@@ -218,3 +218,32 @@ class Asset(Base):
             unique=True,
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# Normalized Transactions
+# ---------------------------------------------------------------------------
+
+class NormalizedTransaction(Base):
+    """Normalized representation of a transaction operation."""
+
+    __tablename__ = "normalized_transactions"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    transaction_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    sender: Mapped[str] = mapped_column(String(56), nullable=False)
+    receiver: Mapped[Optional[str]] = mapped_column(String(56))
+    asset: Mapped[str] = mapped_column(String(70), nullable=False)
+    amount: Mapped[Optional[float]] = mapped_column(Numeric)
+    timestamp: Mapped[datetime] = mapped_column(nullable=False)
+
+    __table_args__ = (
+        Index("ix_normalized_transactions_hash", "transaction_hash"),
+        Index("ix_normalized_transactions_sender_timestamp", "sender", "timestamp"),
+        Index(
+            "ix_normalized_transactions_receiver_timestamp",
+            "receiver",
+            "timestamp",
+            postgresql_where=(receiver.isnot(None)),
+        ),
+    )

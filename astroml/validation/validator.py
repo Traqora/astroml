@@ -102,6 +102,23 @@ class TransactionValidator:
             ValidationResult with validation status and any errors.
         """
         errors: List[ValidationError] = []
+
+        # Check for malformed structure first
+        if not isinstance(transaction, dict):
+            errors.append(
+                ValidationError(
+                    transaction_id=None,
+                    error_type=CorruptionType.MALFORMED_STRUCTURE,
+                    message="Transaction is not a dictionary",
+                )
+            )
+            return ValidationResult(
+                is_valid=False,
+                errors=errors,
+                transaction_id=None,
+                hash="",
+            )
+
         transaction_id = transaction.get("id")
 
         # Check for missing required fields
@@ -129,16 +146,6 @@ class TransactionValidator:
                             field=field,
                         )
                     )
-
-        # Check for malformed structure
-        if not isinstance(transaction, dict):
-            errors.append(
-                ValidationError(
-                    transaction_id=transaction_id,
-                    error_type=CorruptionType.MALFORMED_STRUCTURE,
-                    message="Transaction is not a dictionary",
-                )
-            )
 
         # Compute hash for the transaction
         tx_hash = compute_transaction_hash(

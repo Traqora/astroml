@@ -21,9 +21,10 @@ from typing import Optional
 import aiohttp
 from aiohttp_sse_client import client as sse_client
 
-from astroml.db.schema import Ledger, Transaction
+from astroml.db.schema import Ledger, NormalizedTransaction, Transaction
 from astroml.db.session import get_session
 from astroml.ingestion.config import StreamConfig
+from astroml.ingestion.normalizer import normalize_operation
 from astroml.ingestion.parsers import parse_ledger, parse_operation, parse_transaction
 
 logger = logging.getLogger("astroml.ingestion.stream")
@@ -252,10 +253,26 @@ class HorizonStreamClient:
         await asyncio.to_thread(self._db_write_model, ledger)
 
     async def _persist_operation(self, data: dict) -> None:
-        """Persist an operation."""
+        """Persist an operation and its normalized form."""
         op = parse_operation(data)
+        normalized = normalize_operation(data)
         logger.info("Processing operation %d (type=%s)", op.id, op.type)
-        await asyncio.to_thread(self._db_write_model, op)
+        
+        await asyncio.to_thread(self._db_write_operation_and_normalized, op, normalized)
+
+    @staticmethod
+    def _db_write_operation_and_normalized(op, normalized) -> None:
+        """Synchronous DB write for both raw and normalized operation."""
+        session = get_session()
+        try:
+            session.merge(op)
+            session.merge(normalized)
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
 
     @staticmethod
     def _db_write_model(model) -> None:

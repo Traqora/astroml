@@ -1,0 +1,4 @@
+# file: /Users/ew/waves2/astroml/astroml/features/imbalance.py
+# hypothesis_version: 6.151.9
+
+[0.0, 1e-09, 10.0, 'ignore', 'net_flow_ratio', 'received_amount', 'sent_amount']

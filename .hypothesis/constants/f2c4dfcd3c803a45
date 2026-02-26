@@ -1,0 +1,4 @@
+# file: /Users/ew/waves2/astroml/astroml/features/memo.py
+# hypothesis_version: 6.151.9
+
+['0123456789abcdef', 'hash', 'id', 'is_malformed', 'memo', 'memo_', 'none', 'text', 'type', 'value']

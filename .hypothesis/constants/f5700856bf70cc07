@@ -1,0 +1,4 @@
+# file: /home/maziofweb3/cds/dripsRpos/astroml/astroml/ingestion/parsers.py
+# hypothesis_version: 6.151.9
+
+['+00:00', 'XLM', 'Z', '_links', 'account', 'account_merge', 'amount', 'asset_code', 'asset_issuer', 'asset_type', 'base_fee_in_stroops', 'closed_at', 'create_account', 'created_at', 'destination_account', 'fee_charged', 'fee_pool', 'hash', 'id', 'into', 'ledger', 'memo', 'memo_type', 'native', 'operation_count', 'paging_token', 'prev_hash', 'protocol_version', 'sequence', 'source_account', 'starting_balance', 'successful', 'to', 'total_coins', 'transaction_hash', 'type', 'type_i']

@@ -1,0 +1,4 @@
+# file: /home/maziofweb3/cds/dripsRpos/astroml/astroml/ingestion/state.py
+# hypothesis_version: 6.151.9
+
+['.astroml_state', 'IngestionState', 'ingestion_state.json', 'processed_ledgers', 'r', 'utf-8', 'w']

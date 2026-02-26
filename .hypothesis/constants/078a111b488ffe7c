@@ -1,0 +1,4 @@
+# file: /home/maziofweb3/cds/dripsRpos/astroml/astroml/features/graph/snapshot.py
+# hypothesis_version: 6.151.9
+
+[86400, 'days must be >= 1']

@@ -95,6 +95,7 @@ class TransactionValidator:
         """Validate a single transaction."""
         errors: List[ValidationError] = []
 
+        # Check for malformed structure first
         if not isinstance(transaction, dict):
             errors.append(
                 ValidationError(

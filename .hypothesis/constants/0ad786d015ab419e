@@ -1,0 +1,4 @@
+# file: /home/maziofweb3/cds/dripsRpos/astroml/astroml/db/session.py
+# hypothesis_version: 6.151.9
+
+[5432, 'ASTROML_DATABASE_URL', 'astroml', 'config/database.yaml', 'database', 'host', 'localhost', 'name', 'password', 'port', 'user']

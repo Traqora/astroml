@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
 import pytest
+from hypothesis import given, strategies as st
 
-from astroml.features.frequency import _extract_daily_counts
+from astroml.features.frequency import _extract_daily_counts, _compute_burstiness
 
 
 class TestExtractDailyCounts:
@@ -81,3 +82,130 @@ class TestExtractDailyCounts:
         result = _extract_daily_counts(timestamps)
         expected = np.array([3, 0, 2, 0, 1])
         np.testing.assert_array_equal(result, expected)
+
+
+class TestComputeBurstiness:
+    """Unit tests for _compute_burstiness helper function."""
+
+    def test_known_value_equal_mean_std(self):
+        """Test burstiness when mean equals std (should be 0)."""
+        result = _compute_burstiness(mean=5.0, std=5.0)
+        assert result == 0.0
+
+    def test_known_value_high_std(self):
+        """Test burstiness with high std relative to mean (bursty)."""
+        result = _compute_burstiness(mean=2.0, std=8.0)
+        expected = (8.0 - 2.0) / (8.0 + 2.0)  # 6/10 = 0.6
+        assert result == pytest.approx(expected)
+        assert result == pytest.approx(0.6)
+
+    def test_known_value_low_std(self):
+        """Test burstiness with low std relative to mean (regular)."""
+        result = _compute_burstiness(mean=10.0, std=2.0)
+        expected = (2.0 - 10.0) / (2.0 + 10.0)  # -8/12 ≈ -0.667
+        assert result == pytest.approx(expected)
+        assert result == pytest.approx(-0.6666666666666666)
+
+    def test_known_value_zero_std(self):
+        """Test burstiness with zero std (perfectly regular)."""
+        result = _compute_burstiness(mean=5.0, std=0.0)
+        expected = (0.0 - 5.0) / (0.0 + 5.0)  # -5/5 = -1.0
+        assert result == -1.0
+
+    def test_edge_case_both_zero(self):
+        """Test edge case: when both mean and std are 0, return 0.0."""
+        result = _compute_burstiness(mean=0.0, std=0.0)
+        assert result == 0.0
+
+    def test_edge_case_zero_mean_nonzero_std(self):
+        """Test edge case: zero mean with non-zero std."""
+        result = _compute_burstiness(mean=0.0, std=3.0)
+        expected = (3.0 - 0.0) / (3.0 + 0.0)  # 3/3 = 1.0
+        assert result == 1.0
+
+    def test_result_bounded_upper(self):
+        """Test that result is bounded at upper limit (approaches 1)."""
+        # When std >> mean, burstiness approaches 1
+        result = _compute_burstiness(mean=1.0, std=1000.0)
+        assert result < 1.0
+        assert result > 0.99
+
+    def test_result_bounded_lower(self):
+        """Test that result is bounded at lower limit (approaches -1)."""
+        # When std << mean, burstiness approaches -1
+        result = _compute_burstiness(mean=1000.0, std=1.0)
+        assert result > -1.0
+        assert result < -0.99
+
+    def test_symmetric_values(self):
+        """Test that swapping mean and std produces opposite sign."""
+        result1 = _compute_burstiness(mean=3.0, std=7.0)
+        result2 = _compute_burstiness(mean=7.0, std=3.0)
+        assert result1 == pytest.approx(-result2)
+
+
+class TestComputeBurstinessProperties:
+    """Property-based tests for _compute_burstiness using Hypothesis."""
+
+    @given(
+        mean=st.floats(min_value=0.0, max_value=1e6, allow_nan=False, allow_infinity=False),
+        std=st.floats(min_value=0.0, max_value=1e6, allow_nan=False, allow_infinity=False)
+    )
+    def test_burstiness_always_bounded(self, mean, std):
+        """Property: Burstiness is always in [-1, 1]."""
+        result = _compute_burstiness(mean, std)
+        assert -1.0 <= result <= 1.0, f"Burstiness {result} out of bounds for mean={mean}, std={std}"
+
+    @given(
+        mean=st.floats(min_value=0.01, max_value=1e6, allow_nan=False, allow_infinity=False),
+        std=st.floats(min_value=0.01, max_value=1e6, allow_nan=False, allow_infinity=False)
+    )
+    def test_burstiness_formula_correctness(self, mean, std):
+        """Property: Burstiness correctly implements (std - mean) / (std + mean)."""
+        result = _compute_burstiness(mean, std)
+        expected = (std - mean) / (std + mean)
+        assert result == pytest.approx(expected), f"Formula mismatch for mean={mean}, std={std}"
+
+    @given(
+        value=st.floats(min_value=0.01, max_value=1e6, allow_nan=False, allow_infinity=False)
+    )
+    def test_equal_mean_std_gives_zero(self, value):
+        """Property: When mean equals std, burstiness is 0."""
+        result = _compute_burstiness(mean=value, std=value)
+        assert result == pytest.approx(0.0)
+
+    @given(
+        mean=st.floats(min_value=0.01, max_value=1e6, allow_nan=False, allow_infinity=False)
+    )
+    def test_zero_std_gives_negative_one(self, mean):
+        """Property: When std is 0 (perfectly regular), burstiness is -1."""
+        result = _compute_burstiness(mean=mean, std=0.0)
+        assert result == pytest.approx(-1.0)
+
+    @given(
+        std=st.floats(min_value=0.01, max_value=1e6, allow_nan=False, allow_infinity=False)
+    )
+    def test_zero_mean_gives_positive_one(self, std):
+        """Property: When mean is 0 with non-zero std, burstiness is 1."""
+        result = _compute_burstiness(mean=0.0, std=std)
+        assert result == pytest.approx(1.0)
+
+    @given(
+        mean=st.floats(min_value=0.01, max_value=1e6, allow_nan=False, allow_infinity=False),
+        std=st.floats(min_value=0.01, max_value=1e6, allow_nan=False, allow_infinity=False)
+    )
+    def test_std_greater_than_mean_positive_burstiness(self, mean, std):
+        """Property: When std > mean, burstiness is positive (bursty)."""
+        if std > mean:
+            result = _compute_burstiness(mean, std)
+            assert result > 0.0
+
+    @given(
+        mean=st.floats(min_value=0.01, max_value=1e6, allow_nan=False, allow_infinity=False),
+        std=st.floats(min_value=0.01, max_value=1e6, allow_nan=False, allow_infinity=False)
+    )
+    def test_mean_greater_than_std_negative_burstiness(self, mean, std):
+        """Property: When mean > std, burstiness is negative (regular)."""
+        if mean > std:
+            result = _compute_burstiness(mean, std)
+            assert result < 0.0

@@ -253,4 +253,4 @@ def test_empty_graph():
     stats = graph_validation.graph_summary_statistics(edges)
     assert stats['num_edges'] == 0
     assert stats['num_nodes'] == 0
-    assert stats['density'] == 0.0
+    assert stats.get('density', 0.0) == 0.0

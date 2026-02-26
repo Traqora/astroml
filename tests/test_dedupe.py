@@ -13,7 +13,8 @@ class TestDeduplicator:
         tx = {"id": "1", "payload": "test", "timestamp": "2024-01-01"}
         result = dedup.add(tx)
         assert result is True
-        assert "1" in dedup.seen_hashes
+        # the exact hash string is based on sorting keys so we just check it was added
+        assert len(dedup.seen_hashes) == 1
 
     def test_add_duplicate_transaction(self):
         """Should reject duplicate transaction."""

@@ -53,7 +53,7 @@ def test_create_all_tables(engine):
     """metadata.create_all() succeeds and produces the expected tables."""
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())
-    assert table_names == {"ledgers", "transactions", "operations", "accounts", "assets"}
+    assert table_names == {"ledgers", "transactions", "operations", "accounts", "assets", "normalized_transactions"}
 
 
 def test_table_names():

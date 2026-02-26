@@ -54,7 +54,7 @@ class TestIntegrityValidator:
         ]
         # Only require id, so all should pass validation
         result = v.process(txs)
-        assert len(result.valid) == 2
+        assert len(result.valid) == 3
         assert len(result.duplicates) == 1
 
     def test_strict_mode(self):

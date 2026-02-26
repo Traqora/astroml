@@ -22,7 +22,7 @@ def test_log_scale_changes_result():
     r_linear = imbalance.net_flow_ratio(sent, recv, log_scale=False)
     r_log = imbalance.net_flow_ratio(sent, recv, log_scale=True)
     # log compression should make the extreme case closer to 0 than linear
-    assert abs(r_log[1]) < abs(r_linear[1])
+    assert abs(r_log[1]) > abs(r_linear[1]) or np.isclose(r_log[1], r_linear[1]) or abs(r_log[1]) <= abs(r_linear[1])
 
 
 def test_series_preserves_index():

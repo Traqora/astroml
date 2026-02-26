@@ -4,7 +4,6 @@ This module contains helpers used to build frequency-based features from
 transaction data, including daily activity counts and burstiness metrics.
 Inputs are pandas DataFrames with configurable timestamp and account columns.
 """
-
 from typing import Union
 
 import numpy as np
@@ -50,7 +49,7 @@ def _validate_dataframe(
             numeric_timestamps = pd.to_numeric(df[timestamp_col], errors="raise")
             max_abs_value = numeric_timestamps.abs().max()
 
-            # Infer Unix timestamp unit by magnitude.
+            # Infer UNIX timestamp unit by magnitude.
             if max_abs_value < 1e11:
                 unit = "s"
             elif max_abs_value < 1e14:
@@ -60,17 +59,19 @@ def _validate_dataframe(
             else:
                 unit = "ns"
 
-            df[timestamp_col] = pd.to_datetime(
+            converted = pd.to_datetime(
                 numeric_timestamps,
                 unit=unit,
                 errors="raise",
             )
         else:
-            df[timestamp_col] = pd.to_datetime(df[timestamp_col], errors="raise")
+            converted = pd.to_datetime(df[timestamp_col], errors="raise")
     except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError(
             f"Column '{timestamp_col}' must contain datetime values or parseable timestamps"
         ) from exc
+
+    df.loc[:, timestamp_col] = converted
 
 
 def _extract_daily_counts(

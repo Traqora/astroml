@@ -1,0 +1,11 @@
+# AstroML PostgreSQL database configuration.
+#
+# Override with the ASTROML_DATABASE_URL environment variable:
+#   export ASTROML_DATABASE_URL="postgresql://user:pass@host:5432/dbname"
+
+database:
+  host: localhost
+  port: 5432
+  name: astroml
+  user: astroml
+  password: ""

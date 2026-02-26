@@ -165,6 +165,73 @@ def _compute_burstiness(mean: float, std: float) -> float:
     # Handle edge case: when mean + std == 0, return 0.0
     if mean + std == 0.0:
         return 0.0
-    
+
     # Calculate burstiness: (std - mean) / (std + mean)
     return (std - mean) / (std + mean)
+
+
+def compute_account_frequency(
+    timestamps: pd.Series,
+) -> Dict[str, float]:
+    """Compute frequency metrics for a single account's transaction timestamps.
+
+    A per-account convenience function that wraps the internal helpers to
+    produce all three frequency metrics for one set of timestamps at a time.
+    For batch processing of a full DataFrame with multiple accounts, see
+    :func:`compute_frequency_metrics` (available after merging #47).
+
+    Args:
+        timestamps: Transaction timestamps for a single account. Accepts a
+            ``datetime64`` Series or a numeric (Unix epoch seconds) Series.
+            An empty Series is valid and returns all-zero metrics.
+
+    Returns:
+        Dictionary with three keys:
+
+        - ``"mean_tx_per_day"``  – mean number of transactions per calendar
+          day over the account's active window (float)
+        - ``"std_tx_per_day"``   – sample standard deviation (ddof=1) of
+          daily counts; 0.0 for a single-day window (float)
+        - ``"burstiness"``       – normalised clustering metric in ``[-1, 1]``
+          (float)
+
+    Notes:
+        - Uses ``ddof=1`` for standard deviation. Returns ``std=0.0`` for
+          accounts whose entire history falls within a single calendar day
+          (only one data point, so sample std is undefined).
+        - Numeric timestamps are treated as Unix epoch **seconds** and
+          converted via ``pd.to_datetime(..., unit="s")``.
+        - An empty Series returns all-zero metrics by convention.
+
+    Examples:
+        >>> import pandas as pd
+        >>> ts = pd.Series(pd.to_datetime(['2024-01-01', '2024-01-01', '2024-01-03']))
+        >>> result = compute_account_frequency(ts)
+        >>> result['mean_tx_per_day']
+        1.0
+        >>> result['std_tx_per_day']
+        1.0
+        >>> result['burstiness']
+        0.0
+
+        Empty timestamps return all-zero metrics:
+
+        >>> compute_account_frequency(pd.Series([], dtype='datetime64[ns]'))
+        {'mean_tx_per_day': 0.0, 'std_tx_per_day': 0.0, 'burstiness': 0.0}
+    """
+    if pd.api.types.is_numeric_dtype(timestamps):
+        timestamps = pd.to_datetime(timestamps, unit="s")
+
+    if len(timestamps) == 0:
+        return {"mean_tx_per_day": 0.0, "std_tx_per_day": 0.0, "burstiness": 0.0}
+
+    daily_counts = _extract_daily_counts(timestamps)
+    mean = float(np.mean(daily_counts))
+    std = float(np.std(daily_counts, ddof=1)) if len(daily_counts) > 1 else 0.0
+    burstiness = _compute_burstiness(mean, std)
+
+    return {
+        "mean_tx_per_day": mean,
+        "std_tx_per_day": std,
+        "burstiness": burstiness,
+    }

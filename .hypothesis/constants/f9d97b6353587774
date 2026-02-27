@@ -1,0 +1,4 @@
+# file: /home/maziofweb3/cds/dripsRpos/astroml/astroml/features/graph_validation.py
+# hypothesis_version: 6.151.9
+
+[0.0, '=', 'avg_degree', 'degree_stats', 'density', 'duplicate_edges', 'edge_checks', 'isolated_nodes', 'max', 'mean', 'median', 'min', 'negative_weights', 'null_values', 'num_edges', 'num_nodes', 'num_source_nodes', 'num_target_nodes', 'self_loops', 'source', 'std', 'sum', 'summary', 'target', 'validation_passed', 'weight_stats']

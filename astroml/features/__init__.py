@@ -2,6 +2,7 @@
 
 Expose feature computation utilities here.
 """
+from . import frequency
 from . import imbalance
 from . import memo
 from . import graph_validation

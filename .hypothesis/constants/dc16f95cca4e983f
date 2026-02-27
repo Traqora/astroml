@@ -1,0 +1,4 @@
+# file: /home/maziofweb3/cds/dripsRpos/astroml/astroml/validation/validator.py
+# hypothesis_version: 6.151.9
+
+['HASH_MISMATCH', 'INVALID_TYPE', 'MALFORMED_STRUCTURE', 'MISSING_FIELD', 'Z', 'id']

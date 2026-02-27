@@ -1,0 +1,4 @@
+# file: /home/maziofweb3/cds/dripsRpos/astroml/astroml/features/transaction_graph.py
+# hypothesis_version: 6.151.9
+
+[0.0, 'amount', 'asset', 'asset_count', 'assets', 'count', 'default', 'edge_count', 'from', 'max', 'mean', 'metadata', 'min', 'node_count', 'sum', 'to', 'transaction_count', 'transactions', 'weight']

@@ -1,0 +1,4 @@
+# file: /home/maziofweb3/cds/dripsRpos/astroml/astroml/db/schema.py
+# hypothesis_version: 6.151.9
+
+['0', 'accounts', 'asset_code', 'assets', 'closed_at', 'created_at', 'destination_account', 'ix_ledgers_closed_at', 'ix_operations_type', 'ledger', 'ledger_sequence', 'ledgers', 'ledgers.sequence', 'operations', 'postgresql', 'receiver', 'sender', 'source_account', 'timestamp', 'transaction', 'transaction_hash', 'transactions', 'transactions.hash', 'type', 'updated_at']

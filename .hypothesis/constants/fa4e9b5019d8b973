@@ -1,0 +1,4 @@
+# file: /home/maziofweb3/cds/dripsRpos/astroml/astroml/ingestion/config.py
+# hypothesis_version: 6.151.9
+
+[1.0, 60.0, '/transactions', 'ASTROML_HORIZON_URL']

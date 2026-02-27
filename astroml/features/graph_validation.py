@@ -230,12 +230,12 @@ def graph_summary_statistics(
     all_degrees = pd.Series(0, index=list(all_nodes))
     all_degrees = all_degrees.add(out_degrees, fill_value=0).add(in_degrees, fill_value=0)
 
-    stats['avg_degree'] = float(all_degrees.mean())
+    stats['avg_degree'] = float(all_degrees.mean()) if not all_degrees.empty else 0.0
     stats['degree_stats'] = {
-        'min': int(all_degrees.min()),
-        'max': int(all_degrees.max()),
-        'median': float(all_degrees.median()),
-        'std': float(all_degrees.std()),
+        'min': int(all_degrees.min()) if not all_degrees.empty else 0,
+        'max': int(all_degrees.max()) if not all_degrees.empty else 0,
+        'median': float(all_degrees.median()) if not all_degrees.empty else 0.0,
+        'std': float(all_degrees.std()) if not all_degrees.empty else 0.0,
     }
 
     # Weight statistics if provided

@@ -32,7 +32,7 @@ def net_flow_ratio(
         sent: Sent amounts (scalar or array-like).
         received: Received amounts (same shape as `sent`).
         log_scale: If True, apply log scaling to amounts before computing
-            the ratio. This is `log_base(log(amount + eps))`.
+            the ratio. This is `log_base(log(amount + 1 + eps))`.
         log_base: Base for logarithm when `log_scale` is True.
         eps: Small epsilon added to amounts before logging to avoid -inf.
 
@@ -64,10 +64,10 @@ def net_flow_ratio(
         raise ValueError("`sent` and `received` must have the same shape")
 
     if log_scale:
-        if log_base <= 0:
-            raise ValueError("log_base must be positive")
-        sent_arr = np.log(sent_arr + eps) / np.log(log_base)
-        recv_arr = np.log(recv_arr + eps) / np.log(log_base)
+        if log_base <= 0 or np.isclose(log_base, 1.0):
+            raise ValueError("log_base must be positive and not equal to 1")
+        sent_arr = np.log(sent_arr + 1.0 + eps) / np.log(log_base)
+        recv_arr = np.log(recv_arr + 1.0 + eps) / np.log(log_base)
 
     num = sent_arr - recv_arr
     den = sent_arr + recv_arr

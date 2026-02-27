@@ -1,0 +1,4 @@
+# file: /home/maziofweb3/cds/dripsRpos/astroml/astroml/ingestion/stream.py
+# hypothesis_version: 6.151.9
+
+[200, '%Y-%m-%d %H:%M:%S', '--cursor', '--endpoint', '--horizon-url', '/ledgers', '/operations', '/transactions', 'Connecting to %s', 'Cursor updated to %s', 'Final cursor: %s', 'Processing ledger %d', '__main__', 'cursor', 'horizon_url', 'now', 'paging_token', 'stream_endpoint']

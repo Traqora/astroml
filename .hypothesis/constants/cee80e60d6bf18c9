@@ -1,0 +1,4 @@
+# file: /home/maziofweb3/cds/dripsRpos/astroml/astroml/ingestion/normalizer.py
+# hypothesis_version: 6.151.9
+
+['UNKNOWN', 'XLM', 'created_at', 'source_account', 'transaction_hash', 'type']

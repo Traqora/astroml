@@ -92,15 +92,7 @@ class TransactionValidator:
         transaction: Dict[str, Any],
         stored_hash: Optional[str] = None,
     ) -> ValidationResult:
-        """Validate a single transaction.
-
-        Args:
-            transaction: Transaction dictionary to validate.
-            stored_hash: Optional pre-stored hash for verification.
-
-        Returns:
-            ValidationResult with validation status and any errors.
-        """
+        """Validate a single transaction."""
         errors: List[ValidationError] = []
 
         # Check for malformed structure first

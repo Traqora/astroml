@@ -1,0 +1,4 @@
+# file: /home/maziofweb3/cds/dripsRpos/astroml/astroml/validation/leakage.py
+# hypothesis_version: 6.151.9
+
+[0.8, 0.95, 'constant', 'target_correlation', 'test', 'train', 'unsorted']

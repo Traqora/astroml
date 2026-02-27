@@ -1,0 +1,4 @@
+# file: /home/maziofweb3/cds/dripsRpos/astroml/astroml/features/node_features.py
+# hypothesis_version: 6.151.9
+
+[0.0, 'UNKNOWN', 'account_age', 'amount', 'asset', 'asset_entropy', 'dst', 'first_seen', 'first_seen_dst', 'first_seen_edge', 'first_seen_provided', 'first_seen_src', 'in_degree', 'node', 'out_degree', 'src', 'timestamp', 'total_received', 'total_sent', 'unique_asset_count']

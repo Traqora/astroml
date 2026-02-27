@@ -1,0 +1,4 @@
+# file: /home/maziofweb3/cds/dripsRpos/astroml/astroml/validation/dedupe.py
+# hypothesis_version: 6.151.9
+
+['CORRUPTED', 'DUPLICATE', 'Z', 'id']

@@ -27,6 +27,8 @@ import numpy as np
 Edge = Dict[str, object]
 
 
+from astroml.features.asset_diversity import compute_asset_diversity
+
 def compute_node_features(
     edges: Iterable[Edge],
     nodes_first_seen: Optional[Dict[Hashable, float]] = None,
@@ -34,6 +36,10 @@ def compute_node_features(
 ) -> pd.DataFrame:
     rows_src = []
     rows_dst = []
+    
+    # Track asset interactions for diversity metric
+    asset_rows = []
+    
     max_ts = -np.inf
 
     for e in edges:
@@ -41,15 +47,21 @@ def compute_node_features(
         dst = e.get('dst')
         amt = float(e.get('amount', 0.0) or 0.0)
         ts = float(e.get('timestamp', 0.0) or 0.0)
+        asset = e.get('asset', 'UNKNOWN')
+        
         max_ts = max(max_ts, ts)
-        if src is None or dst is None:
-            continue
-        rows_src.append((src, amt, ts))
-        rows_dst.append((dst, amt, ts))
+        if src is not None:
+            rows_src.append((src, amt, ts))
+            asset_rows.append((src, asset))
+            
+        if dst is not None:
+            rows_dst.append((dst, amt, ts))
+            asset_rows.append((dst, asset))
 
     # Build DataFrames for aggregation
     src_df = pd.DataFrame(rows_src, columns=['node','amount','timestamp'])
     dst_df = pd.DataFrame(rows_dst, columns=['node','amount','timestamp'])
+    asset_df = pd.DataFrame(asset_rows, columns=['node', 'asset'])
 
     if ref_time is None:
         ref_time = float(max_ts if max_ts != -np.inf else 0.0)
@@ -67,9 +79,25 @@ def compute_node_features(
     first_seen_dst = dst_df.groupby('node')['timestamp'].min().rename('first_seen_dst') if not dst_df.empty else pd.Series(dtype=float, name='first_seen_dst')
 
     first_seen_edge = pd.concat([first_seen_src, first_seen_dst], axis=1).min(axis=1).rename('first_seen_edge')
+    
+    # Asset Diversity
+    if not asset_df.empty:
+        # Group by node and asset to get counts
+        asset_counts = asset_df.groupby(['node', 'asset']).size()
+        
+        # Apply diversity function per node
+        diversity_df = asset_counts.groupby('node').apply(
+            lambda x: pd.Series(compute_asset_diversity(x.droplevel('node')))
+        ).unstack()
+        diversity_df = diversity_df.fillna(0)
+    else:
+        diversity_df = pd.DataFrame(columns=['unique_asset_count', 'asset_entropy'])
 
     # Merge all
-    feats = pd.concat([in_degree, out_degree, total_received, total_sent, first_seen_edge], axis=1).fillna(0)
+    feats = pd.concat([
+        in_degree, out_degree, total_received, total_sent, 
+        first_seen_edge, diversity_df
+    ], axis=1).fillna(0)
 
     # If external first_seen provided, prefer it where available
     if nodes_first_seen is not None and len(nodes_first_seen) > 0:
@@ -89,6 +117,13 @@ def compute_node_features(
     feats['total_received'] = feats['total_received'].astype(float)
     feats['total_sent'] = feats['total_sent'].astype(float)
     feats['account_age'] = feats['account_age'].astype(float)
+    
+    if 'unique_asset_count' in feats.columns:
+        feats['unique_asset_count'] = feats['unique_asset_count'].astype(int)
+        feats['asset_entropy'] = feats['asset_entropy'].astype(float)
+    else:
+        feats['unique_asset_count'] = 0
+        feats['asset_entropy'] = 0.0
 
     # Ensure nodes that appear only in nodes_first_seen (no edges) are included
     if nodes_first_seen is not None and len(nodes_first_seen) > 0:
@@ -100,11 +135,13 @@ def compute_node_features(
             extra['out_degree'] = 0
             extra['total_received'] = 0.0
             extra['total_sent'] = 0.0
+            extra['unique_asset_count'] = 0
+            extra['asset_entropy'] = 0.0
             extra['first_seen'] = provided.loc[missing]
             extra['account_age'] = (float(ref_time) - extra['first_seen']).clip(lower=0.0)
             feats = pd.concat([feats, extra])
 
     # Order columns
-    feats = feats[['in_degree','out_degree','total_received','total_sent','account_age','first_seen']]
+    feats = feats[['in_degree','out_degree','total_received','total_sent','account_age','first_seen', 'unique_asset_count', 'asset_entropy']]
 
     return feats.sort_index()

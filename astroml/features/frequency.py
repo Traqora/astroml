@@ -1,25 +1,10 @@
 """Compute transaction frequency metrics for blockchain accounts.
 
-This module provides utilities for analyzing temporal transaction patterns by
-computing frequency-based metrics for blockchain accounts. The primary metrics
-include:
-
-- **Mean transactions per day**: Average daily transaction rate over an
-  account's active period
-- **Standard deviation**: Variability in daily transaction counts
-- **Burstiness metric**: Normalized measure of temporal clustering, defined as
-  (σ - μ) / (σ + μ), bounded in [-1, 1]
-
-The burstiness metric provides intuitive interpretation:
-- B ≈ 1: Highly bursty (transactions clustered in time)
-- B ≈ 0: Random/Poisson-like (memoryless process)
-- B ≈ -1: Highly regular (periodic transactions)
-
-Inputs are pandas DataFrames with configurable column names for timestamps and
-account identifiers. The module handles edge cases gracefully, including empty
-data, single-day transactions, and various timestamp formats.
+This module contains helpers used to build frequency-based features from
+transaction data, including daily activity counts and burstiness metrics.
+Inputs are pandas DataFrames with configurable timestamp and account columns.
 """
-from typing import Union, Dict
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -28,46 +13,65 @@ Number = Union[float, int]
 ArrayLike = Union[Number, np.ndarray, pd.Series, list, tuple]
 
 
-
 def _validate_dataframe(
     df: pd.DataFrame,
     timestamp_col: str,
     account_col: str,
 ) -> None:
-    """Validate input DataFrame structure and content.
-    
+    """Validate required columns and normalize the timestamp column.
+
     Args:
         df: DataFrame to validate.
         timestamp_col: Expected timestamp column name.
         account_col: Expected account column name.
-        
+
     Raises:
-        ValueError: If validation fails with a descriptive message.
-        
-    Notes:
-        - Checks that required columns exist in the DataFrame
-        - Verifies no null values in timestamp or account columns
-        - Validates timestamp column is datetime or numeric (Unix timestamp)
-        - Converts numeric timestamps to datetime if needed
+        ValueError: If required columns are missing, nulls are present,
+            or timestamps cannot be interpreted as datetimes.
     """
-    # Check required columns exist
-    if timestamp_col not in df.columns:
-        raise ValueError(f"Column '{timestamp_col}' not found in DataFrame")
-    if account_col not in df.columns:
-        raise ValueError(f"Column '{account_col}' not found in DataFrame")
-    
-    # Check for null values
-    if df[timestamp_col].isnull().any():
+    required_cols = [timestamp_col, account_col]
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    if missing_cols:
+        missing = ", ".join(f"'{col}'" for col in missing_cols)
+        raise ValueError(f"DataFrame missing required columns: {missing}")
+
+    if df[timestamp_col].isna().any():
         raise ValueError(f"Column '{timestamp_col}' contains null values")
-    if df[account_col].isnull().any():
+
+    if df[account_col].isna().any():
         raise ValueError(f"Column '{account_col}' contains null values")
-    
-    # Validate timestamp type
-    if not (pd.api.types.is_datetime64_any_dtype(df[timestamp_col]) or 
-            pd.api.types.is_numeric_dtype(df[timestamp_col])):
+
+    if pd.api.types.is_datetime64_any_dtype(df[timestamp_col]):
+        return
+
+    try:
+        if pd.api.types.is_numeric_dtype(df[timestamp_col]):
+            numeric_timestamps = pd.to_numeric(df[timestamp_col], errors="raise")
+            max_abs_value = numeric_timestamps.abs().max()
+
+            # Infer UNIX timestamp unit by magnitude.
+            if max_abs_value < 1e11:
+                unit = "s"
+            elif max_abs_value < 1e14:
+                unit = "ms"
+            elif max_abs_value < 1e17:
+                unit = "us"
+            else:
+                unit = "ns"
+
+            converted = pd.to_datetime(
+                numeric_timestamps,
+                unit=unit,
+                errors="raise",
+            )
+        else:
+            converted = pd.to_datetime(df[timestamp_col], errors="raise")
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError(
-            f"Column '{timestamp_col}' must be datetime or numeric (Unix timestamp)"
-        )
+            f"Column '{timestamp_col}' must contain datetime values or parseable timestamps"
+        ) from exc
+
+    df.loc[:, timestamp_col] = converted
 
 
 def _extract_daily_counts(
@@ -117,7 +121,7 @@ def _extract_daily_counts(
     max_date = dates.max()
 
     # Create complete date range from first to last
-    date_range = pd.date_range(start=min_date, end=max_date, freq='D')
+    date_range = pd.date_range(start=min_date, end=max_date, freq="D")
 
     # Count transactions per day using value_counts
     daily_counts = dates.value_counts()
@@ -129,120 +133,28 @@ def _extract_daily_counts(
     return daily_counts.values
 
 
-
-def compute_frequency_metrics(
-    df: pd.DataFrame,
-    timestamp_col: str = "created_at",
-    account_col: str = "account_id",
-) -> pd.DataFrame:
-    """Compute transaction frequency metrics for each account in a DataFrame.
-
-    For each unique account, three temporal frequency metrics are computed
-    over the account's active window (first to last transaction date,
-    inclusive):
-
-    - **mean_tx_per_day**: mean number of transactions per calendar day
-    - **std_tx_per_day**: sample standard deviation (ddof=1) of daily counts
-    - **burstiness**: normalised clustering metric ``(σ - μ) / (σ + μ)``
-
-    Args:
-        df: Transaction DataFrame. Must contain *timestamp_col* and
-            *account_col*; extra columns are ignored.
-        timestamp_col: Name of the column containing transaction timestamps.
-            Accepted types: ``datetime64`` or numeric (Unix epoch seconds).
-            Defaults to ``"created_at"``.
-        account_col: Name of the column containing account identifiers.
-            Values may be any hashable type (str, int, …).
-            Defaults to ``"account_id"``.
-
-    Returns:
-        DataFrame with one row per unique account and columns:
-
-        - ``account``          – account identifier (original type preserved)
-        - ``mean_tx_per_day``  – mean daily transaction count (float)
-        - ``std_tx_per_day``   – sample std of daily counts; 0.0 for
-          single-day windows (float)
-        - ``burstiness``       – burstiness in ``[-1, 1]`` (float)
-
-        Returns an empty DataFrame with those columns when *df* is empty.
-
-    Notes:
-        - Uses ``ddof=1`` (sample standard deviation). Returns ``std=0.0``
-          for accounts whose entire history falls within a single calendar
-          day (only one data point, so sample std is undefined).
-        - Numeric timestamps are treated as Unix epoch **seconds** and
-          converted via ``pd.to_datetime(..., unit="s")``.
-        - The original account identifier type (str, int, …) is preserved
-          in the ``account`` output column.
-        - Each row in *df* counts as one transaction; duplicate rows are
-          each counted separately.
-
-    Examples:
-        >>> import pandas as pd
-        >>> df = pd.DataFrame({
-        ...     "account_id": ["alice", "alice", "bob"],
-        ...     "created_at": pd.to_datetime(["2024-01-01", "2024-01-02",
-        ...                                   "2024-01-01"]),
-        ... })
-        >>> compute_frequency_metrics(df)
-          account  mean_tx_per_day  std_tx_per_day  burstiness
-        0   alice              1.0             0.0        -1.0
-        1     bob              1.0             0.0        -1.0
-    """
-    _validate_dataframe(df, timestamp_col, account_col)
-
-    _SCHEMA = ["account", "mean_tx_per_day", "std_tx_per_day", "burstiness"]
-
-    if df.empty:
-        return pd.DataFrame(columns=_SCHEMA)
-
-    # Convert Unix epoch seconds to datetime if needed
-    working = df
-    if pd.api.types.is_numeric_dtype(df[timestamp_col]):
-        working = df.copy()
-        working[timestamp_col] = pd.to_datetime(working[timestamp_col], unit="s")
-
-    records: list[Dict] = []
-    for account, group in working.groupby(account_col):
-        daily_counts = _extract_daily_counts(group[timestamp_col])
-        mean = float(np.mean(daily_counts))
-        # ddof=1 requires at least 2 data points; single-day window → std=0.0
-        std = float(np.std(daily_counts, ddof=1)) if len(daily_counts) > 1 else 0.0
-        burstiness = _compute_burstiness(mean, std)
-        records.append(
-            {
-                "account": account,
-                "mean_tx_per_day": mean,
-                "std_tx_per_day": std,
-                "burstiness": burstiness,
-            }
-        )
-
-    return pd.DataFrame(records)
-
-
 def _compute_burstiness(mean: float, std: float) -> float:
     """Calculate burstiness metric from mean and standard deviation.
 
     The burstiness metric quantifies temporal clustering of transactions using
-    the formula B = (σ - μ) / (σ + μ), where σ is standard deviation and μ is
-    mean. The result is bounded in [-1, 1] with intuitive interpretation:
-    
-    - B ≈ 1: Highly bursty (high variance, clustered transactions)
-    - B ≈ 0: Random/Poisson-like (variance equals mean)
-    - B ≈ -1: Highly regular (low variance, periodic transactions)
+    the formula B = (std - mean) / (std + mean). The result is bounded in
+    [-1, 1] with intuitive interpretation:
+
+    - B ~= 1: Highly bursty (high variance, clustered transactions)
+    - B ~= 0: Random/Poisson-like (variance equals mean)
+    - B ~= -1: Highly regular (low variance, periodic transactions)
 
     Args:
-        mean: Mean of daily transaction counts (μ ≥ 0).
-        std: Standard deviation of daily counts (σ ≥ 0).
+        mean: Mean of daily transaction counts (mean >= 0).
+        std: Standard deviation of daily counts (std >= 0).
 
     Returns:
         Burstiness value in [-1, 1]. Returns 0.0 when both mean and std are 0.
 
     Notes:
-        - When σ + μ = 0 (both zero), returns 0.0 by definition
-        - When σ = 0 (perfectly regular), returns -1.0
-        - When σ >> μ (highly variable), approaches 1.0
+        - When std + mean = 0 (both zero), returns 0.0 by definition
+        - When std = 0 (perfectly regular), returns -1.0
+        - When std >> mean (highly variable), approaches 1.0
         - Result is automatically bounded in [-1, 1] by the formula
 
     Examples:
@@ -256,6 +168,73 @@ def _compute_burstiness(mean: float, std: float) -> float:
     # Handle edge case: when mean + std == 0, return 0.0
     if mean + std == 0.0:
         return 0.0
-    
+
     # Calculate burstiness: (std - mean) / (std + mean)
     return (std - mean) / (std + mean)
+
+
+def compute_account_frequency(
+    timestamps: pd.Series,
+) -> Dict[str, float]:
+    """Compute frequency metrics for a single account's transaction timestamps.
+
+    A per-account convenience function that wraps the internal helpers to
+    produce all three frequency metrics for one set of timestamps at a time.
+    For batch processing of a full DataFrame with multiple accounts, see
+    :func:`compute_frequency_metrics` (available after merging #47).
+
+    Args:
+        timestamps: Transaction timestamps for a single account. Accepts a
+            ``datetime64`` Series or a numeric (Unix epoch seconds) Series.
+            An empty Series is valid and returns all-zero metrics.
+
+    Returns:
+        Dictionary with three keys:
+
+        - ``"mean_tx_per_day"``  – mean number of transactions per calendar
+          day over the account's active window (float)
+        - ``"std_tx_per_day"``   – sample standard deviation (ddof=1) of
+          daily counts; 0.0 for a single-day window (float)
+        - ``"burstiness"``       – normalised clustering metric in ``[-1, 1]``
+          (float)
+
+    Notes:
+        - Uses ``ddof=1`` for standard deviation. Returns ``std=0.0`` for
+          accounts whose entire history falls within a single calendar day
+          (only one data point, so sample std is undefined).
+        - Numeric timestamps are treated as Unix epoch **seconds** and
+          converted via ``pd.to_datetime(..., unit="s")``.
+        - An empty Series returns all-zero metrics by convention.
+
+    Examples:
+        >>> import pandas as pd
+        >>> ts = pd.Series(pd.to_datetime(['2024-01-01', '2024-01-01', '2024-01-03']))
+        >>> result = compute_account_frequency(ts)
+        >>> result['mean_tx_per_day']
+        1.0
+        >>> result['std_tx_per_day']
+        1.0
+        >>> result['burstiness']
+        0.0
+
+        Empty timestamps return all-zero metrics:
+
+        >>> compute_account_frequency(pd.Series([], dtype='datetime64[ns]'))
+        {'mean_tx_per_day': 0.0, 'std_tx_per_day': 0.0, 'burstiness': 0.0}
+    """
+    if pd.api.types.is_numeric_dtype(timestamps):
+        timestamps = pd.to_datetime(timestamps, unit="s")
+
+    if len(timestamps) == 0:
+        return {"mean_tx_per_day": 0.0, "std_tx_per_day": 0.0, "burstiness": 0.0}
+
+    daily_counts = _extract_daily_counts(timestamps)
+    mean = float(np.mean(daily_counts))
+    std = float(np.std(daily_counts, ddof=1)) if len(daily_counts) > 1 else 0.0
+    burstiness = _compute_burstiness(mean, std)
+
+    return {
+        "mean_tx_per_day": mean,
+        "std_tx_per_day": std,
+        "burstiness": burstiness,
+    }

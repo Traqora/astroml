@@ -8,11 +8,13 @@ from . import hashing
 from . import integrity
 from . import validator
 
-# Try to import leakage (may fail if numpy is not installed)
+# Try to import leakage and calibration (may fail if numpy is not installed)
 try:
     from . import leakage
+    from . import calibration
     __all__ = [
         "leakage",
+        "calibration",
         "dedupe",
         "hashing",
         "validator",

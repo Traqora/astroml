@@ -4,7 +4,7 @@ This module contains helpers used to build frequency-based features from
 transaction data, including daily activity counts and burstiness metrics.
 Inputs are pandas DataFrames with configurable timestamp and account columns.
 """
-from typing import Union
+from typing import Hashable, Union
 
 import numpy as np
 import pandas as pd
@@ -49,7 +49,6 @@ def _validate_dataframe(
             numeric_timestamps = pd.to_numeric(df[timestamp_col], errors="raise")
             max_abs_value = numeric_timestamps.abs().max()
 
-            # Infer UNIX timestamp unit by magnitude.
             if max_abs_value < 1e11:
                 unit = "s"
             elif max_abs_value < 1e14:
@@ -71,7 +70,7 @@ def _validate_dataframe(
             f"Column '{timestamp_col}' must contain datetime values or parseable timestamps"
         ) from exc
 
-    df.loc[:, timestamp_col] = converted
+    df[timestamp_col] = converted
 
 
 def _extract_daily_counts(
@@ -105,31 +104,19 @@ def _extract_daily_counts(
         >>> counts.tolist()
         [2, 0, 1]
     """
-    # Handle empty timestamps
     if len(timestamps) == 0:
         return np.array([])
 
-    # Convert timestamps to dates (day resolution)
     dates = timestamps.dt.date
 
-    # Handle single timestamp
     if len(timestamps) == 1:
         return np.array([1])
 
-    # Determine first and last transaction dates
     min_date = dates.min()
     max_date = dates.max()
-
-    # Create complete date range from first to last
     date_range = pd.date_range(start=min_date, end=max_date, freq="D")
-
-    # Count transactions per day using value_counts
     daily_counts = dates.value_counts()
-
-    # Fill missing days with 0
     daily_counts = daily_counts.reindex(date_range.date, fill_value=0)
-
-    # Return as numpy array
     return daily_counts.values
 
 
@@ -165,66 +152,24 @@ def _compute_burstiness(mean: float, std: float) -> float:
         >>> _compute_burstiness(5.0, 0.0)
         -1.0
     """
-    # Handle edge case: when mean + std == 0, return 0.0
     if mean + std == 0.0:
         return 0.0
 
-    # Calculate burstiness: (std - mean) / (std + mean)
     return (std - mean) / (std + mean)
 
 
-def compute_account_frequency(
+def _compute_frequency_metrics_for_timestamps(
     timestamps: pd.Series,
-) -> Dict[str, float]:
-    """Compute frequency metrics for a single account's transaction timestamps.
-
-    A per-account convenience function that wraps the internal helpers to
-    produce all three frequency metrics for one set of timestamps at a time.
-    For batch processing of a full DataFrame with multiple accounts, see
-    :func:`compute_frequency_metrics` (available after merging #47).
+) -> dict[str, float]:
+    """Compute frequency metrics for one account's validated timestamp series.
 
     Args:
-        timestamps: Transaction timestamps for a single account. Accepts a
-            ``datetime64`` Series or a numeric (Unix epoch seconds) Series.
-            An empty Series is valid and returns all-zero metrics.
+        timestamps: Validated timestamp series for a single account.
 
     Returns:
-        Dictionary with three keys:
-
-        - ``"mean_tx_per_day"``  – mean number of transactions per calendar
-          day over the account's active window (float)
-        - ``"std_tx_per_day"``   – sample standard deviation (ddof=1) of
-          daily counts; 0.0 for a single-day window (float)
-        - ``"burstiness"``       – normalised clustering metric in ``[-1, 1]``
-          (float)
-
-    Notes:
-        - Uses ``ddof=1`` for standard deviation. Returns ``std=0.0`` for
-          accounts whose entire history falls within a single calendar day
-          (only one data point, so sample std is undefined).
-        - Numeric timestamps are treated as Unix epoch **seconds** and
-          converted via ``pd.to_datetime(..., unit="s")``.
-        - An empty Series returns all-zero metrics by convention.
-
-    Examples:
-        >>> import pandas as pd
-        >>> ts = pd.Series(pd.to_datetime(['2024-01-01', '2024-01-01', '2024-01-03']))
-        >>> result = compute_account_frequency(ts)
-        >>> result['mean_tx_per_day']
-        1.0
-        >>> result['std_tx_per_day']
-        1.0
-        >>> result['burstiness']
-        0.0
-
-        Empty timestamps return all-zero metrics:
-
-        >>> compute_account_frequency(pd.Series([], dtype='datetime64[ns]'))
-        {'mean_tx_per_day': 0.0, 'std_tx_per_day': 0.0, 'burstiness': 0.0}
+        Dictionary containing the mean daily transaction count, the sample
+        standard deviation of daily transaction counts, and burstiness.
     """
-    if pd.api.types.is_numeric_dtype(timestamps):
-        timestamps = pd.to_datetime(timestamps, unit="s")
-
     if len(timestamps) == 0:
         return {"mean_tx_per_day": 0.0, "std_tx_per_day": 0.0, "burstiness": 0.0}
 
@@ -237,4 +182,112 @@ def compute_account_frequency(
         "mean_tx_per_day": mean,
         "std_tx_per_day": std,
         "burstiness": burstiness,
+    }
+
+
+def compute_frequency_metrics(
+    df: pd.DataFrame,
+    timestamp_col: str = "timestamp",
+    account_col: str = "account",
+) -> pd.DataFrame:
+    """Compute frequency metrics for each account in a transaction DataFrame.
+
+    Args:
+        df: Transaction DataFrame containing account and timestamp columns.
+        timestamp_col: Name of the timestamp column.
+        account_col: Name of the account identifier column.
+
+    Returns:
+        DataFrame with one row per account and these columns:
+        ``account_col``, ``mean_tx_per_day``, ``std_tx_per_day``, and
+        ``burstiness``.
+
+    Notes:
+        Validation and timestamp normalization are delegated to
+        :func:`_validate_dataframe`. Metric formulas are delegated to
+        :func:`_compute_frequency_metrics_for_timestamps` so the batch and
+        single-account paths stay consistent.
+    """
+    working_df = df.copy()
+    _validate_dataframe(working_df, timestamp_col=timestamp_col, account_col=account_col)
+
+    metric_rows = []
+    for account_value, account_df in working_df.groupby(account_col, sort=False):
+        metric_rows.append(
+            {
+                account_col: account_value,
+                **_compute_frequency_metrics_for_timestamps(account_df[timestamp_col]),
+            }
+        )
+
+    return pd.DataFrame(metric_rows)
+
+
+def compute_account_frequency(
+    df: pd.DataFrame,
+    account_id: Hashable,
+    timestamp_col: str = "timestamp",
+    account_col: str = "account",
+) -> dict[str, float]:
+    """Compute transaction-frequency metrics for one specified account.
+
+    Args:
+        df: Transaction DataFrame containing at least the account and timestamp
+            columns expected by the batch computation path.
+        account_id: Account identifier whose frequency metrics should be
+            returned.
+        timestamp_col: Name of the timestamp column. Defaults to
+            ``"timestamp"``.
+        account_col: Name of the account identifier column. Defaults to
+            ``"account"``.
+
+    Returns:
+        Dictionary with exactly these keys:
+        ``"mean_tx_per_day"``, ``"std_tx_per_day"``, and ``"burstiness"``.
+
+    Raises:
+        ValueError: If the requested account does not exist in ``account_col``
+            or if the DataFrame fails batch validation.
+
+    Notes:
+        This is a thin wrapper around :func:`compute_frequency_metrics`. It
+        validates the DataFrame using the same path as the batch function,
+        filters to the requested account, and extracts that account's row from
+        the batch result. Single-day behavior, custom column handling, and any
+        edge-case ``NaN`` values are therefore inherited directly from the
+        batch implementation.
+
+    Examples:
+        >>> import pandas as pd
+        >>> df = pd.DataFrame({
+        ...     "account": ["acct-1", "acct-1", "acct-2"],
+        ...     "timestamp": ["2024-01-01", "2024-01-03", "2024-01-02"],
+        ... })
+        >>> compute_account_frequency(df, "acct-1")
+        {'mean_tx_per_day': 0.6666666666666666, 'std_tx_per_day': 0.5773502691896258, 'burstiness': -0.07179676972449088}
+
+        Custom column names are supported when they match the batch API:
+
+        >>> renamed = df.rename(columns={"account": "acct", "timestamp": "ts"})
+        >>> compute_account_frequency(renamed, "acct-2", account_col="acct", timestamp_col="ts")
+        {'mean_tx_per_day': 1.0, 'std_tx_per_day': 0.0, 'burstiness': -1.0}
+    """
+    working_df = df.copy()
+    _validate_dataframe(working_df, timestamp_col=timestamp_col, account_col=account_col)
+
+    account_df = working_df.loc[working_df[account_col] == account_id]
+    if account_df.empty:
+        raise ValueError(f"Account {account_id!r} not found in column '{account_col}'")
+
+    batch_metrics = compute_frequency_metrics(
+        account_df,
+        timestamp_col=timestamp_col,
+        account_col=account_col,
+    )
+    metric_row = batch_metrics.iloc[0]
+
+    return {
+        "mean_tx_per_day": float(metric_row["mean_tx_per_day"]),
+        "std_tx_per_day": float(metric_row["std_tx_per_day"]),
+        "burstiness": float(metric_row["burstiness"]),
     }

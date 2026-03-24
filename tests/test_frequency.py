@@ -2,11 +2,14 @@ import numpy as np
 import pandas as pd
 import pytest
 from hypothesis import given, strategies as st
+from hypothesis.extra.pandas import column, data_frames, range_indexes
 
 from astroml.features.frequency import (
     _compute_burstiness,
     _extract_daily_counts,
     _validate_dataframe,
+    compute_account_frequency,
+    compute_frequency_metrics,
 )
 
 
@@ -278,3 +281,179 @@ class TestValidateDataFrame:
 
         with pytest.raises(ValueError, match="must contain datetime values"):
             _validate_dataframe(df, timestamp_col="timestamp", account_col="account")
+
+
+class TestComputeAccountFrequency:
+    """Unit tests for compute_account_frequency."""
+
+    def test_valid_account_id_returns_expected_metrics(self):
+        """Should return the required keys and expected values for a known account."""
+        df = pd.DataFrame({
+            "account": ["acct-1", "acct-1", "acct-1", "acct-2"],
+            "timestamp": pd.to_datetime([
+                "2024-01-01 10:00:00",
+                "2024-01-01 14:00:00",
+                "2024-01-03 09:00:00",
+                "2024-01-02 08:00:00",
+            ]),
+        })
+
+        result = compute_account_frequency(df, "acct-1")
+
+        assert isinstance(result, dict)
+        assert set(result.keys()) == {
+            "mean_tx_per_day",
+            "std_tx_per_day",
+            "burstiness",
+        }
+        assert result["mean_tx_per_day"] == pytest.approx(1.0)
+        assert result["std_tx_per_day"] == pytest.approx(np.sqrt(1.0))
+        assert result["burstiness"] == pytest.approx(0.0)
+
+    def test_invalid_account_id_raises_value_error(self):
+        """Should raise ValueError when the account is absent."""
+        df = pd.DataFrame({
+            "account": ["acct-1"],
+            "timestamp": ["2024-01-01"],
+        })
+
+        with pytest.raises(ValueError, match="not found"):
+            compute_account_frequency(df, "acct-missing")
+
+    def test_single_day_transactions_match_batch_behavior(self):
+        """Single-day histories should match the batch path exactly."""
+        df = pd.DataFrame({
+            "account": ["acct-1", "acct-1", "acct-1", "acct-2"],
+            "timestamp": pd.to_datetime([
+                "2024-01-01 10:00:00",
+                "2024-01-01 12:00:00",
+                "2024-01-01 18:00:00",
+                "2024-01-02 09:00:00",
+            ]),
+        })
+
+        batch_row = compute_frequency_metrics(df).set_index("account").loc["acct-1"]
+        single = compute_account_frequency(df, "acct-1")
+
+        assert single["mean_tx_per_day"] == pytest.approx(float(batch_row["mean_tx_per_day"]))
+        assert single["std_tx_per_day"] == pytest.approx(float(batch_row["std_tx_per_day"]))
+        assert single["burstiness"] == pytest.approx(float(batch_row["burstiness"]))
+
+    def test_custom_column_names_are_supported(self):
+        """Custom account and timestamp columns should follow the batch API."""
+        df = pd.DataFrame({
+            "wallet": ["acct-1", "acct-1", "acct-2"],
+            "block_time": ["2024-01-01", "2024-01-03", "2024-01-02"],
+        })
+
+        result = compute_account_frequency(
+            df,
+            "acct-1",
+            timestamp_col="block_time",
+            account_col="wallet",
+        )
+
+        assert set(result.keys()) == {
+            "mean_tx_per_day",
+            "std_tx_per_day",
+            "burstiness",
+        }
+        expected_std = float(np.std(np.array([1, 0, 1]), ddof=1))
+        assert result["mean_tx_per_day"] == pytest.approx(2.0 / 3.0)
+        assert result["std_tx_per_day"] == pytest.approx(expected_std)
+        assert result["burstiness"] == pytest.approx(
+            (expected_std - (2.0 / 3.0)) / (expected_std + (2.0 / 3.0))
+        )
+
+    def test_batch_and_single_account_consistency(self):
+        """Single-account output should match the corresponding batch row."""
+        df = pd.DataFrame({
+            "account": ["acct-1", "acct-1", "acct-2", "acct-2", "acct-3"],
+            "timestamp": pd.to_datetime([
+                "2024-01-01",
+                "2024-01-03",
+                "2024-01-01",
+                "2024-01-02",
+                "2024-01-04",
+            ]),
+        })
+
+        batch = compute_frequency_metrics(df).set_index("account")
+
+        for account_id in ["acct-1", "acct-2", "acct-3"]:
+            single = compute_account_frequency(df, account_id)
+            batch_row = batch.loc[account_id]
+            assert single == pytest.approx({
+                "mean_tx_per_day": float(batch_row["mean_tx_per_day"]),
+                "std_tx_per_day": float(batch_row["std_tx_per_day"]),
+                "burstiness": float(batch_row["burstiness"]),
+            })
+
+
+@st.composite
+def transaction_data_frames(draw):
+    """Generate realistic transaction DataFrames for frequency tests."""
+    frame = draw(
+        data_frames(
+            index=range_indexes(min_size=1, max_size=12),
+            columns=[
+                column("account", elements=st.sampled_from(["acct-1", "acct-2", "acct-3"])),
+                column(
+                    "timestamp",
+                    elements=st.datetimes(
+                        min_value=pd.Timestamp("2024-01-01").to_pydatetime(),
+                        max_value=pd.Timestamp("2024-01-10").to_pydatetime(),
+                    ),
+                ),
+            ],
+        )
+    )
+    return frame
+
+
+class TestComputeAccountFrequencyProperties:
+    """Property-based tests for compute_account_frequency."""
+
+    @given(transaction_data_frames())
+    def test_single_account_matches_batch_output(self, df):
+        """Property: single-account metrics equal the matching batch row."""
+        target_account = df["account"].iloc[0]
+
+        single = compute_account_frequency(df, target_account)
+        batch_row = compute_frequency_metrics(df).set_index("account").loc[target_account]
+
+        assert single == pytest.approx({
+            "mean_tx_per_day": float(batch_row["mean_tx_per_day"]),
+            "std_tx_per_day": float(batch_row["std_tx_per_day"]),
+            "burstiness": float(batch_row["burstiness"]),
+        })
+
+    @given(transaction_data_frames())
+    def test_custom_columns_preserve_consistency(self, df):
+        """Property: renamed account/timestamp columns still behave consistently."""
+        renamed = df.rename(columns={"account": "wallet", "timestamp": "block_time"})
+        target_account = renamed["wallet"].iloc[0]
+
+        single = compute_account_frequency(
+            renamed,
+            target_account,
+            timestamp_col="block_time",
+            account_col="wallet",
+        )
+        batch_row = compute_frequency_metrics(
+            renamed,
+            timestamp_col="block_time",
+            account_col="wallet",
+        ).set_index("wallet").loc[target_account]
+
+        assert single == pytest.approx({
+            "mean_tx_per_day": float(batch_row["mean_tx_per_day"]),
+            "std_tx_per_day": float(batch_row["std_tx_per_day"]),
+            "burstiness": float(batch_row["burstiness"]),
+        })
+
+    @given(transaction_data_frames())
+    def test_missing_account_always_raises_value_error(self, df):
+        """Property: absent accounts are rejected consistently."""
+        with pytest.raises(ValueError, match="not found"):
+            compute_account_frequency(df, "acct-missing")

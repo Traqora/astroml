@@ -1,0 +1,28 @@
+# Graph Convolutional Network model configuration
+_target_: astroml.models.gcn.GCN
+
+input_dim: ???
+hidden_dims: [64, 32]
+output_dim: ???
+dropout: 0.5
+activation: "relu"
+batch_norm: false
+residual: false
+
+# Alternative model configurations
+variants:
+  small:
+    hidden_dims: [32]
+    dropout: 0.2
+  
+  medium:
+    hidden_dims: [64, 32]
+    dropout: 0.5
+  
+  large:
+    hidden_dims: [128, 64, 32]
+    dropout: 0.6
+  
+  very_large:
+    hidden_dims: [256, 128, 64]
+    dropout: 0.7

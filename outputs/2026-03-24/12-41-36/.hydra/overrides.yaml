@@ -1,0 +1,3 @@
+- experiments.training.lr=0.001
+- experiments.model.hidden_dims=[32]
+- experiments.training.epochs=20

@@ -1,0 +1,294 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AstroML Raw Data Storage Schema &mdash; AstroML Documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="_static/copybutton.js?v=f281be69"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            AstroML
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">AstroML Raw Data Storage Schema</a><ul>
+<li><a class="reference internal" href="#overview">Overview</a></li>
+<li><a class="reference internal" href="#er-diagram">ER Diagram</a></li>
+<li><a class="reference internal" href="#table-details">Table Details</a><ul>
+<li><a class="reference internal" href="#ledgers"><code class="docutils literal notranslate"><span class="pre">ledgers</span></code></a></li>
+<li><a class="reference internal" href="#transactions"><code class="docutils literal notranslate"><span class="pre">transactions</span></code></a></li>
+<li><a class="reference internal" href="#operations"><code class="docutils literal notranslate"><span class="pre">operations</span></code></a></li>
+<li><a class="reference internal" href="#accounts"><code class="docutils literal notranslate"><span class="pre">accounts</span></code></a></li>
+<li><a class="reference internal" href="#assets"><code class="docutils literal notranslate"><span class="pre">assets</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#relationships">Relationships</a></li>
+<li><a class="reference internal" href="#running-migrations">Running Migrations</a></li>
+</ul>
+</li>
+</ul>
+</div>
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">AstroML</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">AstroML Raw Data Storage Schema</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/schema.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="astroml-raw-data-storage-schema">
+<h1>AstroML Raw Data Storage Schema<a class="headerlink" href="#astroml-raw-data-storage-schema" title="Link to this heading"></a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>AstroML stores raw Stellar blockchain data in PostgreSQL. The schema models the five core entities needed for dynamic graph ML: <strong>ledgers</strong>, <strong>transactions</strong>, <strong>operations</strong>, <strong>accounts</strong>, and <strong>assets</strong>.</p>
+<p>The graph mapping is:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Blockchain Concept</p></th>
+<th class="head"><p>Graph Representation</p></th>
+<th class="head"><p>Table</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Accounts</p></td>
+<td><p>Nodes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">accounts</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Operations</p></td>
+<td><p>Directed edges</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">operations</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Assets</p></td>
+<td><p>Edge types</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">assets</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Time (ledger close)</p></td>
+<td><p>Dynamic dimension</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ledgers</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="er-diagram">
+<h2>ER Diagram<a class="headerlink" href="#er-diagram" title="Link to this heading"></a></h2>
+<div class="highlight-mermaid notranslate"><div class="highlight"><pre><span></span>erDiagram
+    ledgers ||--o{ transactions : contains
+    transactions ||--o{ operations : contains
+
+    ledgers {
+        int sequence PK
+        varchar hash UK
+        varchar prev_hash
+        timestamptz closed_at
+        int successful_transaction_count
+        int failed_transaction_count
+        int operation_count
+        numeric total_coins
+        numeric fee_pool
+        int base_fee_in_stroops
+        int protocol_version
+    }
+
+    transactions {
+        varchar hash PK
+        int ledger_sequence FK
+        varchar source_account
+        timestamptz created_at
+        bigint fee
+        smallint operation_count
+        boolean successful
+        varchar memo_type
+        text memo
+    }
+
+    operations {
+        bigint id PK
+        varchar transaction_hash FK
+        smallint application_order
+        varchar type
+        varchar source_account
+        varchar destination_account
+        numeric amount
+        varchar asset_code
+        varchar asset_issuer
+        timestamptz created_at
+        jsonb details
+    }
+
+    accounts {
+        varchar account_id PK
+        numeric balance
+        bigint sequence
+        varchar home_domain
+        int flags
+        int last_modified_ledger
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    assets {
+        int id PK
+        varchar asset_type
+        varchar asset_code
+        varchar asset_issuer
+        int first_seen_ledger
+    }
+</pre></div>
+</div>
+</section>
+<section id="table-details">
+<h2>Table Details<a class="headerlink" href="#table-details" title="Link to this heading"></a></h2>
+<section id="ledgers">
+<h3><code class="docutils literal notranslate"><span class="pre">ledgers</span></code><a class="headerlink" href="#ledgers" title="Link to this heading"></a></h3>
+<p>Temporal anchor — one row per closed Stellar ledger (~5-6 seconds apart).</p>
+<p><strong>Indexes:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">PK</span></code> on <code class="docutils literal notranslate"><span class="pre">sequence</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">UNIQUE</span></code> on <code class="docutils literal notranslate"><span class="pre">hash</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ix_ledgers_closed_at</span></code> on <code class="docutils literal notranslate"><span class="pre">closed_at</span></code></p></li>
+</ul>
+</section>
+<section id="transactions">
+<h3><code class="docutils literal notranslate"><span class="pre">transactions</span></code><a class="headerlink" href="#transactions" title="Link to this heading"></a></h3>
+<p>One row per Stellar transaction. Linked to a ledger via <code class="docutils literal notranslate"><span class="pre">ledger_sequence</span></code>.</p>
+<p><strong>Indexes:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">PK</span></code> on <code class="docutils literal notranslate"><span class="pre">hash</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ix_transactions_source_account_created_at</span></code> on <code class="docutils literal notranslate"><span class="pre">(source_account,</span> <span class="pre">created_at)</span></code> — composite index for account+timestamp queries</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ix_transactions_ledger_sequence</span></code> on <code class="docutils literal notranslate"><span class="pre">ledger_sequence</span></code></p></li>
+</ul>
+</section>
+<section id="operations">
+<h3><code class="docutils literal notranslate"><span class="pre">operations</span></code><a class="headerlink" href="#operations" title="Link to this heading"></a></h3>
+<p>One row per operation — the primary graph-edge table. Common columns (<code class="docutils literal notranslate"><span class="pre">source_account</span></code>, <code class="docutils literal notranslate"><span class="pre">destination_account</span></code>, <code class="docutils literal notranslate"><span class="pre">amount</span></code>, <code class="docutils literal notranslate"><span class="pre">asset_code</span></code>, <code class="docutils literal notranslate"><span class="pre">asset_issuer</span></code>) cover the majority of graph-relevant operation types. The <code class="docutils literal notranslate"><span class="pre">details</span></code> JSONB column stores type-specific fields.</p>
+<p><code class="docutils literal notranslate"><span class="pre">created_at</span></code> is denormalized from the parent transaction to support efficient temporal range queries without JOINs.</p>
+<p><strong>Indexes:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">PK</span></code> on <code class="docutils literal notranslate"><span class="pre">id</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ix_operations_source_created_at</span></code> on <code class="docutils literal notranslate"><span class="pre">(source_account,</span> <span class="pre">created_at)</span></code> — composite index for account+timestamp queries</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ix_operations_dest_created_at</span></code> on <code class="docutils literal notranslate"><span class="pre">(destination_account,</span> <span class="pre">created_at)</span></code> — partial index (WHERE destination_account IS NOT NULL)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ix_operations_transaction_hash</span></code> on <code class="docutils literal notranslate"><span class="pre">transaction_hash</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ix_operations_type</span></code> on <code class="docutils literal notranslate"><span class="pre">type</span></code></p></li>
+</ul>
+</section>
+<section id="accounts">
+<h3><code class="docutils literal notranslate"><span class="pre">accounts</span></code><a class="headerlink" href="#accounts" title="Link to this heading"></a></h3>
+<p>Latest known state of a Stellar account.</p>
+<p><strong>Indexes:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">PK</span></code> on <code class="docutils literal notranslate"><span class="pre">account_id</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ix_accounts_updated_at</span></code> on <code class="docutils literal notranslate"><span class="pre">updated_at</span></code></p></li>
+</ul>
+</section>
+<section id="assets">
+<h3><code class="docutils literal notranslate"><span class="pre">assets</span></code><a class="headerlink" href="#assets" title="Link to this heading"></a></h3>
+<p>Asset registry — unique by (code, issuer). Native XLM has <code class="docutils literal notranslate"><span class="pre">asset_issuer</span> <span class="pre">=</span> <span class="pre">NULL</span></code>.</p>
+<p><strong>Indexes:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">PK</span></code> on <code class="docutils literal notranslate"><span class="pre">id</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ix_assets_code_issuer</span></code> on <code class="docutils literal notranslate"><span class="pre">(asset_code,</span> <span class="pre">COALESCE(asset_issuer,</span> <span class="pre">''))</span></code> — unique expression index handling NULL issuer for native XLM</p></li>
+</ul>
+</section>
+</section>
+<section id="relationships">
+<h2>Relationships<a class="headerlink" href="#relationships" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>ledgers  1 ──&lt; N  transactions  (ledger_sequence → sequence)
+transactions  1 ──&lt; N  operations  (transaction_hash → hash)
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">accounts</span></code> and <code class="docutils literal notranslate"><span class="pre">assets</span></code> are reference tables — not FK-constrained from operations to keep bulk ingestion fast and avoid ordering dependencies.</p>
+</section>
+<section id="running-migrations">
+<h2>Running Migrations<a class="headerlink" href="#running-migrations" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Apply all migrations</span>
+alembic<span class="w"> </span>upgrade<span class="w"> </span>head
+
+<span class="c1"># Rollback all migrations</span>
+alembic<span class="w"> </span>downgrade<span class="w"> </span>base
+
+<span class="c1"># Create a new migration</span>
+alembic<span class="w"> </span>revision<span class="w"> </span>--autogenerate<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;description&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, AstroML Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

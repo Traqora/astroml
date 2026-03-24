@@ -1,0 +1,22 @@
+# Default configuration for AstroML training experiments
+defaults:
+  - model: gcn
+  - training: default
+  - data: cora
+  - _self_
+
+# Experiment settings
+experiment:
+  name: "astroml_experiment"
+  seed: 42
+  device: "auto"  # auto, cpu, cuda
+  save_dir: "outputs"
+  log_level: "INFO"
+
+# Hydra settings
+hydra:
+  run:
+    dir: outputs/${experiment.name}/${now:%Y-%m-%d_%H-%M-%S}
+  sweep:
+    dir: outputs/${experiment.name}/multirun
+    subdir: ${hydra.job.override_dirname}

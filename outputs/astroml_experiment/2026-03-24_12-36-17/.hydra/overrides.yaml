@@ -1,0 +1,3 @@
+- training.lr=0.001
+- model.hidden_dims=[128,64]
+- training.epochs=300

@@ -1,0 +1,6 @@
+experiment_name: debug_experiment
+model_hidden_dims:
+- 32
+training_lr: 0.001
+training_epochs: 20
+data_name: Cora

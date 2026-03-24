@@ -1,0 +1,189 @@
+[2026-03-24 12:35:42,271][__main__][INFO] - Configuration:
+[2026-03-24 12:35:42,286][__main__][INFO] - model:
+  _target_: astroml.models.gcn.GCN
+  input_dim: ???
+  hidden_dims:
+  - 64
+  - 32
+  output_dim: ???
+  dropout: 0.5
+  activation: relu
+  batch_norm: false
+  residual: false
+  variants:
+    small:
+      hidden_dims:
+      - 32
+      dropout: 0.2
+    medium:
+      hidden_dims:
+      - 64
+      - 32
+      dropout: 0.5
+    large:
+      hidden_dims:
+      - 128
+      - 64
+      - 32
+      dropout: 0.6
+    very_large:
+      hidden_dims:
+      - 256
+      - 128
+      - 64
+      dropout: 0.7
+training:
+  epochs: 200
+  lr: 0.01
+  weight_decay: 0.0005
+  optimizer: adam
+  scheduler: null
+  early_stopping:
+    patience: 50
+    min_delta: 0.0001
+    monitor: val_loss
+    mode: min
+  batch_size: null
+  val_split: 0.1
+  test_split: 0.1
+  shuffle: true
+  log_interval: 20
+  save_best_only: true
+  save_last: true
+  optimizer_configs:
+    adam:
+      betas:
+      - 0.9
+      - 0.999
+      eps: 1.0e-08
+      amsgrad: false
+    sgd:
+      momentum: 0.9
+      nesterov: true
+    adamw:
+      betas:
+      - 0.9
+      - 0.999
+      eps: 1.0e-08
+      weight_decay: 0.01
+data:
+  _target_: torch_geometric.datasets.Planetoid
+  name: Cora
+  root: data
+  transform:
+    _target_: torch_geometric.transforms.NormalizeFeatures
+  num_classes: 7
+  num_node_features: 1433
+  variants:
+    citeseer:
+      name: CiteSeer
+      num_classes: 6
+      num_node_features: 3703
+    pubmed:
+      name: PubMed
+      num_classes: 3
+      num_node_features: 5003
+experiment:
+  name: astroml_experiment
+  seed: 42
+  device: auto
+  save_dir: outputs
+  log_level: INFO
+
+[2026-03-24 12:35:42,287][__main__][INFO] - Configuration test successful!
+[2026-03-24 12:35:42,287][__main__][INFO] - Configuration:
+[2026-03-24 12:35:42,301][__main__][INFO] - model:
+  _target_: astroml.models.gcn.GCN
+  input_dim: ???
+  hidden_dims:
+  - 64
+  - 32
+  output_dim: ???
+  dropout: 0.5
+  activation: relu
+  batch_norm: false
+  residual: false
+  variants:
+    small:
+      hidden_dims:
+      - 32
+      dropout: 0.2
+    medium:
+      hidden_dims:
+      - 64
+      - 32
+      dropout: 0.5
+    large:
+      hidden_dims:
+      - 128
+      - 64
+      - 32
+      dropout: 0.6
+    very_large:
+      hidden_dims:
+      - 256
+      - 128
+      - 64
+      dropout: 0.7
+training:
+  epochs: 200
+  lr: 0.01
+  weight_decay: 0.0005
+  optimizer: adam
+  scheduler: null
+  early_stopping:
+    patience: 50
+    min_delta: 0.0001
+    monitor: val_loss
+    mode: min
+  batch_size: null
+  val_split: 0.1
+  test_split: 0.1
+  shuffle: true
+  log_interval: 20
+  save_best_only: true
+  save_last: true
+  optimizer_configs:
+    adam:
+      betas:
+      - 0.9
+      - 0.999
+      eps: 1.0e-08
+      amsgrad: false
+    sgd:
+      momentum: 0.9
+      nesterov: true
+    adamw:
+      betas:
+      - 0.9
+      - 0.999
+      eps: 1.0e-08
+      weight_decay: 0.01
+data:
+  _target_: torch_geometric.datasets.Planetoid
+  name: Cora
+  root: data
+  transform:
+    _target_: torch_geometric.transforms.NormalizeFeatures
+  num_classes: 7
+  num_node_features: 1433
+  variants:
+    citeseer:
+      name: CiteSeer
+      num_classes: 6
+      num_node_features: 3703
+    pubmed:
+      name: PubMed
+      num_classes: 3
+      num_node_features: 5003
+experiment:
+  name: astroml_experiment
+  seed: 42
+  device: auto
+  save_dir: outputs
+  log_level: INFO
+
+[2026-03-24 12:35:42,302][__main__][INFO] - Test results: {'experiment_name': 'astroml_experiment', 'model_hidden_dims': [64, 32], 'training_lr': 0.01, 'training_epochs': 200, 'data_name': 'Cora'}
+[2026-03-24 12:35:42,303][__main__][INFO] - Configuration test completed!
+[2026-03-24 12:35:42,303][__main__][INFO] - Results: {'experiment_name': 'astroml_experiment', 'model_hidden_dims': [64, 32], 'training_lr': 0.01, 'training_epochs': 200, 'data_name': 'Cora'}
+[2026-03-24 12:35:42,325][__main__][INFO] - Configuration saved to outputs

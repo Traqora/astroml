@@ -1,0 +1,29 @@
+# Debug experiment configuration
+defaults:
+  - /model: gcn
+  - /training: default
+  - /data: cora
+  - _self_
+
+# Debug settings
+experiment:
+  name: "debug_experiment"
+  seed: 42
+  device: "auto"
+  save_dir: "outputs"
+  log_level: "INFO"
+
+# Model overrides
+model:
+  hidden_dims: [16]  # Small model for fast debugging
+  dropout: 0.1
+
+# Training overrides
+training:
+  epochs: 10  # Short training for debugging
+  lr: 0.01
+  log_interval: 1
+
+# Data overrides
+data:
+  name: "Cora"

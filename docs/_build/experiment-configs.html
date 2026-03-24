@@ -1,0 +1,491 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Experiment Configuration Guide &mdash; AstroML Documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="_static/copybutton.js?v=f281be69"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            AstroML
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">Experiment Configuration Guide</a><ul>
+<li><a class="reference internal" href="#quick-start">🚀 Quick Start</a><ul>
+<li><a class="reference internal" href="#basic-usage">Basic Usage</a></li>
+<li><a class="reference internal" href="#hyperparameter-sweeps">Hyperparameter Sweeps</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#configuration-structure">📁 Configuration Structure</a></li>
+<li><a class="reference internal" href="#configuration-files">⚙️ Configuration Files</a><ul>
+<li><a class="reference internal" href="#main-config-configs-config-yaml">Main Config (<code class="docutils literal notranslate"><span class="pre">configs/config.yaml</span></code>)</a></li>
+<li><a class="reference internal" href="#model-config-configs-model-gcn-yaml">Model Config (<code class="docutils literal notranslate"><span class="pre">configs/model/gcn.yaml</span></code>)</a></li>
+<li><a class="reference internal" href="#training-config-configs-training-default-yaml">Training Config (<code class="docutils literal notranslate"><span class="pre">configs/training/default.yaml</span></code>)</a></li>
+<li><a class="reference internal" href="#data-config-configs-data-cora-yaml">Data Config (<code class="docutils literal notranslate"><span class="pre">configs/data/cora.yaml</span></code>)</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#configuration-overrides">🔧 Configuration Overrides</a><ul>
+<li><a class="reference internal" href="#command-line-overrides">Command Line Overrides</a></li>
+<li><a class="reference internal" href="#using-experiments">Using Experiments</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#id1">📊 Hyperparameter Sweeps</a><ul>
+<li><a class="reference internal" href="#basic-grid-search">Basic Grid Search</a></li>
+<li><a class="reference internal" href="#using-sweep-configurations">Using Sweep Configurations</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#output-structure">📁 Output Structure</a></li>
+<li><a class="reference internal" href="#common-use-cases">🎯 Common Use Cases</a><ul>
+<li><a class="reference internal" href="#quick-debugging">1. Quick Debugging</a></li>
+<li><a class="reference internal" href="#baseline-comparison">2. Baseline Comparison</a></li>
+<li><a class="reference internal" href="#architecture-search">3. Architecture Search</a></li>
+<li><a class="reference internal" href="#learning-rate-tuning">4. Learning Rate Tuning</a></li>
+<li><a class="reference internal" href="#regularization-experiments">5. Regularization Experiments</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#advanced-features">🔍 Advanced Features</a><ul>
+<li><a class="reference internal" href="#custom-configurations">Custom Configurations</a></li>
+<li><a class="reference internal" href="#environment-variables">Environment Variables</a></li>
+<li><a class="reference internal" href="#conditional-configuration">Conditional Configuration</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#best-practices">📝 Best Practices</a></li>
+<li><a class="reference internal" href="#troubleshooting">🆘 Troubleshooting</a><ul>
+<li><a class="reference internal" href="#common-issues">Common Issues</a></li>
+<li><a class="reference internal" href="#debugging-configurations">Debugging Configurations</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#additional-resources">📚 Additional Resources</a></li>
+</ul>
+</li>
+</ul>
+</div>
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">AstroML</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Experiment Configuration Guide</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/experiment-configs.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="experiment-configuration-guide">
+<h1>Experiment Configuration Guide<a class="headerlink" href="#experiment-configuration-guide" title="Link to this heading"></a></h1>
+<p>This guide explains how to use the Hydra configuration system to run ML experiments with AstroML.</p>
+<section id="quick-start">
+<h2>🚀 Quick Start<a class="headerlink" href="#quick-start" title="Link to this heading"></a></h2>
+<section id="basic-usage">
+<h3>Basic Usage<a class="headerlink" href="#basic-usage" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Run with default configuration</span>
+python<span class="w"> </span>train.py
+
+<span class="c1"># Override learning rate</span>
+python<span class="w"> </span>train.py<span class="w"> </span>training.lr<span class="o">=</span><span class="m">0</span>.001
+
+<span class="c1"># Use debug experiment</span>
+python<span class="w"> </span>train.py<span class="w"> </span><span class="nv">experiment</span><span class="o">=</span>debug
+
+<span class="c1"># Override multiple parameters</span>
+python<span class="w"> </span>train.py<span class="w"> </span>model.hidden_dims<span class="o">=[</span><span class="m">128</span>,64<span class="o">]</span><span class="w"> </span>training.lr<span class="o">=</span><span class="m">0</span>.01<span class="w"> </span>training.epochs<span class="o">=</span><span class="m">300</span>
+</pre></div>
+</div>
+</section>
+<section id="hyperparameter-sweeps">
+<h3>Hyperparameter Sweeps<a class="headerlink" href="#hyperparameter-sweeps" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Grid search over learning rates</span>
+python<span class="w"> </span>train.py<span class="w"> </span>--multirun<span class="w"> </span>training.lr<span class="o">=</span><span class="m">0</span>.001,0.01,0.1
+
+<span class="c1"># Grid search over multiple parameters</span>
+python<span class="w"> </span>train.py<span class="w"> </span>--multirun<span class="w"> </span>model.hidden_dims<span class="o">=[</span><span class="m">32</span><span class="o">]</span>,<span class="o">[</span><span class="m">64</span>,32<span class="o">]</span>,<span class="o">[</span><span class="m">128</span>,64<span class="o">]</span><span class="w"> </span>training.lr<span class="o">=</span><span class="m">0</span>.001,0.01
+
+<span class="c1"># Use pre-configured sweep</span>
+python<span class="w"> </span>train.py<span class="w"> </span>--config-name<span class="w"> </span>experiments/hyperparameter_search<span class="w"> </span>--multirun
+</pre></div>
+</div>
+</section>
+</section>
+<section id="configuration-structure">
+<h2>📁 Configuration Structure<a class="headerlink" href="#configuration-structure" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>configs/
+├── config.yaml                    # Main configuration file
+├── model/
+│   └── gcn.yaml                  # GCN model configurations
+├── training/
+│   └── default.yaml              # Training configurations
+├── data/
+│   └── cora.yaml                 # Dataset configurations
+└── experiments/
+    ├── debug.yaml                # Debug experiment
+    ├── baseline.yaml             # Baseline experiment
+    └── hyperparameter_search.yaml # Hyperparameter sweep
+</pre></div>
+</div>
+</section>
+<section id="configuration-files">
+<h2>⚙️ Configuration Files<a class="headerlink" href="#configuration-files" title="Link to this heading"></a></h2>
+<section id="main-config-configs-config-yaml">
+<h3>Main Config (<code class="docutils literal notranslate"><span class="pre">configs/config.yaml</span></code>)<a class="headerlink" href="#main-config-configs-config-yaml" title="Link to this heading"></a></h3>
+<p>The main configuration file that sets up defaults and experiment settings:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">defaults</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gcn</span><span class="w">          </span><span class="c1"># Use GCN model</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">training</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span><span class="w">   </span><span class="c1"># Use default training config</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">data</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cora</span><span class="w">         </span><span class="c1"># Use Cora dataset</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">_self_</span><span class="w">             </span><span class="c1"># Include this file&#39;s settings</span>
+
+<span class="nt">experiment</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;astroml_experiment&quot;</span>
+<span class="w">  </span><span class="nt">seed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">42</span>
+<span class="w">  </span><span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;auto&quot;</span>
+<span class="w">  </span><span class="nt">save_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;outputs&quot;</span>
+<span class="w">  </span><span class="nt">log_level</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;INFO&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="model-config-configs-model-gcn-yaml">
+<h3>Model Config (<code class="docutils literal notranslate"><span class="pre">configs/model/gcn.yaml</span></code>)<a class="headerlink" href="#model-config-configs-model-gcn-yaml" title="Link to this heading"></a></h3>
+<p>Configures the Graph Convolutional Network:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">_target_</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">astroml.models.gcn.GCN</span>
+<span class="nt">input_dim</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">???</span><span class="w">           </span><span class="c1"># Will be set from dataset</span>
+<span class="nt">hidden_dims</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">64</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">32</span><span class="p p-Indicator">]</span><span class="w">   </span><span class="c1"># Hidden layer sizes</span>
+<span class="nt">output_dim</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">???</span><span class="w">          </span><span class="c1"># Will be set from dataset</span>
+<span class="nt">dropout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
+<span class="nt">activation</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;relu&quot;</span>
+<span class="nt">batch_norm</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="nt">residual</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</pre></div>
+</div>
+</section>
+<section id="training-config-configs-training-default-yaml">
+<h3>Training Config (<code class="docutils literal notranslate"><span class="pre">configs/training/default.yaml</span></code>)<a class="headerlink" href="#training-config-configs-training-default-yaml" title="Link to this heading"></a></h3>
+<p>Training hyperparameters and settings:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">epochs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200</span>
+<span class="nt">lr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.01</span>
+<span class="nt">weight_decay</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5e-4</span>
+<span class="nt">optimizer</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;adam&quot;</span>
+<span class="nt">scheduler</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span>
+<span class="nt">early_stopping</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">patience</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50</span>
+<span class="w">  </span><span class="nt">min_delta</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1e-4</span>
+<span class="w">  </span><span class="nt">monitor</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;val_loss&quot;</span>
+<span class="w">  </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;min&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="data-config-configs-data-cora-yaml">
+<h3>Data Config (<code class="docutils literal notranslate"><span class="pre">configs/data/cora.yaml</span></code>)<a class="headerlink" href="#data-config-configs-data-cora-yaml" title="Link to this heading"></a></h3>
+<p>Dataset configuration:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">_target_</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">torch_geometric.datasets.Planetoid</span>
+<span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Cora&quot;</span>
+<span class="nt">root</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;data&quot;</span>
+<span class="nt">transform</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">_target_</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">torch_geometric.transforms.NormalizeFeatures</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="configuration-overrides">
+<h2>🔧 Configuration Overrides<a class="headerlink" href="#configuration-overrides" title="Link to this heading"></a></h2>
+<section id="command-line-overrides">
+<h3>Command Line Overrides<a class="headerlink" href="#command-line-overrides" title="Link to this heading"></a></h3>
+<p>You can override any configuration parameter from the command line:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Override learning rate</span>
+python<span class="w"> </span>train.py<span class="w"> </span>training.lr<span class="o">=</span><span class="m">0</span>.001
+
+<span class="c1"># Override model architecture</span>
+python<span class="w"> </span>train.py<span class="w"> </span>model.hidden_dims<span class="o">=[</span><span class="m">128</span>,64,32<span class="o">]</span><span class="w"> </span>model.dropout<span class="o">=</span><span class="m">0</span>.6
+
+<span class="c1"># Override dataset</span>
+python<span class="w"> </span>train.py<span class="w"> </span>data.name<span class="o">=</span>CiteSeer
+
+<span class="c1"># Override experiment settings</span>
+python<span class="w"> </span>train.py<span class="w"> </span>experiment.name<span class="o">=</span>my_experiment<span class="w"> </span>experiment.seed<span class="o">=</span><span class="m">123</span>
+</pre></div>
+</div>
+</section>
+<section id="using-experiments">
+<h3>Using Experiments<a class="headerlink" href="#using-experiments" title="Link to this heading"></a></h3>
+<p>Pre-configured experiments provide complete setups:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Debug experiment (small model, few epochs)</span>
+python<span class="w"> </span>train.py<span class="w"> </span>--config-name<span class="w"> </span>experiments/debug
+
+<span class="c1"># Baseline experiment (standard settings)</span>
+python<span class="w"> </span>train.py<span class="w"> </span>--config-name<span class="w"> </span>experiments/baseline
+
+<span class="c1"># Hyperparameter search experiment</span>
+python<span class="w"> </span>train.py<span class="w"> </span>--config-name<span class="w"> </span>experiments/hyperparameter_search<span class="w"> </span>--multirun
+</pre></div>
+</div>
+</section>
+</section>
+<section id="id1">
+<h2>📊 Hyperparameter Sweeps<a class="headerlink" href="#id1" title="Link to this heading"></a></h2>
+<section id="basic-grid-search">
+<h3>Basic Grid Search<a class="headerlink" href="#basic-grid-search" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Search over learning rates</span>
+python<span class="w"> </span>train.py<span class="w"> </span>--multirun<span class="w"> </span>training.lr<span class="o">=</span><span class="m">0</span>.001,0.01,0.1
+
+<span class="c1"># Search over model architectures</span>
+python<span class="w"> </span>train.py<span class="w"> </span>--multirun<span class="w"> </span>model.hidden_dims<span class="o">=[</span><span class="m">32</span><span class="o">]</span>,<span class="o">[</span><span class="m">64</span>,32<span class="o">]</span>,<span class="o">[</span><span class="m">128</span>,64<span class="o">]</span>
+
+<span class="c1"># Combined search</span>
+python<span class="w"> </span>train.py<span class="w"> </span>--multirun<span class="w"> </span>training.lr<span class="o">=</span><span class="m">0</span>.001,0.01<span class="w"> </span>model.dropout<span class="o">=</span><span class="m">0</span>.3,0.5,0.7
+</pre></div>
+</div>
+</section>
+<section id="using-sweep-configurations">
+<h3>Using Sweep Configurations<a class="headerlink" href="#using-sweep-configurations" title="Link to this heading"></a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">hyperparameter_search.yaml</span></code> experiment defines a parameter grid:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>train.py<span class="w"> </span>--config-name<span class="w"> </span>experiments/hyperparameter_search<span class="w"> </span>--multirun
+</pre></div>
+</div>
+<p>This will run experiments for all combinations of:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">model.hidden_dims</span></code>: [32], [64,32], [128,64]</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">model.dropout</span></code>: 0.2, 0.5, 0.7</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">training.lr</span></code>: 0.001, 0.01, 0.1</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">training.weight_decay</span></code>: 1e-5, 5e-4, 1e-3</p></li>
+</ul>
+</section>
+</section>
+<section id="output-structure">
+<h2>📁 Output Structure<a class="headerlink" href="#output-structure" title="Link to this heading"></a></h2>
+<p>Hydra automatically organizes experiment outputs:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>outputs/
+└── astroml_experiment/
+    └── 2024-03-24_10-30-45/
+        ├── .hydra/
+        │   ├── config.yaml      # Full configuration
+        │   ├── hydra.yaml       # Hydra settings
+        │   └── overrides.yaml    # Command line overrides
+        ├── best_model.pth       # Best model checkpoint
+        ├── last_model.pth       # Final model checkpoint
+        ├── results.yaml         # Training results
+        └── train.log           # Training logs
+</pre></div>
+</div>
+<p>For multirun experiments:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>outputs/
+└── astroml_experiment/
+    └── multirun/
+        ├── model.hidden_dims=32,training.lr=0.001/
+        ├── model.hidden_dims=64,training.lr=0.001/
+        └── ...
+</pre></div>
+</div>
+</section>
+<section id="common-use-cases">
+<h2>🎯 Common Use Cases<a class="headerlink" href="#common-use-cases" title="Link to this heading"></a></h2>
+<section id="quick-debugging">
+<h3>1. Quick Debugging<a class="headerlink" href="#quick-debugging" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Small model, few epochs for fast iteration</span>
+python<span class="w"> </span>train.py<span class="w"> </span><span class="nv">experiment</span><span class="o">=</span>debug
+</pre></div>
+</div>
+</section>
+<section id="baseline-comparison">
+<h3>2. Baseline Comparison<a class="headerlink" href="#baseline-comparison" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Run baseline experiment</span>
+python<span class="w"> </span>train.py<span class="w"> </span>--config-name<span class="w"> </span>experiments/baseline
+
+<span class="c1"># Compare with different learning rate</span>
+python<span class="w"> </span>train.py<span class="w"> </span>--config-name<span class="w"> </span>experiments/baseline<span class="w"> </span>training.lr<span class="o">=</span><span class="m">0</span>.001
+</pre></div>
+</div>
+</section>
+<section id="architecture-search">
+<h3>3. Architecture Search<a class="headerlink" href="#architecture-search" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Test different model sizes</span>
+python<span class="w"> </span>train.py<span class="w"> </span>--multirun<span class="w"> </span>model.hidden_dims<span class="o">=[</span><span class="m">32</span><span class="o">]</span>,<span class="o">[</span><span class="m">64</span>,32<span class="o">]</span>,<span class="o">[</span><span class="m">128</span>,64,32<span class="o">]</span>
+</pre></div>
+</div>
+</section>
+<section id="learning-rate-tuning">
+<h3>4. Learning Rate Tuning<a class="headerlink" href="#learning-rate-tuning" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Fine-grained learning rate search</span>
+python<span class="w"> </span>train.py<span class="w"> </span>--multirun<span class="w"> </span>training.lr<span class="o">=</span><span class="m">0</span>.001,0.003,0.01,0.03,0.1
+</pre></div>
+</div>
+</section>
+<section id="regularization-experiments">
+<h3>5. Regularization Experiments<a class="headerlink" href="#regularization-experiments" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Test different dropout rates</span>
+python<span class="w"> </span>train.py<span class="w"> </span>--multirun<span class="w"> </span>model.dropout<span class="o">=</span><span class="m">0</span>.1,0.3,0.5,0.7
+
+<span class="c1"># Test weight decay</span>
+python<span class="w"> </span>train.py<span class="w"> </span>--multirun<span class="w"> </span>training.weight_decay<span class="o">=</span><span class="m">0</span>,1e-5,5e-4,1e-3
+</pre></div>
+</div>
+</section>
+</section>
+<section id="advanced-features">
+<h2>🔍 Advanced Features<a class="headerlink" href="#advanced-features" title="Link to this heading"></a></h2>
+<section id="custom-configurations">
+<h3>Custom Configurations<a class="headerlink" href="#custom-configurations" title="Link to this heading"></a></h3>
+<p>Create your own experiment configurations:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># configs/experiments/my_experiment.yaml</span>
+<span class="nt">defaults</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">override /model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gcn</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">override /training</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">override /data</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cora</span>
+
+<span class="nt">experiment</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;my_custom_experiment&quot;</span>
+
+<span class="nt">model</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">hidden_dims</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">256</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">128</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">dropout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.6</span>
+
+<span class="nt">training</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">epochs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">500</span>
+<span class="w">  </span><span class="nt">lr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.003</span>
+</pre></div>
+</div>
+</section>
+<section id="environment-variables">
+<h3>Environment Variables<a class="headerlink" href="#environment-variables" title="Link to this heading"></a></h3>
+<p>Use environment variables in configs:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># In config.yaml</span>
+<span class="nt">experiment</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;${oc.env:USER}_experiment&quot;</span>
+<span class="w">  </span><span class="nt">seed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${oc.env:RANDOM_SEED:42}</span>
+</pre></div>
+</div>
+</section>
+<section id="conditional-configuration">
+<h3>Conditional Configuration<a class="headerlink" href="#conditional-configuration" title="Link to this heading"></a></h3>
+<p>Use conditional logic in configs:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Conditional model size based on dataset</span>
+<span class="nt">model</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">hidden_dims</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${select:${data.name},CiteSeer:[64],PubMed:[128,64],default:[64,32]}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="best-practices">
+<h2>📝 Best Practices<a class="headerlink" href="#best-practices" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p><strong>Use descriptive experiment names</strong> for easy identification</p></li>
+<li><p><strong>Set random seeds</strong> for reproducible results</p></li>
+<li><p><strong>Use early stopping</strong> to prevent overfitting</p></li>
+<li><p><strong>Save both best and last models</strong> for comparison</p></li>
+<li><p><strong>Log frequently</strong> during training for debugging</p></li>
+<li><p><strong>Use multirun for systematic hyperparameter searches</strong></p></li>
+<li><p><strong>Keep configuration files under version control</strong></p></li>
+</ol>
+</section>
+<section id="troubleshooting">
+<h2>🆘 Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h2>
+<section id="common-issues">
+<h3>Common Issues<a class="headerlink" href="#common-issues" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Config not found</strong>: Check file paths and YAML syntax</p></li>
+<li><p><strong>Override not working</strong>: Use dot notation (e.g., <code class="docutils literal notranslate"><span class="pre">model.lr</span></code> not <code class="docutils literal notranslate"><span class="pre">lr</span></code>)</p></li>
+<li><p><strong>Multirun not working</strong>: Ensure <code class="docutils literal notranslate"><span class="pre">--multirun</span></code> flag is used</p></li>
+<li><p><strong>Output directory issues</strong>: Check write permissions</p></li>
+</ol>
+</section>
+<section id="debugging-configurations">
+<h3>Debugging Configurations<a class="headerlink" href="#debugging-configurations" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Print configuration without running</span>
+python<span class="w"> </span>train.py<span class="w"> </span>--cfg
+
+<span class="c1"># Print specific config section</span>
+python<span class="w"> </span>train.py<span class="w"> </span>--cfg<span class="w"> </span>model
+
+<span class="c1"># Dry run to check config</span>
+python<span class="w"> </span>train.py<span class="w"> </span>--dry-run
+</pre></div>
+</div>
+</section>
+</section>
+<section id="additional-resources">
+<h2>📚 Additional Resources<a class="headerlink" href="#additional-resources" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><a class="reference external" href="https://hydra.cc/">Hydra Documentation</a></p></li>
+<li><p><a class="reference external" href="https://omegaconf.readthedocs.io/">OmegaConf Documentation</a></p></li>
+<li><p><a class="reference external" href="https://pytorch-lightning.readthedocs.io/">PyTorch Lightning Integration</a></p></li>
+</ul>
+<hr class="docutils" />
+<p>For more examples and advanced configurations, see the <code class="docutils literal notranslate"><span class="pre">configs/experiments/</span></code> directory.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, AstroML Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

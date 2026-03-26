@@ -4,7 +4,7 @@ This module contains helpers used to build frequency-based features from
 transaction data, including daily activity counts and burstiness metrics.
 Inputs are pandas DataFrames with configurable timestamp and account columns.
 """
-from typing import Union
+from typing import Dict, Union
 
 import numpy as np
 import pandas as pd

@@ -4,8 +4,10 @@ Constructs directed graphs where nodes represent accounts and edges represent
 transactions between them. Supports weighted edges, multi-asset transactions,
 and export to NetworkX format.
 """
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Any
 from collections import defaultdict
+
+from astroml.features.asset_typing import AssetType, classify_asset
 
 
 class TransactionGraph:
@@ -43,12 +45,19 @@ class TransactionGraph:
         """
         if from_account == to_account:
             return
+<<<<<<< feat/multi-asset-edge-typing
+
+        edge_type = classify_asset(asset)
+
+=======
+>>>>>>> main
         self.nodes.add(from_account)
         self.nodes.add(to_account)
-        
+
         transaction = {
             "amount": amount,
             "asset": asset,
+            "edge_type": int(edge_type),   # 0=XLM, 1=STABLECOIN, 2=CUSTOM
             "metadata": metadata or {}
         }
         
@@ -181,11 +190,17 @@ class TransactionGraph:
             for dst in edge_dict[src]:
                 weight = self.get_edge_weight(src, dst, asset, aggregation)
                 edge_attrs = {"weight": weight}
-                
+
                 if include_metadata:
                     transactions = edge_dict[src][dst]
                     edge_attrs["transaction_count"] = len(transactions)
                     edge_attrs["transactions"] = transactions
+
+                # Attach edge_type from the first transaction on this edge
+                # (all transactions on the same src→dst+asset share the same type)
+                txns = edge_dict[src][dst]
+                if txns:
+                    edge_attrs["edge_type"] = txns[0].get("edge_type", int(classify_asset(txns[0]["asset"])))
                 
                 G.add_edge(src, dst, **edge_attrs)
         

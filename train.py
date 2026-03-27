@@ -21,6 +21,7 @@ import hydra
 from hydra.utils import instantiate, get_original_cwd
 
 from astroml.models.gcn import GCN
+from astroml.tracking import MLflowTracker
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -125,33 +126,67 @@ def train(cfg: DictConfig) -> Dict[str, Any]:
     """Main training function."""
     # Set up device
     device = set_device(cfg.experiment.device)
-    
+
+    # Build MLflow tracker (no-op when disabled)
+    mlflow_cfg = cfg.get("mlflow", {})
+    tracker = MLflowTracker(
+        enabled=mlflow_cfg.get("enabled", False),
+        tracking_uri=mlflow_cfg.get("tracking_uri", "mlruns"),
+        experiment_name=mlflow_cfg.get("experiment_name", cfg.experiment.name),
+        run_name=mlflow_cfg.get("run_name", None),
+        log_model_weights=mlflow_cfg.get("log_model_weights", True),
+    )
+
+    # Log hyper-parameters once
+    tracker.log_params({
+        "model": cfg.model.get("_target_", "gcn"),
+        "hidden_dims": str(cfg.model.get("hidden_dims", [])),
+        "dropout": cfg.model.get("dropout", None),
+        "optimizer": cfg.training.optimizer,
+        "lr": cfg.training.lr,
+        "weight_decay": cfg.training.weight_decay,
+        "epochs": cfg.training.epochs,
+        "seed": cfg.experiment.seed,
+    })
+
     # Load dataset
     dataset, data = load_dataset(cfg)
     data = data.to(device)
-    
+
     # Create model
     model = create_model(cfg, dataset)
     model = model.to(device)
-    
+
     # Create optimizer
     optimizer = create_optimizer(cfg, model)
-    
+
     # Training loop
     logger.info(f"Starting training for {cfg.training.epochs} epochs")
-    
+
     best_val_acc = 0.0
     patience_counter = 0
-    
+    best_model_path = Path(cfg.experiment.save_dir) / "best_model.pth"
+
     for epoch in range(cfg.training.epochs):
         # Train
         train_loss = train_epoch(model, data, optimizer, device)
-        
+
         # Evaluate
         train_metrics = evaluate(model, data, device, "train_mask")
         val_metrics = evaluate(model, data, device, "val_mask")
-        
-        # Log progress
+
+        # Log metrics to MLflow every epoch
+        tracker.log_metrics(
+            {
+                "train_loss": train_loss,
+                "train_acc": train_metrics["accuracy"],
+                "val_loss": val_metrics["loss"],
+                "val_acc": val_metrics["accuracy"],
+            },
+            step=epoch,
+        )
+
+        # Log progress to console at intervals
         if epoch % cfg.training.log_interval == 0:
             logger.info(
                 f"Epoch {epoch:3d} | "
@@ -159,41 +194,53 @@ def train(cfg: DictConfig) -> Dict[str, Any]:
                 f"Train Acc: {train_metrics['accuracy']:.4f} | "
                 f"Val Acc: {val_metrics['accuracy']:.4f}"
             )
-        
+
         # Early stopping
         if val_metrics['accuracy'] > best_val_acc:
             best_val_acc = val_metrics['accuracy']
             patience_counter = 0
-            
+
             # Save best model
             if cfg.training.save_best_only:
-                torch.save(model.state_dict(), 
-                          Path(cfg.experiment.save_dir) / "best_model.pth")
+                torch.save(model.state_dict(), best_model_path)
         else:
             patience_counter += 1
-        
-        if (cfg.training.early_stopping.patience > 0 and 
-            patience_counter >= cfg.training.early_stopping.patience):
+
+        if (cfg.training.early_stopping.patience > 0 and
+                patience_counter >= cfg.training.early_stopping.patience):
             logger.info(f"Early stopping at epoch {epoch}")
             break
-    
+
     # Final evaluation
     test_metrics = evaluate(model, data, device, "test_mask")
     logger.info(f"Test Accuracy: {test_metrics['accuracy']:.4f}")
-    
+
+    # Log final test metrics
+    tracker.log_metrics({
+        "test_acc": test_metrics["accuracy"],
+        "test_loss": test_metrics["loss"],
+        "best_val_acc": best_val_acc,
+    })
+
     # Save final model
+    last_model_path = Path(cfg.experiment.save_dir) / "last_model.pth"
     if cfg.training.save_last:
-        torch.save(model.state_dict(), 
-                  Path(cfg.experiment.save_dir) / "last_model.pth")
-    
+        torch.save(model.state_dict(), last_model_path)
+
+    # Log model artifact
+    checkpoint = best_model_path if best_model_path.exists() else last_model_path
+    tracker.log_model_artifact(model, artifact_path="model", checkpoint_path=str(checkpoint))
+
     # Save configuration
     OmegaConf.save(cfg, Path(cfg.experiment.save_dir) / "config.yaml")
-    
+
+    tracker.end()
+
     return {
         "test_accuracy": test_metrics['accuracy'],
         "test_loss": test_metrics['loss'],
         "best_val_accuracy": best_val_acc,
-        "epochs_trained": epoch + 1
+        "epochs_trained": epoch + 1,
     }
 
 

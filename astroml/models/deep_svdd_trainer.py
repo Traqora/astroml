@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from .deep_svdd import DeepSVDD, DeepSVDDNetwork
+from astroml.tracking import MLflowTracker
 
 
 class DeepSVDDTrainer:
@@ -26,13 +27,15 @@ class DeepSVDDTrainer:
         model: DeepSVDD,
         device: str = 'cpu',
         patience: int = 10,
-        min_delta: float = 1e-4
+        min_delta: float = 1e-4,
+        tracker: Optional[MLflowTracker] = None,
     ):
         self.model = model
         self.device = device
         self.patience = patience
         self.min_delta = min_delta
-        
+        self.tracker = tracker  # None → no MLflow logging
+
         self.training_history = {
             'train_loss': [],
             'val_loss': [],
@@ -101,15 +104,25 @@ class DeepSVDDTrainer:
             if val_loss is not None:
                 self.training_history['val_loss'].append(val_loss)
             self.training_history['radius'].append(radius)
-            
-            # Logging
+
+            # MLflow per-epoch metrics
+            if self.tracker is not None:
+                step_metrics: Dict[str, float] = {
+                    "train_loss": train_loss,
+                    "svdd_radius": radius,
+                }
+                if val_loss is not None:
+                    step_metrics["val_loss"] = val_loss
+                self.tracker.log_metrics(step_metrics, step=epoch)
+
+            # Console logging
             if epoch % 10 == 0:
                 log_msg = f"Epoch {epoch}: Train Loss = {train_loss:.4f}"
                 if val_loss is not None:
                     log_msg += f", Val Loss = {val_loss:.4f}"
                 log_msg += f", Radius = {radius:.4f}"
                 print(log_msg)
-        
+
         return self.training_history
     
     def _train_epoch(
@@ -254,7 +267,7 @@ class DeepSVDDTrainer:
             raise ValueError(f"Unknown scheduler type: {scheduler_type}")
     
     def _save_checkpoint(self):
-        """Save best model checkpoint."""
+        """Save best model checkpoint and log it to MLflow."""
         checkpoint = {
             'model_state_dict': self.model.state_dict(),
             'center': self.model.center,
@@ -262,6 +275,12 @@ class DeepSVDDTrainer:
             'training_history': self.training_history
         }
         torch.save(checkpoint, 'best_deep_svdd.pth')
+        if self.tracker is not None:
+            self.tracker.log_model_artifact(
+                self.model,
+                artifact_path="model",
+                checkpoint_path="best_deep_svdd.pth",
+            )
     
     def load_checkpoint(self, checkpoint_path: str):
         """Load model from checkpoint."""
@@ -280,46 +299,57 @@ class DeepSVDDTrainer:
         self,
         X: np.ndarray,
         y: np.ndarray,
-        threshold_percentile: float = 95.0
+        threshold_percentile: float = 95.0,
     ) -> Dict[str, float]:
-        """Evaluate model performance."""
-        
+        """Evaluate model performance and log results to MLflow."""
+
         # Get anomaly scores
         scores = self.model.predict(X)
-        
+
         # Determine threshold
         threshold = np.percentile(scores, threshold_percentile)
         predictions = (scores > threshold).astype(int)
-        
+
         # Calculate metrics
-        metrics = {}
-        
+        metrics: Dict[str, float] = {}
+
         # AUC-ROC
         try:
             metrics['auc_roc'] = roc_auc_score(y, scores)
         except ValueError:
             metrics['auc_roc'] = 0.0
-        
+
         # AUC-PR
         try:
             precision, recall, _ = precision_recall_curve(y, scores)
             metrics['auc_pr'] = auc(recall, precision)
         except ValueError:
             metrics['auc_pr'] = 0.0
-        
+
         # Basic classification metrics
         tp = np.sum((predictions == 1) & (y == 1))
         fp = np.sum((predictions == 1) & (y == 0))
         fn = np.sum((predictions == 0) & (y == 1))
         tn = np.sum((predictions == 0) & (y == 0))
-        
+
         metrics['precision'] = tp / (tp + fp) if (tp + fp) > 0 else 0
         metrics['recall'] = tp / (tp + fn) if (tp + fn) > 0 else 0
         metrics['f1'] = 2 * metrics['precision'] * metrics['recall'] / (
             metrics['precision'] + metrics['recall']
         ) if (metrics['precision'] + metrics['recall']) > 0 else 0
         metrics['accuracy'] = (tp + tn) / (tp + fp + fn + tn)
-        
+
+        # Log evaluation metrics (ROC-AUC, precision, recall, f1, accuracy)
+        if self.tracker is not None:
+            self.tracker.log_metrics({
+                "eval_roc_auc": metrics['auc_roc'],
+                "eval_auc_pr": metrics['auc_pr'],
+                "eval_precision": metrics['precision'],
+                "eval_recall": metrics['recall'],
+                "eval_f1": metrics['f1'],
+                "eval_accuracy": metrics['accuracy'],
+            })
+
         return metrics
 
 

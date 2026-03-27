@@ -30,7 +30,10 @@ class TransactionGraph:
         metadata: Optional[Dict[str, Any]] = None
     ) -> None:
         """Add a transaction edge to the graph.
-        
+
+        Self-loop edges (from_account == to_account) are silently dropped to
+        prevent infinite loops during graph traversal.
+
         Args:
             from_account: Source account identifier
             to_account: Destination account identifier
@@ -38,6 +41,8 @@ class TransactionGraph:
             asset: Asset type (e.g., 'USD', 'BTC', 'ETH')
             metadata: Optional transaction metadata
         """
+        if from_account == to_account:
+            return
         self.nodes.add(from_account)
         self.nodes.add(to_account)
         

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence, Set, Tuple
+from datetime import datetime, timedelta, timezone
+from typing import Generator, Iterable, List, Optional, Sequence, Set, Tuple
 import bisect
 
 
@@ -86,3 +87,119 @@ def snapshot_last_n_days(
     if start_ts < 0:
         start_ts = 0
     return window_snapshot(edges, start_ts, now_ts, presorted=presorted)
+
+
+# ---------------------------------------------------------------------------
+# DB-backed time-windowed snapshot slicer
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class SnapshotWindow:
+    """A discrete time window slice ready for training."""
+    index: int          # 0-based window index (t_0, t_1, …, t_now)
+    start: datetime
+    end: datetime
+    edges: List[Edge]
+    nodes: Set[str]
+
+
+def _parse_window_size(window: str) -> timedelta:
+    """Parse a window size string like '7d', '24h', '3600s' into a timedelta."""
+    unit = window[-1].lower()
+    value = int(window[:-1])
+    if unit == "d":
+        return timedelta(days=value)
+    if unit == "h":
+        return timedelta(hours=value)
+    if unit == "s":
+        return timedelta(seconds=value)
+    raise ValueError(f"Unknown window unit '{unit}'. Use 'd', 'h', or 's'.")
+
+
+def iter_db_snapshots(
+    window: str = "7d",
+    t0: Optional[datetime] = None,
+    t_now: Optional[datetime] = None,
+    step: Optional[str] = None,
+    session=None,
+) -> Generator[SnapshotWindow, None, None]:
+    """Yield discrete time-windowed graph snapshots from the database.
+
+    Slices ``normalized_transactions`` into non-overlapping (or rolling)
+    windows from ``t0`` to ``t_now``, each of size ``window``.
+
+    Args:
+        window: Window size string, e.g. ``'7d'``, ``'24h'``, ``'3600s'``.
+        t0: Start of the first window. Defaults to the earliest timestamp in DB.
+        t_now: End of the last window. Defaults to ``datetime.now(UTC)``.
+        step: Slide step between windows (defaults to ``window`` for non-overlapping).
+              Set smaller than ``window`` for rolling windows.
+        session: SQLAlchemy session. If None, one is created via ``get_session()``.
+
+    Yields:
+        :class:`SnapshotWindow` instances in chronological order.
+    """
+    from astroml.db.schema import NormalizedTransaction
+    from sqlalchemy import select, func as sqlfunc
+
+    if session is None:
+        from astroml.db.session import get_session
+        session = get_session()
+
+    win_delta = _parse_window_size(window)
+    step_delta = _parse_window_size(step) if step else win_delta
+
+    if t_now is None:
+        t_now = datetime.now(timezone.utc)
+
+    if t0 is None:
+        result = session.execute(
+            select(sqlfunc.min(NormalizedTransaction.timestamp))
+        ).scalar()
+        if result is None:
+            return  # empty DB
+        t0 = result if result.tzinfo else result.replace(tzinfo=timezone.utc)
+
+    if t_now.tzinfo is None:
+        t_now = t_now.replace(tzinfo=timezone.utc)
+    if t0.tzinfo is None:
+        t0 = t0.replace(tzinfo=timezone.utc)
+
+    window_start = t0
+    index = 0
+
+    while window_start < t_now:
+        window_end = min(window_start + win_delta, t_now)
+
+        rows = session.execute(
+            select(
+                NormalizedTransaction.sender,
+                NormalizedTransaction.receiver,
+                NormalizedTransaction.timestamp,
+            ).where(
+                NormalizedTransaction.timestamp >= window_start,
+                NormalizedTransaction.timestamp <= window_end,
+                NormalizedTransaction.receiver.isnot(None),
+                NormalizedTransaction.sender != NormalizedTransaction.receiver,
+            ).order_by(NormalizedTransaction.timestamp)
+        ).all()
+
+        edges = [
+            Edge(src=r.sender, dst=r.receiver, timestamp=int(r.timestamp.timestamp()))
+            for r in rows
+        ]
+        nodes: Set[str] = set()
+        for e in edges:
+            nodes.add(e.src)
+            nodes.add(e.dst)
+
+        yield SnapshotWindow(
+            index=index,
+            start=window_start,
+            end=window_end,
+            edges=edges,
+            nodes=nodes,
+        )
+
+        window_start += step_delta
+        index += 1

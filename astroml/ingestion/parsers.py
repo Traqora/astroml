@@ -145,6 +145,11 @@ def _extract_amount(data: dict) -> Optional[str]:
         return data["amount"]
     if "starting_balance" in data:
         return data["starting_balance"]
+    # For path payments: prefer destination_amount (what receiver gets)
+    if "destination_amount" in data:
+        return data["destination_amount"]
+    if "source_amount" in data:
+        return data["source_amount"]
     return None
 
 
@@ -154,3 +159,70 @@ def _extract_asset(data: dict) -> tuple[Optional[str], Optional[str]]:
     if asset_type == "native":
         return ("XLM", None)
     return (data.get("asset_code"), data.get("asset_issuer"))
+
+
+def extract_path_payment_hops(data: dict) -> list[dict]:
+    """Decompose a path payment into ordered per-hop dicts.
+
+    Each hop dict has keys: from_account, to_account, asset_code,
+    asset_issuer, amount, hop_index, is_first_hop, is_last_hop.
+
+    Returns an empty list for non-path-payment operations.
+    """
+    if data.get("type") not in _PATH_PAYMENT_TYPES:
+        return []
+
+    sender = data["source_account"]
+    receiver = _extract_destination(data, data["type"])
+    path = data.get("path", [])  # intermediate assets
+
+    # Build asset chain: [source_asset, ...path_assets..., dest_asset]
+    def _asset_str(asset_dict: dict) -> str:
+        if asset_dict.get("asset_type") == "native":
+            return "XLM"
+        code = asset_dict.get("asset_code", "UNKNOWN")
+        issuer = asset_dict.get("asset_issuer", "")
+        return f"{code}:{issuer}" if issuer else code
+
+    src_asset_type = data.get("source_asset_type", data.get("asset_type", ""))
+    if src_asset_type == "native":
+        src_asset = "XLM"
+    else:
+        src_code = data.get("source_asset_code", data.get("asset_code", "UNKNOWN"))
+        src_issuer = data.get("source_asset_issuer", data.get("asset_issuer", ""))
+        src_asset = f"{src_code}:{src_issuer}" if src_issuer else src_code
+
+    dst_asset_type = data.get("asset_type", "")
+    if dst_asset_type == "native":
+        dst_asset = "XLM"
+    else:
+        dst_code = data.get("asset_code", "UNKNOWN")
+        dst_issuer = data.get("asset_issuer", "")
+        dst_asset = f"{dst_code}:{dst_issuer}" if dst_issuer else dst_code
+
+    path_assets = [_asset_str(p) for p in path]
+    asset_chain = [src_asset] + path_assets + [dst_asset]
+
+    # Amounts: source_amount on first hop, destination_amount on last hop,
+    # None for intermediate hops (not exposed by Horizon).
+    src_amount = data.get("source_amount")
+    dst_amount = data.get("destination_amount", data.get("amount"))
+
+    # Intermediate accounts are not exposed by Horizon; use sentinel "__path__"
+    # so the graph builder can distinguish them from real accounts.
+    n_hops = len(asset_chain) - 1
+    hops = []
+    for i in range(n_hops):
+        from_acc = sender if i == 0 else f"__path__{data['transaction_hash']}_{i}"
+        to_acc = receiver if i == n_hops - 1 else f"__path__{data['transaction_hash']}_{i + 1}"
+        amount = src_amount if i == 0 else (dst_amount if i == n_hops - 1 else None)
+        hops.append({
+            "from_account": from_acc,
+            "to_account": to_acc,
+            "asset": asset_chain[i],
+            "amount": float(amount) if amount is not None else None,
+            "hop_index": i,
+            "is_first_hop": i == 0,
+            "is_last_hop": i == n_hops - 1,
+        })
+    return hops

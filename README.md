@@ -122,6 +122,7 @@ python -m astroml.training.train_gcn
 
 ## 📊 Example Use Cases
 
+* [Liquidity Monitoring for the Stellar Community Fund](docs/scf-liquidity-monitoring.md)
 * Fraud / scam detection
 * Account clustering
 * Transaction risk scoring

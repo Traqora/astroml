@@ -538,7 +538,66 @@ class FeatureRegistry:
         """
         self.storage = storage
         self._computers: Dict[str, FeatureComputer] = {}
+        self._plugin_computers: Dict[str, str] = {}
         self._register_builtin_features()
+        self._discover_plugins()
+    
+    def _discover_plugins(self) -> None:
+        """Discover and register feature computer plugins via entry points."""
+        try:
+            from importlib.metadata import entry_points
+            plugins = entry_points(group="astroml.feature_computers")
+            for ep in plugins:
+                try:
+                    computer_cls = ep.load()
+                    self._validate_plugin(computer_cls)
+                    name = getattr(computer_cls, "name", ep.name)
+                    if hasattr(computer_cls, "compute"):
+                        computer = computer_cls()
+                        self.register_computer(
+                            name,
+                            computer.compute if hasattr(computer, "compute") else computer,
+                            {
+                                "description": getattr(computer_cls, "__doc__", f"Plugin: {ep.name}"),
+                                "feature_type": FeatureType.NUMERIC,
+                                "tags": ["plugin", ep.name],
+                                "owner": "plugin",
+                            },
+                        )
+                        self._plugin_computers[name] = ep.module or ep.name
+                    elif callable(computer_cls):
+                        metadata = {
+                            "description": getattr(computer_cls, "__doc__", f"Plugin: {ep.name}"),
+                            "feature_type": FeatureType.NUMERIC,
+                            "tags": ["plugin", ep.name],
+                            "owner": "plugin",
+                        }
+                        self.register_computer(ep.name, computer_cls, metadata)
+                        self._plugin_computers[ep.name] = ep.module or ep.name
+                except Exception as e:
+                    logger.warning(f"Failed to load plugin '{ep.name}': {e}")
+        except ImportError:
+            logger.debug("importlib.metadata not available for plugin discovery")
+        except Exception as e:
+            logger.warning(f"Plugin discovery failed: {e}")
+    
+    def _validate_plugin(self, plugin_cls: type) -> None:
+        """Validate that a plugin class has required methods.
+        
+        Args:
+            plugin_cls: Plugin class to validate
+            
+        Raises:
+            TypeError: If plugin is missing required methods
+        """
+        if hasattr(plugin_cls, "compute"):
+            if not callable(getattr(plugin_cls, "compute")):
+                raise TypeError(f"Plugin {plugin_cls.__name__}.compute must be callable")
+        elif not callable(plugin_cls):
+            raise TypeError(
+                f"Plugin {plugin_cls.__name__} must either be callable "
+                f"or have a callable 'compute' method"
+            )
     
     def _register_builtin_features(self) -> None:
         """Register built-in feature computers from existing modules."""

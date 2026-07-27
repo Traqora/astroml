@@ -8,6 +8,7 @@ Enhanced with:
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime
 
 from starlette.middleware.base import BaseHTTPMiddleware

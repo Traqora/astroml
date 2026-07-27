@@ -54,6 +54,74 @@
 - [ ] Pin all dependency versions and maintain a lock file (`pip-compile`)
 - [ ] Rust dependencies: run `cargo audit` against `Cargo.lock`
 
+#### pip-audit CI job (issue #531)
+
+A GitHub Actions job runs `pip-audit` on every push and pull request.
+The step is defined in `.github/workflows/security.yml`:
+
+```yaml
+- name: Audit Python dependencies
+  run: pip-audit --strict
+```
+
+`--strict` causes the job to fail on any vulnerability with a fix available.
+Run locally with `make security-audit`.
+
+#### CVE handling process (issue #531)
+
+1. **Triage** — `pip-audit` or Dependabot surfaces a new CVE.
+2. **Assess** — Determine whether the vulnerable code path is reachable in
+   production. Document findings in this file under *Remediation Tracker*.
+3. **Remediate** — Update the pinned version in the relevant
+   `requirements*.txt` file and run `pip-compile` to regenerate the lock file.
+4. **Verify** — Re-run `pip-audit` locally to confirm no outstanding issues.
+5. **Ship** — Open a PR with the version bump. Reference the CVE ID in the PR
+   description (e.g., `CVE-2024-XXXXX`).
+
+Critical CVEs (CVSS ≥ 9.0) must be remediated within **24 hours** of
+discovery. High CVEs (CVSS 7–9) within **7 days**. Others within **30 days**.
+
+### 2.4 Secrets Scanning
+
+#### detect-secrets pre-commit hook (issue #531)
+
+`detect-secrets` is installed as a pre-commit hook to prevent credentials from
+being committed to the repository.
+
+Install the hooks once:
+```bash
+pip install detect-secrets pre-commit
+pre-commit install
+```
+
+The `.pre-commit-config.yaml` hook entry:
+```yaml
+- repo: https://github.com/Yelp/detect-secrets
+  rev: v1.4.0
+  hooks:
+    - id: detect-secrets
+      args: ["--baseline", ".secrets.baseline"]
+```
+
+To update the baseline after an intentional change:
+```bash
+detect-secrets scan --baseline .secrets.baseline
+```
+
+Run the scan manually with `make secrets-scan`.
+
+#### Secret handling review (issue #531)
+
+- API keys, database passwords, and JWT secrets must only be set via
+  environment variables or a secrets manager — never hard-coded in source.
+- The `.env.example` file must contain placeholder values only (e.g.
+  `SECRET_KEY=change_me`). Never commit a real `.env` file.
+- Review `config/database.yaml` and `configs/` on each PR to confirm no
+  credentials are present (the `.secrets.baseline` scan covers this).
+- Model artefacts (`*.pt`, `*.pkl`) must not contain embedded credentials or
+  PII. Training outputs stored in `benchmark_results/` should be reviewed
+  before sharing externally.
+
 ### 2.4 Deserialization
 - [ ] Pickle-based model serialisation (`torch.save` / `torch.load`) must only load files from trusted paths; never load user-supplied model files directly
 

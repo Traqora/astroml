@@ -433,11 +433,13 @@ class ComputationEngine:
         """
         self.max_workers = max_workers
         self._computers: Dict[str, BaseFeatureComputer] = {}
+        self._plugin_computers: Dict[str, str] = {}
         self._task_queue: List[ComputationTask] = []
         self._running_tasks: Dict[str, ComputationTask] = {}
         self._completed_tasks: Dict[str, ComputationTask] = {}
         self._lock = threading.Lock()
         self._register_builtin_computers()
+        self._discover_plugin_computers()
     
     def _register_builtin_computers(self) -> None:
         """Register built-in feature computers."""
@@ -447,6 +449,62 @@ class ComputationEngine:
         self.register_computer(AssetFeatureComputer())
         
         logger.info("Registered built-in feature computers")
+    
+    def _discover_plugin_computers(self) -> None:
+        """Discover and register plugin computers via entry points."""
+        try:
+            from importlib.metadata import entry_points
+            plugins = entry_points(group="astroml.feature_computers")
+            for ep in plugins:
+                try:
+                    plugin_cls = ep.load()
+                    self._validate_plugin_computer(plugin_cls)
+                    if hasattr(plugin_cls, "compute"):
+                        if issubclass(plugin_cls, BaseFeatureComputer):
+                            computer = plugin_cls()
+                            self.register_computer(computer)
+                            self._plugin_computers[computer.name] = ep.module or ep.name
+                        else:
+                            logger.warning(
+                                f"Plugin {ep.name} does not subclass BaseFeatureComputer"
+                            )
+                    elif callable(plugin_cls):
+                        from .feature_store import FeatureRegistry
+                        logger.info(
+                            f"Plugin {ep.name} is a callable; register via FeatureRegistry"
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to load plugin '{ep.name}': {e}")
+        except ImportError:
+            logger.debug("importlib.metadata not available for plugin discovery")
+        except Exception as e:
+            logger.warning(f"Plugin discovery failed: {e}")
+    
+    def _validate_plugin_computer(self, plugin_cls: type) -> None:
+        """Validate that a plugin computer has the required interface.
+        
+        Args:
+            plugin_cls: Plugin class to validate
+            
+        Raises:
+            TypeError: If validation fails
+        """
+        if hasattr(plugin_cls, "compute"):
+            if not callable(getattr(plugin_cls, "compute")):
+                raise TypeError(
+                    f"Plugin {plugin_cls.__name__}.compute must be callable"
+                )
+        if hasattr(plugin_cls, "validate_input"):
+            if not callable(getattr(plugin_cls, "validate_input")):
+                raise TypeError(
+                    f"Plugin {plugin_cls.__name__}.validate_input must be callable"
+                )
+        if hasattr(plugin_cls, "dependencies"):
+            if not hasattr(plugin_cls, "add_dependency"):
+                raise TypeError(
+                    f"Plugin {plugin_cls.__name__} has dependencies property "
+                    f"but missing add_dependency method"
+                )
     
     def register_computer(self, computer: BaseFeatureComputer) -> None:
         """Register a feature computer.
@@ -471,6 +529,14 @@ class ComputationEngine:
     def list_computers(self) -> List[str]:
         """List all registered computers."""
         return list(self._computers.keys())
+    
+    def list_plugin_computers(self) -> Dict[str, str]:
+        """List all plugin-registered computers with their source modules.
+        
+        Returns:
+            Dict mapping computer name to source module
+        """
+        return dict(self._plugin_computers)
     
     def create_task(
         self,

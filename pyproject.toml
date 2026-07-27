@@ -8,6 +8,9 @@ version = "0.1.0"
 description = "Dynamic graph ML framework for the Stellar network"
 requires-python = ">=3.10"
 
+[project.entry-points."astroml.feature_computers"]
+frequency = "astroml.features.frequency"
+structural = "astroml.features.structural_importance"
 [project.optional-dependencies]
 gpu = ["torch>=2.0.0+cu121", "torch-geometric>=2.3.0"]
 viz = ["matplotlib>=3.7.0", "seaborn>=0.12.0"]

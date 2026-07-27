@@ -1,4 +1,4 @@
-"""Input validation middleware for API requests (issue #333)."""
+"""Input validation middleware for API requests (issue #333, #533)."""
 from __future__ import annotations
 
 from typing import Callable
@@ -9,12 +9,22 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from api.validation import (
     InputValidator,
     ValidationError,
-    XSSPreventionMiddleware,
 )
+
+# Maximum request body size: 1 MB.  Requests exceeding this limit are rejected
+# with 413 before the body is read, preventing memory exhaustion from oversized
+# payloads (issue #533).
+MAX_REQUEST_SIZE_BYTES: int = 1 * 1024 * 1024  # 1 MB
 
 
 class ValidationMiddleware(BaseHTTPMiddleware):
-    """Middleware to validate and sanitize incoming requests."""
+    """Middleware to validate and sanitize incoming requests.
+
+    Responsibilities (issue #533):
+    - Enforce a maximum request body size (default 1 MB).
+    - Reject query parameters containing SQL injection or XSS patterns.
+    - Add defensive response headers (X-Content-Type-Options, etc.).
+    """
 
     # Paths that skip validation
     SKIP_VALIDATION_PATHS = {
@@ -32,7 +42,22 @@ class ValidationMiddleware(BaseHTTPMiddleware):
         if any(path.startswith(skip_path) for skip_path in self.SKIP_VALIDATION_PATHS):
             return await call_next(request)
 
-        # Validate query parameters
+        # ── Request size limit (issue #533) ───────────────────────────────────
+        # Reject oversized payloads early using Content-Length when present.
+        content_length = request.headers.get("content-length")
+        if content_length is not None:
+            try:
+                if int(content_length) > MAX_REQUEST_SIZE_BYTES:
+                    return Response(
+                        content='{"detail": "Request body too large. Maximum allowed size is 1 MB."}',
+                        status_code=413,
+                        media_type="application/json",
+                    )
+            except ValueError:
+                # Malformed Content-Length header — let the app handle it.
+                pass
+
+        # ── Query parameter validation (issue #533) ───────────────────────────
         if request.query_params:
             try:
                 self._validate_query_params(request)
@@ -46,9 +71,10 @@ class ValidationMiddleware(BaseHTTPMiddleware):
         # Process the request
         response = await call_next(request)
 
-        # Sanitize response to prevent XSS
-        if response.headers.get("content-type", "").startswith("application/json"):
-            response = await self._sanitize_json_response(response)
+        # ── Defensive response headers (issue #533) ───────────────────────────
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
 
         return response
 
@@ -69,13 +95,3 @@ class ValidationMiddleware(BaseHTTPMiddleware):
                         f"Invalid query parameter '{key}': potential XSS",
                         field=key,
                     )
-
-    async def _sanitize_json_response(self, response: Response) -> Response:
-        """Sanitize JSON response to prevent XSS."""
-        # Note: This is a simplified implementation
-        # In production, you'd want to parse the JSON, sanitize, and re-serialize
-        # For now, we'll just add security headers
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        return response

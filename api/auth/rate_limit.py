@@ -168,19 +168,57 @@ class RateLimiter:
         self._metrics: dict[str, int] = defaultdict(int)
         self._sliding_window = SlidingWindowCounter(redis_client)
         self._redis_client = redis_client
+
+        # ── Rate limit tiers (issue #532) ────────────────────────────────────
+        # Three tiers apply across the API:
+        #   Public endpoints      — 100 req/min  (unauthenticated callers)
+        #   Authenticated users   — 1 000 req/min (JWT / API-key callers)
+        #   Admin endpoints       — 50 req/min   (sensitive management routes)
+        #
+        # Endpoint-specific configs below override the tier defaults where a
+        # tighter or looser limit makes sense (e.g. auth/login is much stricter
+        # to resist brute-force; LLM embedding has higher throughput allowance).
+        # ─────────────────────────────────────────────────────────────────────
         self._endpoint_configs: dict[str, RateLimitConfig] = {
+            # ── Auth ─────────────────────────────────────────────────────────
+            # Strict limit on login to mitigate credential-stuffing attacks.
             "/api/v1/auth/login": RateLimitConfig(requests_per_minute=5, burst_size=2),
-            "/api/v1/transactions": RateLimitConfig(requests_per_minute=100, burst_size=20),
-            "/api/v1/fraud": RateLimitConfig(requests_per_minute=50, burst_size=10),
-            "/api/v1/accounts": RateLimitConfig(requests_per_minute=30, burst_size=5),
-            "/api/v1/monitoring": RateLimitConfig(requests_per_minute=60, burst_size=10),
+
+            # ── Public endpoints (100 req/min) ────────────────────────────────
+            "/api/v1/health": RateLimitConfig(requests_per_minute=100, burst_size=20),
+            "/api/v1/faq": RateLimitConfig(requests_per_minute=100, burst_size=20),
+            "/api/v1/onboarding": RateLimitConfig(requests_per_minute=100, burst_size=20),
+
+            # ── Authenticated endpoints (1 000 req/min) ───────────────────────
+            "/api/v1/transactions": RateLimitConfig(requests_per_minute=1000, burst_size=100),
+            "/api/v1/accounts": RateLimitConfig(requests_per_minute=1000, burst_size=100),
+            "/api/v1/fraud": RateLimitConfig(requests_per_minute=1000, burst_size=100),
+            "/api/v1/monitoring": RateLimitConfig(requests_per_minute=1000, burst_size=100),
+            "/api/v1/models": RateLimitConfig(requests_per_minute=1000, burst_size=100),
+            "/api/v1/loyalty": RateLimitConfig(requests_per_minute=1000, burst_size=100),
+            "/api/v1/mentorship": RateLimitConfig(requests_per_minute=1000, burst_size=100),
+
+            # ── LLM endpoints — sliding window to smooth bursty inference traffic
             "/api/v1/llm": RateLimitConfig(requests_per_minute=100, burst_size=20, algorithm="sliding_window"),
             "/api/v1/llm/embedding": RateLimitConfig(requests_per_minute=200, burst_size=50, algorithm="sliding_window"),
             "/api/v1/llm/chat": RateLimitConfig(requests_per_minute=50, burst_size=10, algorithm="sliding_window"),
+
+            # ── Admin endpoints (50 req/min) ──────────────────────────────────
+            "/api/v1/admin": RateLimitConfig(requests_per_minute=50, burst_size=10),
+            "/api/v1/audit": RateLimitConfig(requests_per_minute=50, burst_size=10),
+            "/api/v1/backup": RateLimitConfig(requests_per_minute=50, burst_size=5),
+            "/api/v1/compliance": RateLimitConfig(requests_per_minute=50, burst_size=10),
         }
 
     def _get_endpoint_config(self, path: str) -> RateLimitConfig:
-        """Get rate limit config for an endpoint."""
+        """Get rate limit config for an endpoint.
+
+        Falls back to tier-based defaults when no exact/prefix match exists:
+          - Admin paths  → 50 req/min
+          - All others   → authenticated default (1 000 req/min for logged-in
+            users; callers without a token are further limited at the middleware
+            layer to 100 req/min via ``JWT_RATE_LIMIT_PER_MINUTE``).
+        """
         # Check for exact match first
         if path in self._endpoint_configs:
             return self._endpoint_configs[path]
@@ -190,12 +228,13 @@ class RateLimiter:
             if path.startswith(endpoint_path):
                 return config
 
-        # Check for admin override
-        if ADMIN_OVERRIDE_ENABLED and self._is_admin_path(path):
-            return RateLimitConfig(requests_per_minute=1000, burst_size=200)
+        # Admin paths default to 50 req/min
+        if self._is_admin_path(path):
+            return RateLimitConfig(requests_per_minute=50, burst_size=10)
 
-        # Default config
-        return RateLimitConfig(requests_per_minute=60, burst_size=10)
+        # Default: authenticated tier — 1 000 req/min
+        # (public callers are capped at 100 req/min by JWT_RATE_LIMIT_PER_MINUTE)
+        return RateLimitConfig(requests_per_minute=1000, burst_size=100)
 
     def _is_admin_path(self, path: str) -> bool:
         """Check if the path is an admin endpoint."""

@@ -87,6 +87,7 @@ class BenchmarkConfig:
     training: TrainingConfig
     description: str = ""
     output_dir: str = "./benchmark_results"
+    artifact_uri: str = "./artifacts"  # Local path, s3://bucket/path, gs://bucket/path
     save_model: bool = True
     save_data: bool = False
     device: str = "auto"  # auto, cpu, cuda
@@ -108,6 +109,7 @@ class BenchmarkConfig:
             "data": self.data.to_dict(),
             "training": self.training.to_dict(),
             "output_dir": self.output_dir,
+            "artifact_uri": self.artifact_uri,
             "save_model": self.save_model,
             "save_data": self.save_data,
             "device": self.device,
@@ -125,6 +127,7 @@ class BenchmarkConfig:
             data=DataConfig.from_dict(data["data"]),
             training=TrainingConfig.from_dict(data["training"]),
             output_dir=data.get("output_dir", "./benchmark_results"),
+            artifact_uri=data.get("artifact_uri", "./artifacts"),
             save_model=data.get("save_model", True),
             save_data=data.get("save_data", False),
             device=data.get("device", "auto"),

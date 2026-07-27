@@ -2,13 +2,24 @@
 
 This example demonstrates how to use Deep SVDD for fraud detection
 when labeled fraud data is scarce or unavailable.
+
+This example can be run from any working directory.
 """
 from __future__ import annotations
+
+import sys
+from pathlib import Path
 
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.datasets import make_blobs, make_classification
 from sklearn.metrics import classification_report, confusion_matrix
+
+# Add the parent directory to the path to import astroml
+# This allows the example to run from any working directory
+script_dir = Path(__file__).parent.resolve()
+repo_root = script_dir.parent
+sys.path.insert(0, str(repo_root))
 
 from astroml.models.deep_svdd_trainer import FraudDetectionDeepSVDD
 

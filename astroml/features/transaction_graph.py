@@ -45,12 +45,8 @@ class TransactionGraph:
         """
         if from_account == to_account:
             return
-<<<<<<< feat/multi-asset-edge-typing
 
         edge_type = classify_asset(asset)
-
-=======
->>>>>>> main
         self.nodes.add(from_account)
         self.nodes.add(to_account)
 

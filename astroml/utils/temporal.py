@@ -499,10 +499,10 @@ class TemporalMetrics:
                 
                 # Compute AUC for this window
                 try:
-                    from sklearn.metrics import roc_auc_score
+                    from sklearn.metrics import roc_auc_score  # noqa: E402
                     auc = roc_auc_score(window_targets.cpu().numpy(), window_preds.cpu().numpy())
                     aucs.append(auc)
-                except:
+                except Exception:
                     pass
         
         return np.mean(aucs) if aucs else 0.0

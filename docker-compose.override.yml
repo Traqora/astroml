@@ -1,0 +1,65 @@
+# docker-compose.override.yml — local dev quickstart (issue #207)
+#
+# Docker Compose automatically merges this file with docker-compose.yml when
+# you run `docker compose up` (no extra flags needed).
+#
+# What this adds:
+#   - Activates the `dev` profile so the hot-reload dev server starts alongside
+#     Postgres and Redis.
+#   - Named volumes so data survives container restarts during development.
+#   - Ports bound to 127.0.0.1 only (safe on shared/cloud dev machines).
+#   - Sane dev environment variables (override in a local .env file).
+#
+# Quick start:
+#   cp .env.example .env          # fill in any secrets
+#   docker compose up             # starts postgres + redis + dev server
+#   docker compose logs -f dev    # tail the app logs
+#   docker compose down -v        # stop and wipe volumes
+#
+# See docs/DOCKER_VERIFICATION_STATUS.md for full environment reference.
+
+version: "3.8"
+
+services:
+  postgres:
+    profiles: []           # always start postgres in dev (remove profile gate)
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - dev_postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: astroml_dev
+      POSTGRES_USER: astroml
+      POSTGRES_PASSWORD: astroml_dev_password
+
+  redis:
+    profiles: []           # always start redis in dev
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - dev_redis_data:/data
+
+  # Activate the dev application server (hot-reload, debug mode)
+  dev:
+    profiles: []           # enabled by default in this override
+    environment:
+      - ENV=development
+      - DEBUG=1
+      - DATABASE_URL=postgresql://astroml:astroml_dev_password@postgres:5432/astroml_dev
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=DEBUG
+    volumes:
+      # Bind-mount source for hot-reload — edits on host reflect instantly
+      - .:/app:cached
+      - /app/.venv          # keep the venv inside the container
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  dev_postgres_data:
+    driver: local
+  dev_redis_data:
+    driver: local

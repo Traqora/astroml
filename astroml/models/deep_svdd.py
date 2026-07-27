@@ -88,8 +88,11 @@ class DeepSVDD(nn.Module, BaseEstimator):
     
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         """Predict anomaly scores."""
+        from astroml.observability.metrics import MODEL_INFERENCE_LATENCY
+
         self.eval()
-        with torch.no_grad():
+        # Model inference latency (issue #567).
+        with MODEL_INFERENCE_LATENCY.labels("deep_svdd").time(), torch.no_grad():
             x = x.to(self.device).float()
             embeddings = self.network(x)
             distances = torch.sum((embeddings - self.center) ** 2, dim=1)

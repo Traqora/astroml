@@ -1,0 +1,11 @@
+# AWS S3 artifact storage configuration
+artifact_storage:
+  backend: s3
+  s3:
+    bucket: my-astroml-bucket
+    prefix: models
+    # AWS credentials can be provided here or via environment variables:
+    # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION
+    aws_access_key_id: null # Set to your AWS access key or use env var
+    aws_secret_access_key: null # Set to your AWS secret key or use env var
+    region_name: us-east-1

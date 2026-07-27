@@ -1,1 +1,5 @@
 export { ModelMonitoringDashboard } from './ModelMonitoringDashboard'
+export { ModelSelector } from './ModelSelector'
+export { ExportButton } from './ExportButton'
+export { ModelComparisonChart } from './ModelComparisonChart'
+export { LastUpdated } from './LastUpdated'

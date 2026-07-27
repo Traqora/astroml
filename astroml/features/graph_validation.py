@@ -336,20 +336,20 @@ def validate_graph(
         print(f"Edges: {summary['num_edges']}")
         print(f"Density: {summary['density']:.6f}")
         print(f"Average Degree: {summary['avg_degree']:.2f}")
-        print(f"\nDegree Statistics:")
+        print("\nDegree Statistics:")
         print(f"  Min: {summary['degree_stats']['min']}")
         print(f"  Max: {summary['degree_stats']['max']}")
         print(f"  Median: {summary['degree_stats']['median']:.2f}")
         print(f"  Std: {summary['degree_stats']['std']:.2f}")
 
         if weight_col and 'weight_stats' in summary:
-            print(f"\nWeight Statistics:")
+            print("\nWeight Statistics:")
             print(f"  Min: {summary['weight_stats']['min']:.2f}")
             print(f"  Max: {summary['weight_stats']['max']:.2f}")
             print(f"  Mean: {summary['weight_stats']['mean']:.2f}")
             print(f"  Sum: {summary['weight_stats']['sum']:.2f}")
 
-        print(f"\nEdge Checks:")
+        print("\nEdge Checks:")
         print(f"  Self-loops: {edge_checks['self_loops']}")
         print(f"  Duplicate edges: {edge_checks['duplicate_edges']}")
         print(f"  Null values: {edge_checks['null_values']}")

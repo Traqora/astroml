@@ -4,38 +4,80 @@ version: '3.8'
 # Use with: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up
 
 services:
+  # PostgreSQL Database - Production
   postgres:
-    # Use production-grade PostgreSQL image
     image: postgres:15-alpine
+    container_name: astroml-postgres-prod
     restart: always
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-astroml}
+      POSTGRES_USER: ${POSTGRES_USER:-astroml}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C --shared-buffers=256MB --max-connections=200"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./monitoring/postgres/backup:/backup
+      - ./migrations:/docker-entrypoint-initdb.d
     networks:
       - astroml-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-astroml} -d ${POSTGRES_DB:-astroml}"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: '2.0'
           memory: 2G
         reservations:
-          cpus: '1'
-          memory: 1G
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
+  # Redis - Production
   redis:
-    # Production Redis configuration
     image: redis:7-alpine
+    container_name: astroml-redis-prod
     restart: always
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - astroml-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  astroml-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
     volumes:
       - redis_data:/data
     networks:
@@ -49,14 +91,21 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1'
+          cpus: '1.0'
           memory: 1G
         reservations:
           cpus: '0.5'
           memory: 512M
+    start_period: 10s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
+  # Production application service
   production:
-    # Production application service
     environment:
       - LOG_LEVEL=WARNING
       - DEBUG=False
@@ -72,25 +121,54 @@ services:
           memory: 2G
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+
+  # AstroML Ingestion Service
+  ingestion:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: astroml-ingestion-prod
+    environment:
+      ASTROML_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-astroml}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-astroml}
+      REDIS_URL: redis://redis:6379/0
+      FEATURE_STORE_PATH: /app/feature_store
+    volumes:
+      - feature_store:/app/feature_store
+      - ./config:/app/config:ro
+    networks:
+      - astroml-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import astroml.ingestion; import astroml.features; print('OK')"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
-
   ingestion:
     # Production ingestion service
-    restart: always
+    restart: unless-stopped
     environment:
       - LOG_LEVEL=INFO
       - APP_ENV=production
     deploy:
       resources:
         limits:
-          cpus: '2'
-          memory: 2G
+          cpus: '4.0'
+          memory: 8G
         reservations:
-          cpus: '1'
-          memory: 1G
+          cpus: '1.0'
+          memory: 2G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   streaming:
     # Production streaming service
@@ -106,6 +184,95 @@ services:
         reservations:
           cpus: '1'
           memory: 1G
+
+  # AstroML Training Service
+  training:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: training
+    container_name: astroml-training-prod
+    environment:
+      ASTROML_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-astroml}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-astroml}
+      REDIS_URL: redis://redis:6379/0
+      FEATURE_STORE_PATH: /app/feature_store
+      CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-0}
+    volumes:
+      - feature_store:/app/feature_store
+      - ./config:/app/config:ro
+      - model_store:/app/models
+    networks:
+      - astroml-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import torch; import astroml.features; print('OK')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '8.0'
+          memory: 32G
+        reservations:
+          cpus: '2.0'
+          memory: 4G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Feature Store Service
+  feature-store:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: feature-store
+    container_name: astroml-feature-store-prod
+    environment:
+      ASTROML_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-astroml}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-astroml}
+      REDIS_URL: redis://redis:6379/0
+      FEATURE_STORE_PATH: /app/feature_store
+    ports:
+      - "${FEATURE_STORE_PORT:-8000}:8000"
+    volumes:
+      - feature_store:/app/feature_store
+    networks:
+      - astroml-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "from astroml.features import create_feature_store; store = create_feature_store('/app/feature_store'); print('OK')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   prometheus:
     # Production Prometheus with persistent storage
@@ -169,7 +336,16 @@ volumes:
     driver: local
   redis_data:
     driver: local
+volumes:
   prometheus_data:
     driver: local
   grafana_data:
     driver: local
+  feature_store:
+    driver: local
+  model_store:
+    driver: local
+
+networks:
+  astroml-network:
+    driver: bridge

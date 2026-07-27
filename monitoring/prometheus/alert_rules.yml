@@ -28,11 +28,106 @@ groups:
           summary: "Ingestion stalled for {{ $labels.stream_type }} on {{ $labels.horizon_url }}"
           description: "No records have been processed for {{ $labels.stream_type }} in the last 15 minutes."
 
-      - alert: PersistentRateLimit
-        expr: astroml_ingestion_rate_limit_backoff_seconds > 60
+  - alert: PersistentRateLimit
+    expr: astroml_ingestion_rate_limit_backoff_seconds > 60
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Persistent rate limiting for {{ $labels.stream_type }}"
+      description: "The ingestion service is facing persistent rate limiting with backoff > 60s for over 10 minutes."
+
+  - name: astroml_llm_alerts
+    rules:
+      - alert: LLMProviderDown
+        expr: astroml_llm_provider_health == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "LLM provider {{ $labels.provider }} is down"
+          description: "The {{ $labels.provider }} LLM provider has been unreachable for more than 2 minutes."
+
+      - alert: LLMHighErrorRate
+        expr: rate(astroml_llm_requests_total{status="error"}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High LLM error rate for {{ $labels.provider }}"
+          description: "LLM error rate for {{ $labels.provider }} is currently {{ $value }} requests/sec."
+
+      - alert: LLMCostThreshold
+        expr: increase(astroml_llm_cost_usd_total[1h]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM cost spike for {{ $labels.provider }}"
+          description: "LLM cost for {{ $labels.provider }} exceeded $10 in the last hour."
+
+      - alert: LLMHighLatency
+        expr: histogram_quantile(0.95, rate(astroml_llm_request_latency_seconds_bucket[5m])) > 5
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High LLM latency for {{ $labels.provider }}"
+          description: "P95 latency for {{ $labels.provider }} is {{ $value }}s (threshold 5s)."
+
+  # ─── API health, latency and DB pool (issues #550, #567, #569) ────────────
+  - name: astroml_api_alerts
+    rules:
+      - alert: DatabasePoolNearExhaustion
+        expr: db_pool_utilization_ratio >= 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database pool {{ $labels.pool }} above 80% utilization"
+          description: "Pool {{ $labels.pool }} has been at {{ $value | humanizePercentage }} of capacity for 5m. Check for leaked sessions or slow queries, then raise DB_POOL_MAX_SIZE."
+
+      - alert: DatabasePoolExhausted
+        expr: db_pool_utilization_ratio >= 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database pool {{ $labels.pool }} exhausted"
+          description: "Every connection in pool {{ $labels.pool }} is checked out; new requests block until pool_timeout expires."
+
+      - alert: ApiHighLatency
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, endpoint)) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 latency above 1s for {{ $labels.endpoint }}"
+          description: "P95 request latency for {{ $labels.endpoint }} is {{ $value }}s over the last 5 minutes."
+
+      - alert: ApiHighErrorRate
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API 5xx rate above 5%"
+          description: "{{ $value | humanizePercentage }} of requests returned 5xx over the last 5 minutes."
+
+      - alert: IngestionJobsStalled
+        expr: active_jobs{job_type="ingestion"} == 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No active ingestion jobs for 30m"
+          description: "The active_jobs gauge for ingestion has been zero for 30 minutes; the backfill or stream worker may have died."
+
+      - alert: ModelInferenceLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(model_inference_latency_bucket[10m])) by (le, model)) > 2
         for: 10m
         labels:
           severity: warning
         annotations:
-          summary: "Persistent rate limiting for {{ $labels.stream_type }}"
-          description: "The ingestion service is facing persistent rate limiting with backoff > 60s for over 10 minutes."
+          summary: "Model {{ $labels.model }} P95 inference latency above 2s"
+          description: "P95 inference latency for {{ $labels.model }} is {{ $value }}s over the last 10 minutes."

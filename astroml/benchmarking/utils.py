@@ -175,8 +175,8 @@ def compute_model_size(model: torch.nn.Module) -> Dict[str, int]:
 
 def set_random_seed(seed: int) -> None:
     """Set random seeds for reproducibility."""
-    import random
-    import numpy as np
+    import random  # noqa: E402
+    import numpy as np  # noqa: E402
     
     random.seed(seed)
     np.random.seed(seed)
@@ -227,3 +227,36 @@ def create_progress_callback(description: str):
             print(f"  {metric}: {value:.4f}")
     
     return callback
+
+
+def get_environment_info() -> Dict[str, Any]:
+    """Collect environment information for reproducibility."""
+    import sys
+    import platform
+    from importlib.metadata import version
+    
+    env_info = {
+        'python_version': sys.version,
+        'platform': platform.platform(),
+        'platform_system': platform.system(),
+        'platform_release': platform.release(),
+        'platform_version': platform.version(),
+        'platform_machine': platform.machine(),
+        'processor': platform.processor(),
+    }
+    
+    # Get library versions
+    libraries = ['torch', 'numpy', 'scikit-learn', 'pandas', 'torch-geometric']
+    for lib in libraries:
+        try:
+            env_info[f'{lib}_version'] = version(lib)
+        except Exception:
+            try:
+                # Fallback for packages with different import names
+                import importlib
+                module = importlib.import_module(lib.replace('-', '_'))
+                env_info[f'{lib}_version'] = getattr(module, '__version__', 'unknown')
+            except Exception:
+                env_info[f'{lib}_version'] = 'not_installed'
+    
+    return env_info

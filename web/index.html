@@ -4,6 +4,52 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Loyalty Dashboard</title>
+    <style>
+      :root,
+      [data-theme="light"] {
+        --bg-primary: #ffffff;
+        --bg-secondary: #f9f9f9;
+        --bg-card: #ffffff;
+        --text-primary: #1a202c;
+        --text-secondary: #4a5568;
+        --text-muted: #718096;
+        --border-color: #e2e8f0;
+        --border-light: #f1f1f1;
+        --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+        --shadow-md: 0 2px 14px rgba(0,0,0,0.06);
+        --card-border: #ececec;
+      }
+      [data-theme="dark"] {
+        --bg-primary: #0f1419;
+        --bg-secondary: #1a1f2e;
+        --bg-card: #1e2538;
+        --text-primary: #e2e8f0;
+        --text-secondary: #a0aec0;
+        --text-muted: #718096;
+        --border-color: #2d3748;
+        --border-light: #2d3748;
+        --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+        --shadow-md: 0 2px 14px rgba(0,0,0,0.3);
+        --card-border: #2d3748;
+      }
+      body {
+        margin: 0;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        transition: background-color 0.3s, color 0.3s;
+      }
+      * {
+        transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s;
+      }
+      @media (max-width: 640px) {
+        body { padding: 0 8px; }
+        h1 { font-size: 20px !important; }
+        h2 { font-size: 18px !important; }
+      }
+      @media (min-width: 641px) and (max-width: 1024px) {
+        body { padding: 0 16px; }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

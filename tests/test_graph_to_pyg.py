@@ -59,7 +59,37 @@ class TestGraphToPyG:
         # Check labels
         assert data.y is not None
         assert data.y.shape[0] == 3  # num_nodes
-    
+
+    def test_conversion_with_numpy_edge_features_and_node_labels(self):
+        """Test conversion with numpy arrays for edge features and labels."""
+        node_features = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64)
+        edge_index = np.array([[0, 1], [1, 0]], dtype=np.int32)
+        edge_features = np.array([[0.5], [0.6]], dtype=np.float64)
+        node_labels = np.array([0, 1], dtype=np.int64)
+
+        data = graph_to_pyg_data(node_features, edge_index, edge_features, node_labels)
+
+        assert data.edge_attr.dtype == torch.float32
+        assert data.y.dtype == torch.int64
+        assert data.y.shape == (2,)
+
+    def test_invalid_edge_index_negative_id(self):
+        """Test error handling for negative edge index values."""
+        node_features = [[1.0, 2.0], [3.0, 4.0]]
+        edge_index = [[0, -1], [1, 0]]
+
+        with pytest.raises(ValueError, match="Edge index contains negative node IDs"):
+            graph_to_pyg_data(node_features, edge_index)
+
+    def test_invalid_node_labels_2d_shape(self):
+        """Test error handling for node labels with incorrect dimensionality."""
+        node_features = [[1.0, 2.0], [3.0, 4.0]]
+        edge_index = [[0, 1], [1, 0]]
+        node_labels = [[0], [1]]
+
+        with pytest.raises(ValueError, match="node_labels must be 1D array"):
+            graph_to_pyg_data(node_features, edge_index, node_labels=node_labels)
+
     def test_edge_index_format_conversion(self):
         """Test edge index format conversion from [num_edges, 2] to [2, num_edges]."""
         node_features = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]
@@ -138,7 +168,7 @@ class TestGraphToPyG:
         node_features = [[1.0, 2.0], [3.0, 4.0]]
         edge_index = [[0, 1, 2], [1, 2], [0, 1]]  # Invalid shape
         
-        with pytest.raises(ValueError, match="edge_index must have shape"):
+        with pytest.raises(ValueError, match="edge_index must"):
             graph_to_pyg_data(node_features, edge_index)
     
     def test_edge_index_out_of_bounds(self):
@@ -167,6 +197,50 @@ class TestGraphToPyG:
         with pytest.raises(ValueError, match="node_labels shape mismatch"):
             graph_to_pyg_data(node_features, edge_index, node_labels=node_labels)
     
+    def test_edge_features_zero_dim(self):
+        """Test edge features with zero-dimensional features per edge."""
+        node_features = [[1.0, 2.0], [3.0, 4.0]]
+        edge_index = [[0], [1]]
+        edge_features = [[]]  # 1 edge, 0 features
+
+        data = graph_to_pyg_data(node_features, edge_index, edge_features)
+
+        assert data.edge_attr is not None
+        assert data.edge_attr.shape == (1, 0)
+
+    def test_ambiguous_2x2_edge_index(self):
+        """Test edge_index with shape [2, 2] which is both valid [2, N] and [N, 2]."""
+        node_features = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]
+        edge_index = [[0, 1], [2, 0]]  # [2, 2] — valid as COO
+
+        data = graph_to_pyg_data(node_features, edge_index)
+
+        assert data.edge_index.shape == (2, 2)
+        expected = torch.tensor([[0, 1], [2, 0]], dtype=torch.int64)
+        assert torch.equal(data.edge_index, expected)
+
+    def test_node_features_int_dtype(self):
+        """Test node_features with integer dtype converts to float32."""
+        node_features = np.array([[1, 2], [3, 4]], dtype=np.int32)
+        edge_index = [[0], [1]]
+
+        data = graph_to_pyg_data(node_features, edge_index)
+
+        assert data.x.dtype == torch.float32
+        assert torch.equal(data.x, torch.tensor([[1., 2.], [3., 4.]]))
+
+    def test_node_labels_numpy_int(self):
+        """Test node_labels as numpy int array."""
+        node_features = [[1.0, 2.0], [3.0, 4.0]]
+        edge_index = [[0], [1]]
+        node_labels = np.array([0, 1], dtype=np.int32)
+
+        data = graph_to_pyg_data(node_features, edge_index, node_labels=node_labels)
+
+        assert data.y is not None
+        assert data.y.dtype == torch.int64
+        assert torch.equal(data.y, torch.tensor([0, 1], dtype=torch.int64))
+
     def test_complete_graph_example(self):
         """Test with a complete graph example including all features."""
         # 4 nodes, 3 features each

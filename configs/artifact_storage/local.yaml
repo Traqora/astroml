@@ -1,0 +1,5 @@
+# Local filesystem artifact storage configuration
+artifact_storage:
+  backend: local
+  local:
+    path: artifacts

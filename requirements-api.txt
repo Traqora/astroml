@@ -1,0 +1,11 @@
+# ============================================================================
+# AstroML FastAPI service — root-level alias.
+#
+# The API service's actual dependency list lives in api/requirements.txt
+# (it's installed independently by api/Dockerfile, without the core ML/
+# feature-store stack). This file composes it from the repo root purely for
+# discoverability alongside the other purpose-built requirements-*.txt files
+# — `pip install -r requirements-api.txt` from the repo root gets you the
+# same thing as `pip install -r api/requirements.txt`. See REQUIREMENTS.md.
+# ============================================================================
+-r api/requirements.txt

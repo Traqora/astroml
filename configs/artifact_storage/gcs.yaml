@@ -1,0 +1,11 @@
+# Google Cloud Storage artifact storage configuration
+artifact_storage:
+  backend: gcs
+  gcs:
+    bucket: my-astroml-bucket
+    prefix: models
+    # GCP credentials can be provided here or via environment variables:
+    # GOOGLE_APPLICATION_CREDENTIALS (path to service account JSON)
+    # GOOGLE_CLOUD_PROJECT
+    project_id: null # Set to your GCP project ID or use env var
+    credentials_path: null # Set to path of service account JSON or use env var

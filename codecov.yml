@@ -1,0 +1,37 @@
+coverage:
+  precision: 2
+  round: down
+  range: "60...100"
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+        informational: true
+    patch:
+      default:
+        target: 70%
+        informational: true
+
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: false
+
+ignore:
+  - "tests/**"
+  - "**/*_test.py"
+  - "test_*.py"
+  - "examples/**"
+  - "docs/**"
+  - "outputs/**"
+  - "k8s/**"
+  - "migrations/**"
+
+flags:
+  py3.10:
+    paths:
+      - astroml
+  py3.11:
+    paths:
+      - astroml

@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union, Callable
 from sklearn.metrics import roc_auc_score, precision_recall_curve, auc
 from sklearn.preprocessing import StandardScaler
@@ -17,6 +18,7 @@ import seaborn as sns
 
 from .deep_svdd import DeepSVDD, DeepSVDDNetwork
 from astroml.tracking import MLflowTracker
+from astroml.artifacts import get_artifact_store
 
 
 class DeepSVDDTrainer:
@@ -29,12 +31,15 @@ class DeepSVDDTrainer:
         patience: int = 10,
         min_delta: float = 1e-4,
         tracker: Optional[MLflowTracker] = None,
+        artifact_uri: Optional[str] = None,
     ):
         self.model = model
         self.device = device
         self.patience = patience
         self.min_delta = min_delta
         self.tracker = tracker  # None → no MLflow logging
+        self.artifact_uri = artifact_uri or './artifacts'
+        self.artifact_store = get_artifact_store(artifact_uri)
 
         self.training_history = {
             'train_loss': [],
@@ -272,9 +277,29 @@ class DeepSVDDTrainer:
             'model_state_dict': self.model.state_dict(),
             'center': self.model.center,
             'scaler': self.model.scaler if hasattr(self.model, 'scaler') else None,
-            'training_history': self.training_history
+            'training_history': self.training_history,
+            'metadata': {
+                'version': '1.0',
+                'input_dim': self.model.input_dim,
+                'hidden_dims': self.model.hidden_dims,
+                'device': self.device,
+                'model_class': self.model.__class__.__name__
+            }
         }
-        torch.save(checkpoint, 'best_deep_svdd.pth')
+        
+        # Save to artifact store
+        try:
+            checkpoint_uri = self.artifact_store.save_checkpoint(
+                checkpoint,
+                'deep_svdd/best_deep_svdd.pth'
+            )
+            print(f"Checkpoint saved to artifact store: {checkpoint_uri}")
+        except Exception as e:
+            print(f"Warning: Failed to save to artifact store: {e}")
+            # Fallback to local save
+            torch.save(checkpoint, 'best_deep_svdd.pth')
+            print("Checkpoint saved locally to best_deep_svdd.pth")
+        
         if self.tracker is not None:
             self.tracker.log_model_artifact(
                 self.model,
@@ -282,18 +307,148 @@ class DeepSVDDTrainer:
                 checkpoint_path="best_deep_svdd.pth",
             )
     
-    def load_checkpoint(self, checkpoint_path: str):
-        """Load model from checkpoint."""
-        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+    def load_checkpoint(self, checkpoint_path: str) -> bool:
+        """Load model from checkpoint with validation.
         
-        self.model.load_state_dict(checkpoint['model_state_dict'])
+        Supports loading from:
+        - Local filesystem paths
+        - S3 (s3://bucket/path)
+        - Google Cloud Storage (gs://bucket/path)
+        
+        Args:
+            checkpoint_path: Path to checkpoint file (local or artifact URI)
+            
+        Returns:
+            True if checkpoint was loaded successfully
+            
+        Raises:
+            FileNotFoundError: If checkpoint file doesn't exist
+            ValueError: If checkpoint metadata doesn't match model architecture
+            RuntimeError: If device is unavailable or checkpoint is corrupted
+        """
+from pathlib import Path
+
+try:
+    # Try to load from artifact store first if it looks like a relative path
+    if not checkpoint_path.startswith(('/', 's3://', 'gs://', 'http')):
+        try:
+            checkpoint = self.artifact_store.load_checkpoint(
+                checkpoint_path,
+                device=self.device
+            )
+        except Exception:
+            # Fall through to local file loading
+            if not Path(checkpoint_path).exists():
+                raise FileNotFoundError(
+                    f"Checkpoint file not found: {checkpoint_path}\n"
+                    f"Please ensure the file exists and the path is correct."
+                )
+
+            checkpoint = torch.load(
+                checkpoint_path,
+                map_location=self.device,
+                weights_only=True
+            )
+    else:
+        # Load from absolute path or remote URI
+        if not Path(checkpoint_path).exists():
+            raise FileNotFoundError(
+                f"Checkpoint file not found: {checkpoint_path}\n"
+                f"Please ensure the file exists and the path is correct."
+            )
+
+        checkpoint = torch.load(
+            checkpoint_path,
+            map_location=self.device,
+            weights_only=True
+        )
+
+except FileNotFoundError:
+    raise
+except Exception as e:
+    raise RuntimeError(
+        f"Failed to load checkpoint '{checkpoint_path}': {str(e)}"
+    ) from e
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to load checkpoint from {checkpoint_path}\n"
+                f"Error: {e}\n"
+                f"The file may be corrupted or incompatible with this PyTorch version."
+            ) from e
+        
+        # Validate checkpoint structure
+        if 'model_state_dict' not in checkpoint:
+            raise ValueError(
+                f"Invalid checkpoint format: missing 'model_state_dict' key.\n"
+                f"Available keys: {list(checkpoint.keys())}"
+            )
+        
+        # Validate metadata if present
+        if 'metadata' in checkpoint:
+            metadata = checkpoint['metadata']
+            
+            # Check input dimension
+            if 'input_dim' in metadata:
+                if metadata['input_dim'] != self.model.input_dim:
+                    raise ValueError(
+                        f"Checkpoint input dimension mismatch:\n"
+                        f"  Expected: {self.model.input_dim}\n"
+                        f"  Found in checkpoint: {metadata['input_dim']}\n"
+                        f"Please ensure the model architecture matches the checkpoint."
+                    )
+            
+            # Check hidden dimensions
+            if 'hidden_dims' in metadata:
+                if metadata['hidden_dims'] != self.model.hidden_dims:
+                    raise ValueError(
+                        f"Checkpoint hidden dimensions mismatch:\n"
+                        f"  Expected: {self.model.hidden_dims}\n"
+                        f"  Found in checkpoint: {metadata['hidden_dims']}\n"
+                        f"Please ensure the model architecture matches the checkpoint."
+                    )
+            
+            # Check device compatibility
+            if 'device' in metadata:
+                checkpoint_device = metadata['device']
+                if checkpoint_device != self.device and checkpoint_device != 'cpu':
+                    print(
+                        f"Warning: Loading checkpoint from device '{checkpoint_device}' "
+                        f"to device '{self.device}'. This may cause performance issues."
+                    )
+        else:
+            print(
+                "Warning: Checkpoint does not contain metadata. "
+                "Cannot validate model architecture compatibility. "
+                "Proceed with caution."
+            )
+        
+        # Load model state
+        try:
+            self.model.load_state_dict(checkpoint['model_state_dict'])
+        except Exception as e:
+            raise ValueError(
+                f"Failed to load model state dict:\n"
+                f"Error: {e}\n"
+                f"This typically indicates a mismatch between the checkpoint architecture "
+                f"and the current model architecture."
+            ) from e
+        
+        # Load center
+        if 'center' not in checkpoint:
+            raise ValueError("Invalid checkpoint format: missing 'center' key")
         self.model.center = checkpoint['center']
         
+        # Load scaler if present
         if checkpoint.get('scaler') is not None:
             self.model.scaler = checkpoint['scaler']
         
+        # Load training history if present
         if checkpoint.get('training_history') is not None:
             self.training_history = checkpoint['training_history']
+        
+        return True
+        
+        return True
     
     def evaluate(
         self,

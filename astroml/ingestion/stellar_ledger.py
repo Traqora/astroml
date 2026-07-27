@@ -121,8 +121,8 @@ class StellarLedgerDownloader:
 
 async def main():
     """Simple CLI for the downloader."""
-    import argparse
-    import sys
+    import argparse  # noqa: E402
+    import sys  # noqa: E402
 
     parser = argparse.ArgumentParser(description="Stellar Ledger Downloader")
     parser.add_argument("--start", type=int, required=True, help="Start ledger sequence")
@@ -132,7 +132,11 @@ async def main():
     
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO)
+    # Issue #195 — central logging config (level + text/json format)
+    # via ASTROML_LOG_LEVEL / ASTROML_LOG_FORMAT env vars.
+    from astroml.utils.logging import configure_logging
+
+    configure_logging()
     
     async with StellarLedgerDownloader() as downloader:
         try:

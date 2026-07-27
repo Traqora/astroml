@@ -7,6 +7,8 @@ import torch
 from astroml.pipeline.inductive import InductiveGraphSAGE, _FEATURE_COLS
 from astroml.features.node_features import compute_node_features
 from astroml.models.deep_svdd import DeepSVDD
+from ..cache import cached_prediction
+
 
 
 class InductiveAnomalyScorer:
@@ -34,6 +36,7 @@ class InductiveAnomalyScorer:
         self.svdd = svdd
         self.mode = mode
 
+    @cached_prediction(ttl_seconds=300)
     def score_new_accounts(
         self,
         edges: List[Dict],

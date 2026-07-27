@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.backends.legacy:build"
+requires = ["setuptools>=42"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "astroml"
@@ -8,6 +8,43 @@ version = "0.1.0"
 description = "Dynamic graph ML framework for the Stellar network"
 requires-python = ">=3.10"
 
+[project.optional-dependencies]
+gpu = ["torch>=2.0.0+cu121", "torch-geometric>=2.3.0"]
+viz = ["matplotlib>=3.7.0", "seaborn>=0.12.0"]
+dev = ["pytest>=7.4.0", "black>=23.11.0", "mypy>=1.7.0", "ruff>=0.4.0", "pytest-asyncio>=0.23", "pytest-cov>=4.1.0", "pytest-mock>=3.12.0", "hypothesis>=6.100.0", "flake8>=6.1.0", "pre-commit>=3.7.0", "isort>=5.13.0"]
+notebook = ["jupyter>=1.0.0", "notebook>=7.0.0", "ipykernel>=6.26.0"]
+dask = ["dask[complete]>=2024.1.0"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["astroml*"]
+
+[tool.pytest.ini_options]
+# Scope collection to the dedicated tests/ tree so root-level standalone
+# scripts (e.g. test_data_quality_import.py — a manual smoke that calls
+# sys.exit(1) on ImportError) don't poison pytest collection.
+testpaths = ["tests"]
+# Custom markers used by the CI matrix (#186).
+markers = [
+    "gpu: requires a CUDA-capable runner; auto-skipped on CPU-only environments",
+    "e2e: end-to-end pipeline test (#193)",
+]
+
+[tool.coverage.run]
+source = ["astroml"]
+branch = true
+omit = [
+    "*/tests/*",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]

@@ -266,13 +266,16 @@ class MultiHorizonService:
 # ---------------------------------------------------------------------------
 
 def _configure_logging() -> None:
-    """Configure structured logging."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)-8s [%(name)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        stream=sys.stderr,
-    )
+    """Configure structured logging.
+
+    Delegates to :func:`astroml.utils.logging.configure_logging` so log
+    level (``ASTROML_LOG_LEVEL``) and format (``ASTROML_LOG_FORMAT=
+    text|json``) are consistent across every astroml entry point. See
+    issue #195.
+    """
+    from astroml.utils.logging import configure_logging
+
+    configure_logging()
 
 
 async def run_single_stream(config: EnhancedStreamConfig) -> None:

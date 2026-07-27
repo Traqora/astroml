@@ -23,17 +23,16 @@ logger = logging.getLogger("astroml.ingestion.enhanced_cli")
 
 
 def _configure_logging(level: str = "INFO") -> None:
-    """Configure structured logging."""
-    numeric_level = getattr(logging, level.upper(), None)
-    if not isinstance(numeric_level, int):
-        raise ValueError(f'Invalid log level: {level}')
-    
-    logging.basicConfig(
-        level=numeric_level,
-        format="%(asctime)s %(levelname)-8s [%(name)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        stream=sys.stderr,
-    )
+    """Configure structured logging.
+
+    Delegates to :func:`astroml.utils.logging.configure_logging` so log
+    level (``ASTROML_LOG_LEVEL``) and format (``ASTROML_LOG_FORMAT=
+    text|json``) are consistent across every astroml entry point. See
+    issue #195.
+    """
+    from astroml.utils.logging import configure_logging
+
+    configure_logging(level=level)
 
 
 def _parse_enhanced_args() -> argparse.Namespace:

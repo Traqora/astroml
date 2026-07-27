@@ -333,6 +333,64 @@ Before submitting a PR:
 
 ## PR Process
 
+### PR Checklist (Copy into your PR description)
+
+```markdown
+## PR Checklist
+
+### Tests
+- [ ] `pytest tests/ -v` passes locally with no failures
+- [ ] New functionality has unit tests covering the happy path and edge cases
+- [ ] Any new async functions are tested with `@pytest.mark.asyncio`
+- [ ] No hardcoded test data paths — fixtures and `test_data/` only
+
+### Lint & Style
+- [ ] `black --check astroml/ tests/` reports no formatting violations
+- [ ] `flake8 astroml/ tests/` reports no errors (line length ≤ 88)
+- [ ] All public functions/classes have Google-style docstrings
+- [ ] Type hints are present on all new function signatures
+
+### Changelog & Docs
+- [ ] `CHANGELOG.md` entry added under `## [Unreleased]`
+- [ ] `README.md` updated if new features, CLI flags, or config keys were added
+- [ ] Example scripts in `examples/` updated or added where appropriate
+```
+
+Every pull request **must** pass all of the following before requesting review.
+
+#### Tests
+- [ ] `pytest tests/ -v` passes locally with no failures
+- [ ] New functionality has unit tests covering the happy path and edge cases
+- [ ] Any new async functions are tested with `@pytest.mark.asyncio`
+- [ ] Integration tests pass against a real database (not mocked) where applicable
+- [ ] No hardcoded test data paths — fixtures and `test_data/` only
+
+#### Lint & Style
+- [ ] `black --check astroml/ tests/` reports no formatting violations
+- [ ] `flake8 astroml/ tests/` reports no errors (line length ≤ 88)
+- [ ] `mypy astroml/` passes with no new type errors
+- [ ] All public functions/classes have Google-style docstrings
+- [ ] Type hints are present on all new function signatures
+
+#### Changelog & Docs
+- [ ] `CHANGELOG.md` entry added under `## [Unreleased]` describing the change
+- [ ] `README.md` updated if new features, CLI flags, or config keys were added
+- [ ] Any new config fields are documented in the relevant YAML file
+- [ ] Example scripts in `examples/` updated or added where appropriate
+
+#### Security & Safety
+- [ ] No secrets, credentials, or API keys in the diff
+- [ ] No hardcoded file paths pointing to local machine directories
+- [ ] Database migrations include a safe `downgrade` function
+- [ ] Random seeds are fixed for any reproducibility-sensitive tests
+
+#### Reproducibility (pipeline changes only)
+- [ ] Checksums/snapshots updated in `test_snapshots/` if graph output changed
+- [ ] Hyperparameter changes are config-driven (not hardcoded)
+- [ ] `CHANGELOG.md` notes any model output or feature change that breaks reproducibility
+
+---
+
 ### Before Opening a PR
 
 1. **Sync with upstream:**
@@ -343,11 +401,17 @@ Before submitting a PR:
 
 2. **Run linting & tests locally:**
    ```bash
-   # Check for obvious issues
-   python -m py_compile astroml/**/*.py
-   
-   # Run full test suite
-   pytest tests/ -v
+   # Format check
+   black --check astroml/ tests/
+
+   # Lint
+   flake8 astroml/ tests/
+
+   # Type check
+   mypy astroml/
+
+   # Full test suite
+   pytest tests/ -v --cov=astroml
    ```
 
 3. **Ensure commits are clean:**

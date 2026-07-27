@@ -1,0 +1,35 @@
+# ============================================================================
+# Development tooling: testing, linting, formatting, type checking.
+#
+# Composes on top of requirements-minimal.txt (Hydra + dataframes) so you can
+# run the unit test suite and pre-commit hooks without installing the full
+# GPU training stack. See REQUIREMENTS.md for how this fits alongside
+# requirements.txt / -cpu.txt / -minimal.txt / -api.txt / -train.txt /
+# -mlflow.txt.
+#
+# If you're already installing requirements.txt or requirements-cpu.txt for
+# other reasons, just add this file too (pytest/black/mypy/ruff aren't
+# duplicated by pip if already satisfied).
+# ============================================================================
+-r requirements-minimal.txt
+
+# ── Testing ──────────────────────────────────────────────────────────────
+pytest>=7.4.0
+pytest-asyncio>=0.23
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+hypothesis>=6.100.0
+
+# ── Linting / formatting / type checking ───────────────────────────────────
+black>=23.11.0
+flake8>=6.1.0
+mypy>=1.7.0
+ruff>=0.4.0
+isort>=5.13.0
+pre-commit>=3.7.0
+
+# ── Dependency introspection (issue #562: `make dependency-tree`) ──────────
+pipdeptree>=2.13.0
+
+# ── Security auditing ───────────────────────────────────────────────────────
+pip-audit>=2.7.0

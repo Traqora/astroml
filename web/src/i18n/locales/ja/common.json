@@ -1,0 +1,169 @@
+{
+  "app": {
+    "title": "モデルパフォーマンスモニタリング",
+    "loyalty": "ロイヤルティダッシュボード",
+    "transactions": "取引履歴"
+  },
+  "monitoring": {
+    "title": "モデルパフォーマンスモニタリング",
+    "metrics": {
+      "accuracy": "予測精度",
+      "accuracy_desc": "最新のエンドツーエンドモデル精度",
+      "f1": "F1スコア",
+      "f1_desc": "適合率と再現率のバランス",
+      "drift": "データドリフト",
+      "drift_desc": "最新1週間のドリフトスコア",
+      "auc": "AUC",
+      "auc_desc": "リンク予測の分離性"
+    },
+    "charts": {
+      "accuracy_trend": "予測精度の推移",
+      "drift_detection": "ドリフト検出",
+      "drift_description": "モデルのドリフトは中程度です。特徴量分布の急激な変動に注意してください。"
+    },
+    "errors": {
+      "loading": "モニタリングデータの読み込みエラー: {message}",
+      "no_data": "モニタリングデータがありません"
+    },
+    "export": {
+      "button": "CSVエクスポート"
+    },
+    "model_selector": {
+      "label": "モデル"
+    },
+    "comparison": {
+      "active": "{count} モデルを比較中",
+      "no_data": "比較データがありません"
+    },
+    "last_updated": "最終更新",
+    "realtime": {
+      "active": "ライブアップデート有効"
+    }
+  },
+  "loyalty": {
+    "title": "ロイヤルティダッシュボード",
+    "current_tier": "現在のティア",
+    "points_balance": "ポイント残高",
+    "tier_progress": "次のティアまでの進捗",
+    "top_tier": "最高ティア達成",
+    "points_to": "あと {remaining} ポイントで {tier}",
+    "benefits": "ティア特典",
+    "redeem": {
+      "title": "ポイント交換",
+      "button": "交換",
+      "available": "利用可能: {balance}",
+      "errors": {
+        "positive": "正の数を入力してください",
+        "exceeds_balance": "残高を超えています"
+      }
+    },
+    "referral": {
+      "title": "友達を招待",
+      "copy": "コピー",
+      "share": "シェア",
+      "copied": "紹介リンクをコピーしました！",
+      "share_title": "一緒に始めよう！",
+      "share_text": "私の紹介リンクを使用してください",
+      "stats": "招待: {invited} • 報酬: {rewards}"
+    },
+    "history": {
+      "title": "ポイント履歴",
+      "loading": "読み込み中...",
+      "no_data": "取引がありません",
+      "columns": {
+        "date": "日付",
+        "type": "種類",
+        "points": "ポイント",
+        "source": "ソース",
+        "note": "メモ"
+      }
+    },
+    "tiers": {
+      "comparison": "ティア比較",
+      "threshold": "しきい値",
+      "multiplier": "乗数",
+      "retention": "維持率"
+    }
+  },
+  "transactions": {
+    "title": "取引履歴",
+    "subtitle": "Stellarブロックチェーン取引の表示と検索",
+    "filters": {
+      "source_account": "送信元アカウント",
+      "operation_type": "操作タイプ",
+      "start_date": "開始日",
+      "end_date": "終了日",
+      "clear": "フィルターをクリア",
+      "all_types": "すべてのタイプ",
+      "types": {
+        "payment": "支払い",
+        "create_account": "アカウント作成",
+        "change_trust": "信頼設定変更",
+        "path_payment": "パス支払い",
+        "manage_buy_offer": "買いオファー管理"
+      }
+    },
+    "table": {
+      "title": "取引履歴",
+      "prev": "前へ",
+      "next": "次へ",
+      "page": "{current} / {total} ページ",
+      "loading": "読み込み中...",
+      "no_data": "取引が見つかりません",
+      "columns": {
+        "hash": "ハッシュ",
+        "ledger": "レジャー",
+        "source": "送信元",
+        "destination": "送信先",
+        "type": "種類",
+        "amount": "金額",
+        "asset": "資産",
+        "fee": "手数料",
+        "status": "ステータス",
+        "date": "日付"
+      },
+      "fee_unit": "ストループ",
+      "success": "成功",
+      "failed": "失敗",
+      "placeholder": "-"
+    },
+    "showing": "{total} 件中 {start} 件を表示"
+  },
+  "fraud": {
+    "title": "不正検出",
+    "stats": {
+      "total": "総アラート数",
+      "high_risk": "高リスク",
+      "medium_risk": "中リスク",
+      "low_risk": "低リスク"
+    },
+    "charts": {
+      "risk_score": "リスクスコア（14日間）",
+      "risk_distribution": "リスク分布"
+    },
+    "alerts": {
+      "title": "最近のアラート",
+      "columns": {
+        "account": "アカウント",
+        "pattern": "パターン",
+        "score": "スコア",
+        "detected": "検出日時",
+        "description": "説明"
+      },
+      "patterns": {
+        "sybil_cluster": "Sybilクラスター",
+        "wash_trading_loop": "ウォッシュトレード",
+        "anomaly": "異常"
+      }
+    },
+    "loading": "不正データを読み込み中..."
+  },
+  "realtime": {
+    "title": "ライブStellar取引",
+    "latest": "最新: {amount} XLM（{source} から）",
+    "waiting": "ストリームを待機中..."
+  },
+  "common": {
+    "loading": "読み込み中..."
+  }
+}

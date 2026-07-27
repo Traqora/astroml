@@ -1,0 +1,3 @@
+"""
+Documentation generator CLI tool.
+"""

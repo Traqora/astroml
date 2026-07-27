@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  postgres-e2e:
+    image: postgres:15-alpine
+    container_name: astroml-e2e-postgres
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: astroml_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-e2e-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-e2e:
+    image: redis:7-alpine
+    container_name: astroml-e2e-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-e2e-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api-e2e:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: astroml-e2e-api
+    ports:
+      - "8001:8000"
+    environment:
+      DATABASE_URL: postgresql://test:test@postgres-e2e:5432/astroml_test
+      REDIS_URL: redis://redis-e2e:6379
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    depends_on:
+      postgres-e2e:
+        condition: service_healthy
+      redis-e2e:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pytest-e2e:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: astroml-e2e-tests
+    environment:
+      DATABASE_URL: postgresql://test:test@postgres-e2e:5432/astroml_test
+      REDIS_URL: redis://redis-e2e:6379
+      API_BASE_URL: http://api-e2e:8000
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    depends_on:
+      api-e2e:
+        condition: service_healthy
+    volumes:
+      - ./tests/e2e:/app/tests/e2e
+      - ./test-results:/app/test-results
+    command: >
+      pytest tests/e2e/test_api_e2e.py
+      -v
+      --tb=short
+      --junitxml=/app/test-results/e2e-results.xml
+      --cov=api
+      --cov-report=html:/app/test-results/coverage
+      --cov-report=term-missing
+
+volumes:
+  postgres-e2e-data:
+  redis-e2e-data:
+
+networks:
+  default:
+    name: astroml-e2e-network

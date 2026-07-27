@@ -29,7 +29,7 @@ class ClassificationMetrics:
         if y_prob is not None and len(np.unique(y_true)) == 2:
             try:
                 metrics['auc'] = roc_auc_score(y_true, y_prob[:, 1])
-            except:
+            except Exception:
                 metrics['auc'] = 0.0
         
         # Per-class metrics
@@ -77,7 +77,7 @@ class LinkPredictionMetrics:
         if y_prob is not None:
             try:
                 metrics['auc'] = roc_auc_score(y_true, y_prob)
-            except:
+            except Exception:
                 metrics['auc'] = 0.0
         
         # Ranking metrics (for recommendation scenarios)
@@ -161,7 +161,7 @@ class AnomalyDetectionMetrics:
         if y_scores is not None:
             try:
                 metrics['auc'] = roc_auc_score(y_true, y_scores)
-            except:
+            except Exception:
                 metrics['auc'] = 0.0
         
         # Anomaly-specific metrics

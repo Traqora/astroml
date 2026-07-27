@@ -25,7 +25,8 @@ from .utils import (
     format_time,
     format_memory,
     set_random_seed,
-    get_device_info
+    get_device_info,
+    get_environment_info
 )
 
 __all__ = [
@@ -58,5 +59,6 @@ __all__ = [
     "format_time",
     "format_memory",
     "set_random_seed",
-    "get_device_info"
+    "get_device_info",
+    "get_environment_info"
 ]

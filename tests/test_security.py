@@ -1,4 +1,4 @@
-"""Security tests for the AstroML pipeline (GitHub Issue #130).
+"""Security tests for the AstroML pipeline (GitHub Issue #130, #178).
 
 Covers:
 - Input validation and injection prevention
@@ -8,9 +8,11 @@ Covers:
 - Database URL construction safety
 - Data leakage between pipeline stages
 - Configuration boundary validation
+- YAML safe_load enforcement (#178)
 """
 from __future__ import annotations
 
+import ast
 import io
 import os
 import pathlib
@@ -191,7 +193,6 @@ class TestInsecureDeserialization:
 
         class _Exploit:
             def __reduce__(self):
-                import os  # noqa: PLC0415
                 return (os.system, ("echo PICKLE_RCE_EXECUTED",))
 
         payload = pickle.dumps(_Exploit())
@@ -653,3 +654,134 @@ class TestFraudRegistrySecurityLogic:
         assert registry["admin"] == attacker, (
             "Re-initialization vulnerability confirmed — see SECURITY_AUDIT.md SC-1"
         )
+
+
+# ---------------------------------------------------------------------------
+# 9. YAML Safe Load Enforcement (GitHub Issue #178)
+# ---------------------------------------------------------------------------
+
+class TestYamlSafeLoad:
+    """Ensure yaml.load is never called without an explicit safe Loader.
+
+    yaml.load() with an untrusted document and the default (or FullLoader)
+    Loader can execute arbitrary Python code via YAML tags such as
+    !!python/object/apply. All YAML loading in the codebase must use
+    yaml.safe_load() or yaml.load(..., Loader=yaml.SafeLoader).
+    """
+
+    _SOURCE_DIRS = [
+        pathlib.Path("astroml"),
+        pathlib.Path("tests"),
+        pathlib.Path("scripts"),
+        pathlib.Path("config"),
+        pathlib.Path("configs"),
+        pathlib.Path("migrations"),
+    ]
+
+    _SAFE_LOADERS = frozenset({"SafeLoader", "BaseLoader"})
+
+    def _python_files(self) -> list[pathlib.Path]:
+        files: list[pathlib.Path] = []
+        # Root-level .py files (non-recursive so we don't double-scan sub-packages)
+        files.extend(pathlib.Path(".").glob("*.py"))
+        for d in self._SOURCE_DIRS:
+            if d.exists():
+                files.extend(d.rglob("*.py"))
+        return files
+
+    def _yaml_load_calls_in_file(self, path: pathlib.Path) -> list[str]:
+        """Return descriptions of any unsafe yaml.load() calls found via AST."""
+        violations: list[str] = []
+        try:
+            source = path.read_text(errors="replace")
+            tree = ast.parse(source, filename=str(path))
+        except SyntaxError:
+            return violations
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            # Match yaml.load(...) attribute calls
+            if not (isinstance(func, ast.Attribute) and func.attr == "load"):
+                continue
+            # Must be called on something named "yaml"
+            if not (isinstance(func.value, ast.Name) and func.value.id == "yaml"):
+                continue
+            # Check whether a Loader keyword argument was supplied and is safe
+            loader_kw = next(
+                (kw for kw in node.keywords if kw.arg == "Loader"), None
+            )
+            if loader_kw is None:
+                violations.append(
+                    f"{path}:{node.lineno}: yaml.load() called without Loader= "
+                    f"— use yaml.safe_load() instead"
+                )
+                continue
+            # Loader must resolve to a safe loader class
+            loader_val = loader_kw.value
+            loader_name: str | None = None
+            if isinstance(loader_val, ast.Name):
+                loader_name = loader_val.id
+            elif isinstance(loader_val, ast.Attribute):
+                loader_name = loader_val.attr
+            if loader_name not in self._SAFE_LOADERS:
+                violations.append(
+                    f"{path}:{node.lineno}: yaml.load() uses potentially unsafe "
+                    f"Loader={loader_name!r} — use yaml.SafeLoader"
+                )
+        return violations
+
+    def test_no_unsafe_yaml_load_in_source(self) -> None:
+        """No Python source file may call yaml.load() without SafeLoader."""
+        all_violations: list[str] = []
+        for path in self._python_files():
+            all_violations.extend(self._yaml_load_calls_in_file(path))
+        assert not all_violations, (
+            "Unsafe yaml.load() calls found — replace with yaml.safe_load():\n"
+            + "\n".join(all_violations)
+        )
+
+    def test_safe_load_parses_valid_yaml(self) -> None:
+        """yaml.safe_load() must correctly parse well-formed config-like YAML."""
+        doc = """
+database:
+  host: localhost
+  port: 5432
+  name: astroml
+  user: admin
+  password: secret
+horizon:
+  url: https://horizon-testnet.stellar.org
+"""
+        result = yaml.safe_load(doc)
+        assert result["database"]["host"] == "localhost"
+        assert result["database"]["port"] == 5432
+        assert result["horizon"]["url"] == "https://horizon-testnet.stellar.org"
+
+    def test_safe_load_rejects_arbitrary_python_object_tag(self) -> None:
+        """yaml.safe_load() must raise on !!python/object tags (code execution vector)."""
+        malicious = "!!python/object/apply:os.system ['echo pwned']\n"
+        with pytest.raises(yaml.YAMLError):
+            yaml.safe_load(malicious)
+
+    def test_safe_load_rejects_python_tuple_tag(self) -> None:
+        """yaml.safe_load() must raise on !!python/tuple tags."""
+        doc = "key: !!python/tuple [1, 2, 3]"
+        with pytest.raises(yaml.YAMLError):
+            yaml.safe_load(doc)
+
+    def test_yaml_load_without_loader_is_demonstrably_unsafe(self) -> None:
+        """Document that yaml.load() without a Loader accepts dangerous tags.
+
+        This test does NOT call the unsafe form in production paths — it only
+        demonstrates why the restriction exists, so reviewers understand the risk.
+        The safe form (safe_load) must be used everywhere in the codebase.
+        """
+        benign_doc = "key: value\n"
+        result_safe = yaml.safe_load(benign_doc)
+        assert result_safe == {"key": "value"}
+
+        # yaml.load with SafeLoader must produce the same result.
+        result_explicit = yaml.load(benign_doc, Loader=yaml.SafeLoader)  # noqa: S506
+        assert result_explicit == result_safe

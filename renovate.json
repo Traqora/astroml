@@ -1,0 +1,52 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base"
+  ],
+  "schedule": ["every monday"],
+  "timezone": "UTC",
+  "labels": ["dependencies"],
+  "commitMessagePrefix": "deps",
+  "commitMessageAction": "Update",
+  "commitMessageTopic": "{{depName}}",
+  "python": {
+    "packageRules": [
+      {
+        "matchUpdateTypes": ["minor", "patch"],
+        "automerge": false,
+        "groupName": "non-major dependencies"
+      },
+      {
+        "matchUpdateTypes": ["major"],
+        "automerge": false,
+        "groupName": "major dependencies"
+      }
+    ]
+  },
+  "cargo": {
+    "packageRules": [
+      {
+        "matchUpdateTypes": ["minor", "patch"],
+        "automerge": false
+      }
+    ]
+  },
+  "github-actions": {
+    "packageRules": [
+      {
+        "matchUpdateTypes": ["minor", "patch"],
+        "automerge": false
+      }
+    ]
+  },
+  "vulnerabilityAlerts": {
+    "labels": ["security"],
+    "assignees": ["@maintainers"],
+    "automerge": false
+  },
+  "prConcurrentLimit": 10,
+  "prHourlyLimit": 2,
+  "rebaseWhen": "conflicted",
+  "assignees": ["@maintainers"],
+  "reviewers": ["@maintainers"]
+}

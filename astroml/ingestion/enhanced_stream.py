@@ -36,8 +36,15 @@ from astroml.ingestion.metrics import (
     STREAM_CONNECTION_HEALTH,
     STREAM_RATE_LIMIT_BACKOFF,
     STREAM_PROCESSING_LATENCY,
-    STREAM_CURSOR
+    STREAM_CURSOR,
+    STREAM_LAG_SECONDS
 )
+
+try:
+    from api.routers.streaming import update_stream_state
+    _stream_state_available = True
+except ImportError:
+    _stream_state_available = False
 
 logger = logging.getLogger("astroml.ingestion.enhanced_stream")
 
@@ -148,6 +155,40 @@ class EnhancedStellarStream:
         self._running: bool = False
         self._cursor: Optional[str] = config.cursor
         self._processed_count: int = 0
+        self._last_record_created_at: Optional[float] = None
+        self._stream_id = f"{config.stream_type}-{config.horizon_url.replace('https://', '').replace('http://', '').replace('/', '_')}"
+        
+    def _update_stream_state(self) -> None:
+        """Update the stream state in the API router."""
+        if not _stream_state_available:
+            return
+            
+        # Calculate lag
+        lag_seconds = None
+        if self._last_record_created_at:
+            lag_seconds = time.time() - self._last_record_created_at
+            
+        # Determine status
+        if self.health_monitor.is_healthy and self._running:
+            status = "active"
+        elif self.health_monitor.consecutive_failures > 0:
+            status = "error"
+        else:
+            status = "inactive"
+            
+        state = {
+            "stream_type": self.config.stream_type,
+            "horizon_url": self.config.horizon_url,
+            "is_healthy": self.health_monitor.is_healthy,
+            "status": status,
+            "cursor": self._cursor,
+            "processed_count": self._processed_count,
+            "consecutive_failures": self.health_monitor.consecutive_failures,
+            "current_backoff": self.rate_tracker.current_backoff,
+            "lag_seconds": lag_seconds
+        }
+        
+        update_stream_state(self._stream_id, state)
         
     async def __aenter__(self) -> "EnhancedStellarStream":
         """Async context manager entry."""
@@ -156,6 +197,7 @@ class EnhancedStellarStream:
             stream_type=self.config.stream_type,
             horizon_url=self.config.horizon_url
         ).set(1)
+        self._update_stream_state()
         logger.info(
             "EnhancedStellarStream initialized | horizon=%s stream=%s cursor=%s",
             self.config.horizon_url,
@@ -171,6 +213,7 @@ class EnhancedStellarStream:
             stream_type=self.config.stream_type,
             horizon_url=self.config.horizon_url
         ).set(0)
+        self._update_stream_state()
         logger.info(
             "EnhancedStellarStream shutdown | processed=%d final_cursor=%s",
             self._processed_count,
@@ -249,6 +292,7 @@ class EnhancedStellarStream:
             horizon_url=self.config.horizon_url,
             error_type="connection_error"
         ).inc()
+        self._update_stream_state()
         
         if self.health_monitor.consecutive_failures >= self.health_monitor.max_consecutive_failures:
             logger.error(

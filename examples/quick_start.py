@@ -5,9 +5,15 @@ import sys
 from pathlib import Path
 
 # Add the parent directory to the path to import astroml
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# This allows the example to run from any working directory
+script_dir = Path(__file__).parent.resolve()
+repo_root = script_dir.parent
+sys.path.insert(0, str(repo_root))
 
 from astroml.benchmarking import ModelBenchmark, create_config_from_template
+
+# Use script-relative paths for outputs
+OUTPUT_DIR = script_dir / "benchmark_results"
 
 
 def main():
@@ -42,7 +48,7 @@ def main():
             if isinstance(value, (int, float)):
                 print(f"    {metric}: {value:.4f}")
     
-    print(f"\nResults saved to: benchmark_results")
+    print(f"\nResults saved to: {OUTPUT_DIR}")
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ from typing import Dict, Iterable, List, Optional, Any
 import pandas as pd
 from sqlalchemy.orm import Session
 
-from astroml.db.schema import Operation, NormalizedTransaction
+from astroml.db.schema import Operation, NormalizedTransaction, Transaction
 from astroml.features.structural_importance import compute_structural_importance_metrics
 
 logger = logging.getLogger(__name__)
@@ -72,7 +72,7 @@ class StructuralImportancePipeline:
         logger.info("Starting structural importance computation from operations")
         
         # Build query
-        query = session.query(Operation)
+        query = session.query(Operation).order_by(Operation.id)
         
         if start_ledger is not None:
             query = query.join(Operation.transaction).filter(
@@ -90,13 +90,20 @@ class StructuralImportancePipeline:
                 (Operation.destination_account.in_(account_filter))
             )
         
-        # Process in batches
+        # Process in batches using keyset pagination
         edges = []
         total_processed = 0
+        last_id = None
         
-        for offset in range(0, query.count(), self.batch_size):
-            batch = query.limit(self.batch_size).offset(offset).all()
+        while True:
+            batch_query = query
+            if last_id is not None:
+                batch_query = batch_query.filter(Operation.id > last_id)
+            batch = batch_query.limit(self.batch_size).all()
             
+            if not batch:
+                break
+                
             for op in batch:
                 if op.source_account and op.destination_account:
                     edges.append({
@@ -109,6 +116,8 @@ class StructuralImportancePipeline:
             total_processed += len(batch)
             if total_processed % (self.batch_size * 5) == 0:
                 logger.info(f"Processed {total_processed} operations")
+                
+            last_id = batch[-1].id
         
         logger.info(f"Extracted {len(edges)} edges from {total_processed} operations")
         
@@ -144,7 +153,7 @@ class StructuralImportancePipeline:
         logger.info("Starting structural importance computation from normalized transactions")
         
         # Build query
-        query = session.query(NormalizedTransaction)
+        query = session.query(NormalizedTransaction).order_by(NormalizedTransaction.id)
         
         if start_time is not None:
             query = query.filter(NormalizedTransaction.timestamp >= start_time)
@@ -158,13 +167,20 @@ class StructuralImportancePipeline:
                 (NormalizedTransaction.receiver.in_(account_filter))
             )
         
-        # Process in batches
+        # Process in batches using keyset pagination
         edges = []
         total_processed = 0
+        last_id = None
         
-        for offset in range(0, query.count(), self.batch_size):
-            batch = query.limit(self.batch_size).offset(offset).all()
+        while True:
+            batch_query = query
+            if last_id is not None:
+                batch_query = batch_query.filter(NormalizedTransaction.id > last_id)
+            batch = batch_query.limit(self.batch_size).all()
             
+            if not batch:
+                break
+                
             for tx in batch:
                 if tx.sender and tx.receiver:
                     edges.append({
@@ -177,6 +193,8 @@ class StructuralImportancePipeline:
             total_processed += len(batch)
             if total_processed % (self.batch_size * 5) == 0:
                 logger.info(f"Processed {total_processed} normalized transactions")
+                
+            last_id = batch[-1].id
         
         logger.info(f"Extracted {len(edges)} edges from {total_processed} normalized transactions")
         

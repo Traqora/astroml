@@ -37,3 +37,10 @@ STREAM_CURSOR = Gauge(
     "Current cursor position (numeric representation if possible)",
     ["stream_type", "horizon_url"]
 )
+
+STREAM_LAG_SECONDS = Gauge(
+    "astroml_ingestion_lag_seconds",
+    "Current lag in seconds (time since last record's created_at)",
+    ["stream_type", "horizon_url"]
+)
+

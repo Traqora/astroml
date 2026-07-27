@@ -321,16 +321,53 @@ class TemporalTrainer:
         
         torch.save(checkpoint, f'temporal_model_checkpoint_epoch_{epoch}.pth')
     
-    def load_checkpoint(self, checkpoint_path: str):
-        """Load model checkpoint."""
-        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+    def load_checkpoint(self, checkpoint_path: str) -> bool:
+        """Load model checkpoint.
         
-        self.model.load_state_dict(checkpoint['model_state_dict'])
-        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        Returns:
+            True if checkpoint was loaded successfully, False otherwise.
+        
+        Raises:
+            FileNotFoundError: If checkpoint file does not exist
+            ValueError: If checkpoint is corrupted or missing required keys
+            RuntimeError: If state dict does not match model architecture
+        """
+        try:
+            checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=True)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Checkpoint file not found: {checkpoint_path}")
+        except Exception as e:
+            raise ValueError(f"Failed to load checkpoint: {e}")
+        
+        # Validate required keys
+        required_keys = ['model_state_dict', 'optimizer_state_dict', 'scheduler_state_dict', 'training_history']
+        for key in required_keys:
+            if key not in checkpoint:
+                raise ValueError(f"Checkpoint missing required key: {key}")
+        
+        try:
+            self.model.load_state_dict(checkpoint['model_state_dict'])
+        except Exception as e:
+            raise RuntimeError(f"Model state dict does not match architecture: {e}")
+        
+        try:
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        except Exception as e:
+            raise RuntimeError(f"Optimizer state dict does not match: {e}")
+        
+        try:
+            self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        except Exception as e:
+            raise RuntimeError(f"Scheduler state dict does not match: {e}")
+        
         self.training_history = checkpoint['training_history']
         
-        self.logger.info(f"Loaded checkpoint from epoch {checkpoint['epoch']}")
+        if 'epoch' in checkpoint:
+            self.logger.info(f"Loaded checkpoint from epoch {checkpoint['epoch']}")
+        else:
+            self.logger.info("Loaded checkpoint (epoch info not available)")
+        
+        return True
     
     def evaluate(
         self,
@@ -488,7 +525,7 @@ class TemporalExperiment:
         }
         
         # Print summary
-        print(f"\nExperiment Results:")
+        print("\nExperiment Results:")
         print(f"Test Accuracy: {test_results['test_accuracy']:.4f}")
         print(f"Temporal AUC: {test_results['temporal_auc']:.4f}")
         print(f"Temporal Accuracy: {test_results['temporal_accuracy']:.4f}")

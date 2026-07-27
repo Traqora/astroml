@@ -2,660 +2,395 @@
 
 ## Overview
 
-This guide provides comprehensive instructions for setting up and running AstroML using Docker containers. The AstroML project includes multiple Docker configurations for different use cases including data ingestion, machine learning training, smart contract development, and production deployment.
+This guide provides comprehensive instructions for setting up, developing, training, testing, and deploying AstroML using Docker. It combines containerized development, PostgreSQL, Redis, Feature Store services, GPU-enabled training, monitoring, and production deployment into a single Docker workflow.
 
 ## Table of Contents
 
-1. [Prerequisites](#prerequisites)
-2. [Quick Start](#quick-start)
-3. [Docker Services](#docker-services)
-4. [Docker Stages](#docker-stages)
-5. [Environment Configuration](#environment-configuration)
-6. [Common Operations](#common-operations)
-7. [Troubleshooting](#troubleshooting)
-8. [Advanced Usage](#advanced-usage)
+1. Prerequisites
+2. Quick Start
+3. Docker Services
+4. Docker Build Stages
+5. Environment Configuration
+6. Development Workflow
+7. Common Operations
+8. Production Deployment
+9. Troubleshooting
+10. Advanced Usage
+11. Security Best Practices
+
+---
 
 ## Prerequisites
 
-### Required Software
+### System Requirements
 
-- **Docker**: Version 20.10 or higher
-- **Docker Compose**: Version 2.0 or higher
-- **NVIDIA Docker** (for GPU support): If using GPU training
+- Docker Engine 20.10+
+- Docker Compose v2+
+- 8GB+ RAM (development)
+- 16GB+ RAM (training workloads)
+- NVIDIA GPU (optional for GPU training)
+- 20GB+ available disk space
 
-### Installation
+### Docker Installation
 
-#### Docker Installation
+#### Linux
 
-**Linux:**
-```bash
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-sudo usermod -aG docker $USER
-```
-
-**macOS:**
-```bash
-brew install --cask docker
-```
-
-**Windows:**
-Download Docker Desktop from https://www.docker.com/products/docker-desktop
-
-#### NVIDIA Docker (GPU Support)
-
-```bash
-distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
-curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | sudo tee /etc/apt/sources.list.d/nvidia-docker.list
-
-sudo apt-get update
-sudo apt-get install -y nvidia-docker2
-sudo systemctl restart docker
 ```
 
 ## Quick Start
 
-### Start Core Services
+## Quick Start
+
+### 1. Clone and Setup
 
 ```bash
-# Start PostgreSQL and Redis
-docker-compose up postgres redis -d
+git clone https://github.com/Menjay7/astroml.git
+cd astroml
 
+cp .env.example .env
+
+# Linux/macOS
+chmod +x scripts/docker-dev.sh
+```
+
+### 2. Start Core Infrastructure
+
+For local development with native Python execution:
+
+```bash
+# Start PostgreSQL and Redis only
+docker compose up -d postgres redis
+
+# Verify services
+docker compose ps
+
+# Run migrations locally
+alembic upgrade head
+
+# Run application locally
+python examples/quick_start.py
+```
+
+### 3. Start Full Containerized Development Environment
+
+If you prefer to run everything inside Docker:
+
+```bash
+# Build images
+./scripts/docker-dev.sh build
+
+# Start development environment
+./scripts/docker-dev.sh dev
+
+# Or using Docker Compose directly
+docker compose --profile dev up -d
+```
+
+### 4. Start Application Services
+
+```bash
 # Start ingestion service
-docker-compose up ingestion -d
+docker compose up -d ingestion
 
-# Verify services are running
-docker-compose ps
+# Start streaming service
+docker compose up -d streaming
+
+# Verify running services
+docker compose ps
 ```
 
-### Start Development Environment
+### 5. Start Training
+
+#### CPU Training
 
 ```bash
-# Start development environment with Jupyter
-docker-compose --profile dev up -d
-
-# Access Jupyter Lab
-# Open browser to http://localhost:8888
+docker compose --profile cpu up training-cpu
 ```
 
-### Start Training
+#### GPU Training
 
 ```bash
-# CPU training
-docker-compose --profile cpu up training-cpu
-
-# GPU training (requires NVIDIA Docker)
-docker-compose --profile gpu up training-gpu
+docker compose --profile gpu up training-gpu
 ```
 
-### Start Soroban Development
+Requires NVIDIA Docker runtime and compatible GPU drivers.
+
+### 6. Start Monitoring
 
 ```bash
-# Start Soroban contract development
-docker-compose --profile soroban up soroban-dev -d
-
-# Build Soroban contracts
-docker-compose --profile soroban-build up soroban-build
-
-# Test Soroban contracts
-docker-compose --profile soroban-test up soroban-test
+docker compose --profile monitoring up -d
 ```
+
+Available services:
+
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3000
+
+### 7. Access Services
+
+| Service | URL/Port |
+|----------|-----------|
+| PostgreSQL | localhost:5432 |
+| Redis | localhost:6379 |
+| Feature Store | http://localhost:8000 |
+| Ingestion API | http://localhost:8001 |
+| Streaming API | http://localhost:8002 |
+| Jupyter Lab | http://localhost:8888 |
+| TensorBoard (GPU) | http://localhost:6006 |
+| TensorBoard (CPU) | http://localhost:6007 |
+| Prometheus | http://localhost:9090 |
+| Grafana | http://localhost:3000 |
+
+---
 
 ## Docker Services
 
 ### Core Infrastructure
 
 #### PostgreSQL Database
-- **Service Name**: `postgres`
+
+- **Container**: `astroml-postgres`
 - **Image**: `postgres:15-alpine`
 - **Port**: `5432`
-- **Environment Variables**:
-  - `POSTGRES_DB`: astroml
-  - `POSTGRES_USER`: astroml
-  - `POSTGRES_PASSWORD`: astroml_password
-- **Volumes**: `postgres_data`
+- **Database**: `astroml`
+- **User**: `astroml`
+- **Storage**: Persistent Docker volume (`postgres_data`)
+- **Purpose**: Primary application database
 
 #### Redis Cache
-- **Service Name**: `redis`
+
+- **Container**: `astroml-redis`
 - **Image**: `redis:7-alpine`
 - **Port**: `6379`
-- **Volumes**: `redis_data`
-- **Features**: AOF persistence enabled
+- **Storage**: Persistent Docker volume (`redis_data`)
+- **Features**:
+  - AOF persistence
+  - Job queues
+  - Application caching
+  - Session storage
+
+#### Feature Store
+
+- **Container**: `astroml-feature-store`
+- **Port**: `8000`
+- **Storage Path**: `/app/feature_store`
+- **Purpose**:
+  - Feature management
+  - Feature caching
+  - Feature versioning
+  - ML feature serving
 
 ### Application Services
 
 #### Ingestion Service
-- **Service Name**: `ingestion`
-- **Port**: `8000` (HTTP), `8080` (Health)
-- **Environment Variables**:
-  - `DATABASE_URL`: PostgreSQL connection string
-  - `REDIS_URL`: Redis connection string
-  - `LOG_LEVEL`: INFO
-- **Volumes**: `ingestion_logs`, `ingestion_data`
+
+- **Container**: `astroml-ingestion`
+- **Port**: `8001`
+- **Purpose**: Data ingestion and preprocessing
+- **Dependencies**: PostgreSQL, Redis
 
 #### Streaming Service
-- **Service Name**: `streaming`
-- **Port**: `8001`
-- **Purpose**: Enhanced streaming for Stellar data
-- **Volumes**: `streaming_logs`
 
-#### Training Services
-- **CPU Training**: `training-cpu` (Port: 6007)
-- **GPU Training**: `training-gpu` (Port: 6006)
-- **Profiles**: `cpu`, `gpu`
-- **Volumes**: `training_models`, `training_data`, `training_logs`
+- **Container**: `astroml-streaming`
+- **Port**: `8002`
+- **Purpose**: Real-time data streaming and event processing
 
 #### Development Environment
-- **Service Name**: `dev`
-- **Ports**: `8002` (API), `8888` (Jupyter), `6008` (TensorBoard)
-- **Profile**: `dev`
-- **Features**: Live code editing, testing, Jupyter Lab
+
+- **Container**: `astroml-dev`
+- **Ports**:
+  - API: `8003`
+  - Jupyter Lab: `8888`
+  - TensorBoard: `6008`
+- **Purpose**:
+  - Interactive development
+  - Notebook experimentation
+  - Testing and debugging
 
 #### Production Service
-- **Service Name**: `production`
-- **Port**: `8000`
-- **Profile**: `prod`
-- **Features**: Minimal image, optimized for production
 
-### Soroban Services
+- **Container**: `astroml-production`
+- **Port**: `8004`
+- **Purpose**: Production deployment
 
-#### Soroban Development
-- **Service Name**: `soroban-dev`
-- **Port**: `8000`
-- **Profile**: `soroban`
-- **Features**: Live contract development with cargo-watch
+### Training Services
 
-#### Soroban Build
-- **Service Name**: `soroban-build`
-- **Profile**: `soroban-build`
-- **Purpose**: Build contracts in release mode
+#### GPU Training
 
-#### Soroban Testing
-- **Service Name**: `soroban-test`
-- **Profile**: `soroban-test`
-- **Purpose**: Run contract tests
+- **Container**: `astroml-training-gpu`
+- **TensorBoard Port**: `6006`
+- **GPU Required**: Yes
+- **Purpose**: Accelerated model training
+
+#### CPU Training
+
+- **Container**: `astroml-training-cpu`
+- **TensorBoard Port**: `6007`
+- **GPU Required**: No
+- **Purpose**: CPU-only training workloads
 
 ### Monitoring Services
 
 #### Prometheus
-- **Service Name**: `prometheus`
+
+- **Container**: `astroml-prometheus`
 - **Port**: `9090`
-- **Profile**: `monitoring`
-- **Purpose**: Metrics collection
+- **Purpose**: Metrics collection and alerting
 
 #### Grafana
-- **Service Name**: `grafana`
+
+- **Container**: `astroml-grafana`
+- **Port**: `3000`
+- **Purpose**: Monitoring dashboards and visualization
+- **Default Credentials**: `admin / admin`
+
+### Application Services
+
+#### Ingestion Service
+### Application Services
+
+#### Ingestion Service
+
+- **Container**: `astroml-ingestion`
+- **Service Name**: `ingestion`
+- **Port**: `8001` (API) / `8080` (Health Check)
+- **Purpose**: Data ingestion, ETL processing, and Stellar data collection
+- **Environment Variables**:
+  - `DATABASE_URL`
+  - `REDIS_URL`
+  - `LOG_LEVEL`
+- **Volumes**:
+  - `ingestion_logs`
+  - `ingestion_data`
+- **Dependencies**: PostgreSQL, Redis
+
+#### Streaming Service
+
+- **Container**: `astroml-streaming`
+- **Service Name**: `streaming`
+- **Port**: `8002`
+- **Purpose**: Real-time data streaming and event processing
+- **Volumes**:
+  - `streaming_logs`
+
+#### Development Environment
+
+- **Container**: `astroml-dev`
+- **Service Name**: `dev`
+- **Ports**:
+  - `8003` (API)
+  - `8888` (Jupyter Lab)
+  - `6008` (TensorBoard)
+- **Profile**: `dev`
+- **Purpose**:
+  - Interactive development
+  - Live code editing
+  - Testing and debugging
+  - Jupyter notebooks
+
+#### Production Service
+
+- **Container**: `astroml-production`
+- **Service Name**: `production`
+- **Port**: `8004`
+- **Profile**: `prod`
+- **Purpose**: Production deployment
+- **Features**:
+  - Optimized image size
+  - Production configuration
+  - Health monitoring
+
+### Training Services
+
+#### GPU Training
+
+- **Container**: `astroml-training-gpu`
+- **Service Name**: `training-gpu`
+- **TensorBoard Port**: `6006`
+- **Profile**: `gpu`
+- **GPU Required**: Yes
+- **Purpose**: GPU-accelerated machine learning training
+- **Volumes**:
+  - `training_models`
+  - `training_data`
+  - `training_logs`
+
+#### CPU Training
+
+- **Container**: `astroml-training-cpu`
+- **Service Name**: `training-cpu`
+- **TensorBoard Port**: `6007`
+- **Profile**: `cpu`
+- **GPU Required**: No
+- **Purpose**: CPU-based machine learning training
+- **Volumes**:
+  - `training_models`
+  - `training_data`
+  - `training_logs`
+
+### Soroban Services
+
+#### Soroban Development
+
+- **Service Name**: `soroban-dev`
+- **Profile**: `soroban`
+- **Purpose**: Smart contract development environment
+- **Features**:
+  - Live contract development
+  - Cargo watch support
+  - Rapid iteration workflow
+
+#### Soroban Build
+
+- **Service Name**: `soroban-build`
+- **Profile**: `soroban-build`
+- **Purpose**: Build and package Soroban contracts for deployment
+
+#### Soroban Testing
+
+- **Service Name**: `soroban-test`
+- **Profile**: `soroban-test`
+- **Purpose**: Execute Soroban contract tests and validation suites
+
+### Monitoring Services
+
+#### Prometheus
+### Monitoring Services
+
+#### Prometheus
+- **Container**: `astroml-prometheus`
+- **Port**: `9090`
+- **Profile**: `monitoring`
+- **Purpose**: Metrics collection and monitoring
+
+#### Grafana
+- **Container**: `astroml-grafana`
 - **Port**: `3000`
 - **Profile**: `monitoring`
-- **Purpose**: Metrics visualization
-- **Default Credentials**: admin / admin
+- **Purpose**: Dashboards and metrics visualization
+- **Default Credentials**: `admin/admin`
+
+---
 
 ## Docker Stages
 
 ### Main Dockerfile Stages
 
 #### Base Stage
-- **Purpose**: Common dependencies and Python environment
-- **Python Version**: 3.11-slim
-- **System Dependencies**: build-essential, curl, git, postgresql-client
-- **User**: astroml (non-root)
+- Common Python runtime and dependencies
+- Python 3.11
+- Non-root `astroml` user
+- Shared libraries and tooling
 
 #### Ingestion Stage
-- **Purpose**: Data ingestion and streaming
-- **Additional Tools**: jq, netcat-openbsd
-- **Health Check**: Python module import check
-- **Default Command**: `python -m astroml.ingestion`
-
-#### Training Base Stage
-- **Purpose**: ML training with GPU support
-- **Base Image**: nvidia/cuda:12.1-runtime-base-ubuntu22.04
-- **Python**: 3.11
-- **PyTorch**: CUDA 12.1 support
-- **PyTorch Geometric**: CUDA 12.1 support
-
-#### Training CPU Stage
-- **Purpose**: CPU-only training
-- **Base**: Base stage
-- **Use Case**: Environments without GPU
-
-#### Development Stage
-- **Purpose**: Development and testing
-- **Additional Tools**: pytest, black, flake8, mypy, jupyter
-- **Ports**: 8000, 8080, 8888, 6006
-- **Default Command**: pytest
-
-#### Production Stage
-- **Purpose**: Production deployment
-- **Features**: Minimal image, optimized for production
-- **Health Check**: Basic import check
-
-### Soroban Dockerfile Stages
-
-#### Soroban Base Stage
-- **Purpose**: Soroban development environment
-- **Rust Version**: 1.75-slim
-- **Soroban CLI**: v20.0.0
-- **System Dependencies**: build-essential, pkg-config, libssl-dev
-
-#### Development Stage
-- **Purpose**: Full development environment
-- **Additional Tools**: cargo-watch, cargo-expand
-- **Default Command**: cargo-watch with build
-
-#### Build Stage
-- **Purpose**: Optimized build for deployment
-- **Output**: WASM files in `/app/target/wasm`
-
-#### Testing Stage
-- **Purpose**: Run contract tests
-- **Command**: cargo test --all-features
-
-#### Verification Stage
-- **Purpose**: Verify contract build
-- **Command**: Build and verify WASM output
-
-## Environment Configuration
-
-### Environment Variables
-
-#### Database Configuration
+- Data ingestion and streaming workloads
+- Health checks enabled
+- Default command:
 ```bash
-DATABASE_URL=postgresql://astroml:astroml_password@postgres:5432/astroml
-```
-
-#### Redis Configuration
+python -m astroml.ingestion
 ```bash
-REDIS_URL=redis://redis:6379/0
-```
-
-#### Stellar Configuration
-```bash
-STELLAR_NETWORK_PASSPHRASE=Public Global Stellar Network ; September 2015
-STELLAR_HORIZON_URL=https://horizon.stellar.org
-```
-
-#### Logging Configuration
-```bash
-LOG_LEVEL=INFO
-PYTHONPATH=/app
-```
-
-#### GPU Configuration
-```bash
-CUDA_VISIBLE_DEVICES=0
-```
-
-### Configuration Files
-
-#### Docker Compose Override
-Create `docker-compose.override.yml` for local development:
-
-```yaml
-version: '3.8'
-
-services:
-  postgres:
-    environment:
-      POSTGRES_PASSWORD: your_secure_password
-
-  ingestion:
-    environment:
-      LOG_LEVEL: DEBUG
-    volumes:
-      - ./local_data:/app/data
-```
-
-#### Environment File
-Create `.env` file for sensitive data:
-
-```bash
-POSTGRES_PASSWORD=your_secure_password
-REDIS_PASSWORD=your_redis_password
-STELLAR_SECRET_KEY=your_stellar_secret
-```
-
-## Common Operations
-
-### Build Images
-
-```bash
-# Build all images
-docker-compose build
-
-# Build specific service
-docker-compose build ingestion
-
-# Build with no cache
-docker-compose build --no-cache
-
-# Build specific stage
-docker build --target development -t astroml:dev .
-```
-
-### Start Services
-
-```bash
-# Start all services
-docker-compose up -d
-
-# Start specific service
-docker-compose up postgres redis -d
-
-# Start with profile
-docker-compose --profile dev up -d
-
-# Start with multiple profiles
-docker-compose --profile dev --profile monitoring up -d
-```
-
-### Stop Services
-
-```bash
-# Stop all services
-docker-compose down
-
-# Stop specific service
-docker-compose stop ingestion
-
-# Stop and remove volumes
-docker-compose down -v
-```
-
-### View Logs
-
-```bash
-# View all logs
-docker-compose logs
-
-# View specific service logs
-docker-compose logs ingestion
-
-# Follow logs
-docker-compose logs -f ingestion
-
-# View last 100 lines
-docker-compose logs --tail=100 ingestion
-```
-
-### Execute Commands
-
-```bash
-# Execute command in running container
-docker-compose exec ingestion bash
-
-# Execute command in new container
-docker-compose run ingestion python -m pytest
-
-# Execute as root
-docker-compose exec -u root ingestion bash
-```
-
-### Database Operations
-
-```bash
-# Connect to PostgreSQL
-docker-compose exec postgres psql -U astroml -d astroml
-
-# Run migrations
-docker-compose exec ingestion alembic upgrade head
-
-# Create database backup
-docker-compose exec postgres pg_dump -U astroml astroml > backup.sql
-
-# Restore database
-docker-compose exec -T postgres psql -U astroml astroml < backup.sql
-```
-
-### Redis Operations
-
-```bash
-# Connect to Redis
-docker-compose exec redis redis-cli
-
-# Flush Redis cache
-docker-compose exec redis redis-cli FLUSHALL
-
-# Monitor Redis
-docker-compose exec redis redis-cli MONITOR
-```
-
-### Training Operations
-
-```bash
-# Start CPU training
-docker-compose --profile cpu run training-cpu python train.py
-
-# Start GPU training
-docker-compose --profile gpu run training-gpu python train.py
-
-# View TensorBoard
-docker-compose --profile gpu up training-gpu
-# Open browser to http://localhost:6006
-```
-
-### Soroban Operations
-
-```bash
-# Start Soroban development
-docker-compose --profile soroban up soroban-dev -d
-
-# Build contracts
-docker-compose --profile soroban-build run soroban-build
-
-# Test contracts
-docker-compose --profile soroban-test run soroban-test
-
-# Execute Soroban CLI
-docker-compose --profile soroban run soroban-dev soroban --help
-```
-
-### Monitoring Operations
-
-```bash
-# Start monitoring stack
-docker-compose --profile monitoring up -d
-
-# Access Prometheus
-# Open browser to http://localhost:9090
-
-# Access Grafana
-# Open browser to http://localhost:3000
-# Default credentials: admin / admin
-```
-
-## Troubleshooting
-
-### Common Issues
-
-#### Container Won't Start
-
-**Problem**: Container fails to start or crashes immediately
-
-**Solution**:
-```bash
-# Check logs
-docker-compose logs <service_name>
-
-# Check container status
-docker-compose ps
-
-# Restart service
-docker-compose restart <service_name>
-
-# Rebuild image
-docker-compose build --no-cache <service_name>
-```
-
-#### Database Connection Issues
-
-**Problem**: Cannot connect to PostgreSQL
-
-**Solution**:
-```bash
-# Check PostgreSQL is running
-docker-compose ps postgres
-
-# Check PostgreSQL logs
-docker-compose logs postgres
-
-# Verify database is ready
-docker-compose exec postgres pg_isready -U astroml
-
-# Check network connectivity
-docker-compose exec ingestion ping postgres
-```
-
-#### Permission Issues
-
-**Problem**: Permission denied errors
-
-**Solution**:
-```bash
-# Fix volume permissions
-docker-compose exec ingestion chown -R astroml:astroml /app
-
-# Run as root
-docker-compose exec -u root ingestion bash
-
-# Check user permissions
-docker-compose exec ingestion whoami
-```
-
-#### GPU Not Available
-
-**Problem**: GPU training fails with CUDA errors
-
-**Solution**:
-```bash
-# Check NVIDIA Docker installation
-docker run --rm --gpus all nvidia/cuda:12.1-runtime-base-ubuntu22.04 nvidia-smi
-
-# Verify GPU access
-docker-compose --profile gpu config
-
-# Use CPU training instead
-docker-compose --profile cpu up training-cpu
-```
-
-#### Out of Memory
-
-**Problem**: Container OOM killed
-
-**Solution**:
-```bash
-# Increase Docker memory limit in Docker Desktop settings
-
-# Check container memory usage
-docker stats
-
-# Reduce batch size in training configuration
-
-# Use CPU training instead
-docker-compose --profile cpu up training-cpu
-```
-
-#### Port Conflicts
-
-**Problem**: Port already in use
-
-**Solution**:
-```bash
-# Check what's using the port
-netstat -tulpn | grep <port>
-
-# Change port mapping in docker-compose.yml
-ports:
-  - "8001:8000"  # Change to different host port
-
-# Stop conflicting service
-docker-compose stop <conflicting_service>
-```
-
-### Health Checks
-
-#### Service Health Status
-
-```bash
-# Check all service health
-docker-compose ps
-
-# Check specific service health
-docker-compose exec ingestion python -c "import astroml.ingestion"
-
-# Check PostgreSQL health
-docker-compose exec postgres pg_isready -U astroml
-
-# Check Redis health
-docker-compose exec redis redis-cli ping
-```
-
-### Debug Mode
-
-#### Enable Debug Logging
-
-```bash
-# Set log level to DEBUG
-docker-compose exec ingestion bash
-export LOG_LEVEL=DEBUG
-
-# Or update docker-compose.yml
-environment:
-  - LOG_LEVEL=DEBUG
-```
-
-#### Interactive Debugging
-
-```bash
-# Start container with interactive shell
-docker-compose run --rm ingestion bash
-
-# Attach to running container
-docker attach <container_name>
-
-# Use docker exec for debugging
-docker-compose exec ingestion python -m pdb your_script.py
-```
-
-## Advanced Usage
-
-### Custom Networks
-
-```yaml
-networks:
-  astroml-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
-```
-
-### Resource Limits
-
-```yaml
-services:
-  training-gpu:
-    deploy:
-      resources:
-        limits:
-          cpus: '4'
-          memory: 8G
-        reservations:
-          cpus: '2'
-          memory: 4G
-```
-
-### Multi-Stage Builds
-
-```bash
-# Build specific stage
-docker build --target development -t astroml:dev .
-
-# Use specific stage in docker-compose
-build:
-  context: .
-  target: development
-```
+# List volumes
+docker volume ls
 
 ### Volume Management
 
@@ -666,11 +401,23 @@ docker volume ls
 # Remove unused volumes
 docker volume prune
 
-# Backup volume
-docker run --rm -v astroml_postgres_data:/data -v $(pwd):/backup ubuntu tar czf /backup/postgres_backup.tar.gz /data
+# Backup PostgreSQL volume
+docker run --rm \
+  -v astroml_postgres_data:/data \
+  -v $(pwd):/backup \
+  ubuntu \
+  tar czf /backup/postgres_backup.tar.gz /data
 
-# Restore volume
-docker run --rm -v astroml_postgres_data:/data -v $(pwd):/backup ubuntu tar xzf /backup/postgres_backup.tar.gz -C /
+# Restore PostgreSQL volume
+docker run --rm \
+  -v astroml_postgres_data:/data \
+  -v $(pwd):/backup \
+  ubuntu \
+  tar xzf /backup/postgres_backup.tar.gz -C /
+
+# Recreate all project volumes
+docker-compose down -v
+docker-compose up -d
 ```
 
 ### Container Orchestration
@@ -679,11 +426,46 @@ docker run --rm -v astroml_postgres_data:/data -v $(pwd):/backup ubuntu tar xzf 
 # Scale services
 docker-compose up -d --scale ingestion=3
 
-# Update services without downtime
+# Update a service without downtime
 docker-compose up -d --no-deps --build <service>
 
 # Rolling update
 docker-compose up -d --build --no-deps ingestion
+```
+
+### Debug Commands
+
+#### Check Container Status
+
+```bash
+# Show running containers
+docker-compose ps
+
+# Inspect a specific container
+docker inspect astroml-feature-store
+```
+
+#### Access Container Logs
+
+```bash
+# Show recent logs
+docker-compose logs --tail=100 feature-store
+
+# Follow logs in real time
+docker-compose logs -f feature-store
+
+# Show logs from the last hour
+docker-compose logs --since="1h" feature-store
+```
+
+#### Health Checks
+
+```bash
+# Check service health
+docker-compose ps
+
+# Run a manual health check
+docker-compose exec feature-store python -c "import astroml.features"
 ```
 
 ### Production Deployment
@@ -691,23 +473,17 @@ docker-compose up -d --build --no-deps ingestion
 #### Build Production Image
 
 ```bash
-# Build production image
 docker-compose build production
 
-# Tag image
 docker tag astroml_production:latest your-registry/astroml:latest
 
-# Push to registry
 docker push your-registry/astroml:latest
 ```
 
 #### Deploy to Production
 
 ```bash
-# Use production profile
-docker-compose --profile prod up -d
-
-# Set environment variables
+# Set production environment variables
 export DATABASE_URL=production_db_url
 export REDIS_URL=production_redis_url
 
@@ -722,17 +498,23 @@ docker-compose --profile prod up -d
 ```yaml
 name: Docker Build and Test
 
-on: [push, pull_request]
+on:
+  - push
+  - pull_request
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v2
+
       - name: Build Docker images
         run: docker-compose build
+
       - name: Run tests
         run: docker-compose run --rm dev pytest
+
       - name: Build Soroban contracts
         run: docker-compose --profile soroban-build run soroban-build
 ```
@@ -742,19 +524,20 @@ jobs:
 #### Scan Images for Vulnerabilities
 
 ```bash
-# Use Trivy
-docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+# Scan with Trivy
+docker run --rm \
+  -v /var/run/docker.sock:/var/run/docker.sock \
   aquasec/trivy image astroml:latest
 
-# Use Docker Scout
+# Scan with Docker Scout
 docker scout quickview astroml:latest
 ```
 
 #### Use Non-Root Users
 
 ```dockerfile
-# Already implemented in Dockerfile
 RUN groupadd -r astroml && useradd -r -g astroml astroml
+
 USER astroml
 ```
 
@@ -763,13 +546,20 @@ USER astroml
 ```yaml
 security_opt:
   - no-new-privileges:true
+
 cap_drop:
   - ALL
+
 cap_add:
   - NET_BIND_SERVICE
 ```
+```
 
 ### Performance Optimization
+
+## Performance Optimization
+
+### Build Optimization
 
 #### Use BuildKit
 
@@ -779,33 +569,36 @@ export DOCKER_BUILDKIT=1
 
 # Build with BuildKit
 docker-compose build
-```
 
-#### Layer Caching
+# Use cache for faster builds
+docker-compose build --no-cache=false
 
-```dockerfile
-# Order Dockerfile instructions to maximize cache hits
+# Order instructions to maximize cache efficiency
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 COPY . .
 ```
 
-#### Multi-Stage Builds
+# Builder stage
+FROM python:3.11-slim as builder
 
-```dockerfile
-# Use multi-stage builds to reduce final image size
-FROM base as builder
-# Build steps here
+COPY requirements.txt .
+RUN pip install --user -r requirements.txt
 
-FROM base as final
-COPY --from=builder /app/target /app/target
-```
+# Runtime stage
+FROM python:3.11-slim
+COPY --from=builder /root/.local /root/.local
 
-## Maintenance
+# Builder stage
+FROM python:3.11-slim as builder
 
-### Clean Up
+COPY requirements.txt .
+RUN pip install --user -r requirements.txt
 
-```bash
+# Runtime stage
+FROM python:3.11-slim
+COPY --from=builder /root/.local /root/.local
+
 # Remove stopped containers
 docker container prune
 
@@ -818,22 +611,8 @@ docker volume prune
 # Remove unused networks
 docker network prune
 
-# Complete cleanup
+# Full system cleanup
 docker system prune -a
-```
-
-### Updates
-
-```bash
-# Pull latest images
-docker-compose pull
-
-# Rebuild with latest base images
-docker-compose build --pull
-
-# Update specific service
-docker-compose pull postgres
-docker-compose up -d postgres
 ```
 
 ### Backups
@@ -845,14 +624,10 @@ docker-compose up -d postgres
 docker-compose exec postgres pg_dump -U astroml astroml > backup_$(date +%Y%m%d).sql
 ```
 
-#### Volume Backup
-
-```bash
-# Backup all volumes
 for vol in $(docker volume ls -q); do
-  docker run --rm -v $vol:/data -v $(pwd):/backup ubuntu tar czf /backup/${vol}.tar.gz /data
+  docker run --rm -v $vol:/data -v $(pwd):/backup \
+    ubuntu tar czf /backup/${vol}.tar.gz /data
 done
-```
 
 ## Support
 
@@ -861,6 +636,137 @@ For issues or questions:
 - Documentation: https://github.com/jaynomyaro/astroml/docs
 - Docker Documentation: https://docs.docker.com
 
-## License
+docker run --rm \
+  -v astroml_postgres_data:/data \
+  -v $(pwd):/backup \
+  ubuntu tar xzf /backup/postgres_backup.tar.gz -C /
 
-This Docker setup is part of the AstroML project and is licensed under the MIT License.
+deploy:
+  resources:
+    limits:
+      cpus: '2'
+      memory: 4G
+    reservations:
+      cpus: '1'
+      memory: 2G
+```
+
+## Advanced Usage
+
+### Custom Dockerfiles
+
+Create custom Dockerfiles for specific use cases:
+
+```dockerfile
+# Custom Dockerfile for research
+FROM astroml:development
+
+# Install additional packages
+RUN pip install jupyterlab-widgets plotly seaborn
+
+# Copy research notebooks
+COPY research/ /app/research/
+```
+
+docker run --rm \
+  -v astroml_postgres_data:/data \
+  -v $(pwd):/backup \
+  ubuntu tar xzf /backup/postgres_backup.tar.gz -C /
+
+# Runtime stage
+FROM python:3.11-slim
+COPY --from=builder /root/.local /root/.local
+```
+
+### Service Mesh
+
+Integrate with service mesh (Istio, Linkerd):
+
+`apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    sidecar.istio.io/inject: "true"``yaml
+# Add service mesh annotations
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    sidecar.istio.io/inject: "true"
+```
+Security Considerations
+Use non-root users
+Limit container capabilities
+Scan images for vulnerabilities
+Use image signing
+Use private networks
+Enable TLS encryption
+Configure firewall rules
+Use secrets management
+Perform regular audits
+Support
+
+If you face issues:
+
+Check logs: docker-compose logs
+Inspect containers: docker-compose ps
+Search GitHub issues
+Open a new issue with full details
+## Security Considerations
+
+### Container Security
+- Use non-root users
+- Limit container capabilities
+- Scan images for vulnerabilities
+- Use image signing
+
+### Network Security
+- Use private networks
+- Implement TLS encryption
+- Configure firewall rules
+- Monitor network traffic
+
+### Data Security
+- Encrypt sensitive data
+- Use secrets management
+- Implement access controls
+- Regular security audits
+
+## Best Practices
+
+### Development
+- Use volume mounts for code changes
+- Enable hot reloading
+- Use development tools
+- Write tests for all features
+
+### Production
+- Use specific image tags
+- Implement health checks
+- Use resource limits
+- Monitor performance
+
+# Backup all volumes
+for vol in $(docker volume ls -q); do
+  docker run --rm -v $vol:/data -v $(pwd):/backup ubuntu tar czf /backup/${vol}.tar.gz /data
+done
+Support
+For issues or questions:
+
+Check the local documentation and logs (docker-compose logs).
+
+Review logs and error messages.
+
+Search existing GitHub Issues.
+
+Create a new issue with detailed replication steps.
+
+
+Additional Resources
+Docker Documentation
+
+Docker Compose Documentation
+
+AstroML Repository & Docs
+
+Feature Store Documentation

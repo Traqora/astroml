@@ -1,0 +1,169 @@
+{
+  "app": {
+    "title": "Model Performance Monitoring",
+    "loyalty": "Loyalty Dashboard",
+    "transactions": "Transaction History"
+  },
+  "monitoring": {
+    "title": "Model Performance Monitoring",
+    "metrics": {
+      "accuracy": "Prediction Accuracy",
+      "accuracy_desc": "Latest end-to-end model accuracy",
+      "f1": "F1 Score",
+      "f1_desc": "Balanced precision / recall",
+      "drift": "Data Drift",
+      "drift_desc": "Drift score over the latest week",
+      "auc": "AUC",
+      "auc_desc": "Link-prediction separability"
+    },
+    "charts": {
+      "accuracy_trend": "Prediction Accuracy Trend",
+      "drift_detection": "Drift Detection",
+      "drift_description": "Overall model drift is moderate. Watch for sudden deviations in feature distributions."
+    },
+    "errors": {
+      "loading": "Error loading monitoring data: {message}",
+      "no_data": "No monitoring data available"
+    },
+    "export": {
+      "button": "Export CSV"
+    },
+    "model_selector": {
+      "label": "Model"
+    },
+    "comparison": {
+      "active": "Comparing {count} models",
+      "no_data": "No comparison data available"
+    },
+    "last_updated": "Last updated",
+    "realtime": {
+      "active": "Live updates active"
+    }
+  },
+  "loyalty": {
+    "title": "Loyalty Dashboard",
+    "current_tier": "Current Tier",
+    "points_balance": "Points Balance",
+    "tier_progress": "Progress to Next Tier",
+    "top_tier": "Top tier achieved",
+    "points_to": "{remaining} points to {tier}",
+    "benefits": "Tier Benefits",
+    "redeem": {
+      "title": "Redeem Points",
+      "button": "Redeem",
+      "available": "Available: {balance}",
+      "errors": {
+        "positive": "Enter a positive amount",
+        "exceeds_balance": "Amount exceeds balance"
+      }
+    },
+    "referral": {
+      "title": "Invite Friends",
+      "copy": "Copy",
+      "share": "Share",
+      "copied": "Referral link copied!",
+      "share_title": "Join me!",
+      "share_text": "Use my referral link",
+      "stats": "Invited: {invited} • Rewards: {rewards}"
+    },
+    "history": {
+      "title": "Points History",
+      "loading": "Loading...",
+      "no_data": "No transactions",
+      "columns": {
+        "date": "Date",
+        "type": "Type",
+        "points": "Points",
+        "source": "Source",
+        "note": "Note"
+      }
+    },
+    "tiers": {
+      "comparison": "Tier Comparison",
+      "threshold": "Threshold",
+      "multiplier": "Multiplier",
+      "retention": "Retention"
+    }
+  },
+  "transactions": {
+    "title": "Transaction History",
+    "subtitle": "View and search Stellar blockchain transactions",
+    "filters": {
+      "source_account": "Source Account",
+      "operation_type": "Operation Type",
+      "start_date": "Start Date",
+      "end_date": "End Date",
+      "clear": "Clear Filters",
+      "all_types": "All Types",
+      "types": {
+        "payment": "Payment",
+        "create_account": "Create Account",
+        "change_trust": "Change Trust",
+        "path_payment": "Path Payment",
+        "manage_buy_offer": "Manage Buy Offer"
+      }
+    },
+    "table": {
+      "title": "Transaction History",
+      "prev": "Prev",
+      "next": "Next",
+      "page": "Page {current} / {total}",
+      "loading": "Loading...",
+      "no_data": "No transactions found",
+      "columns": {
+        "hash": "Hash",
+        "ledger": "Ledger",
+        "source": "Source",
+        "destination": "Destination",
+        "type": "Type",
+        "amount": "Amount",
+        "asset": "Asset",
+        "fee": "Fee",
+        "status": "Status",
+        "date": "Date"
+      },
+      "fee_unit": "stroops",
+      "success": "Success",
+      "failed": "Failed",
+      "placeholder": "-"
+    },
+    "showing": "Showing {start} of {total} transactions"
+  },
+  "fraud": {
+    "title": "Fraud Detection",
+    "stats": {
+      "total": "Total Alerts",
+      "high_risk": "High Risk",
+      "medium_risk": "Medium Risk",
+      "low_risk": "Low Risk"
+    },
+    "charts": {
+      "risk_score": "Risk Score (14 days)",
+      "risk_distribution": "Risk Distribution"
+    },
+    "alerts": {
+      "title": "Recent Alerts",
+      "columns": {
+        "account": "Account",
+        "pattern": "Pattern",
+        "score": "Score",
+        "detected": "Detected",
+        "description": "Description"
+      },
+      "patterns": {
+        "sybil_cluster": "Sybil Cluster",
+        "wash_trading_loop": "Wash Trading",
+        "anomaly": "Anomaly"
+      }
+    },
+    "loading": "Loading fraud data..."
+  },
+  "realtime": {
+    "title": "Live Stellar Transactions",
+    "latest": "Latest: {amount} XLM from {source}",
+    "waiting": "Waiting for stream..."
+  },
+  "common": {
+    "loading": "Loading..."
+  }
+}

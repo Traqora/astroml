@@ -1,0 +1,64 @@
+# AstroML Feature Store configuration.
+#
+# These values are read by create_feature_store() / get_feature_store() in
+# astroml/features/feature_store.py.  Constructor arguments always take
+# precedence over the values here, so individual FeatureStore instances can
+# still be tuned programmatically.
+
+feature_store:
+  # Path to the SQLite-backed storage directory.
+  storage_path: "./feature_store"
+
+cache:
+  # -----------------------------------------------------------------
+  # TTL (time-to-live)
+  # -----------------------------------------------------------------
+  # Seconds after which a cached entry is considered stale and will be
+  # re-fetched from storage on the next access.
+  # Default: 900 (15 minutes).
+  ttl_seconds: 900
+
+  # -----------------------------------------------------------------
+  # LRU capacity
+  # -----------------------------------------------------------------
+  # Maximum number of feature DataFrames held in memory simultaneously.
+  # When this limit is reached the least-recently-used entry is evicted
+  # automatically by cachetools.TTLCache.
+  # Default: 128.
+  maxsize: 128
+
+  # -----------------------------------------------------------------
+  # Soft memory cap
+  # -----------------------------------------------------------------
+  # Soft upper-bound on total cache memory in megabytes.  This cap is
+  # enforced by manual LRU eviction *before* inserting a new entry when
+  # the accumulated DataFrame sizes would exceed it.  It is in addition
+  # to the hard LRU maxsize limit above.
+  # Default: 500 MB.
+  max_size_mb: 500
+
+  # -----------------------------------------------------------------
+  # Cache invalidation strategy
+  # -----------------------------------------------------------------
+  # Entries are invalidated (removed from the cache) in the following
+  # situations:
+  #
+  #   1. TTL expiry  – TTLCache automatically drops entries that are
+  #      older than `ttl_seconds` on the next access.
+  #
+  #   2. LRU eviction – When the number of entries reaches `maxsize`,
+  #      the least-recently-used entry is evicted by TTLCache.
+  #
+  #   3. Memory cap eviction – When a new entry would push total cache
+  #      memory past `max_size_mb`, LRU entries are removed manually
+  #      until enough space is reclaimed.
+  #
+  #   4. Explicit write invalidation – Calling store_feature() removes
+  #      the corresponding cache entry so subsequent reads always see
+  #      fresh data.
+  #
+  #   5. Manual clear – FeatureStore.clear_cache() empties all caches
+  #      and resets hit/miss/eviction counters.
+  #
+  #   6. Batch mode – FeatureStore.batch_mode() clears the cache on
+  #      both entry and exit of the context manager.

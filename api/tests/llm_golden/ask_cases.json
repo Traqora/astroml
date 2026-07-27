@@ -1,0 +1,12 @@
+[
+  {
+    "question": "Where can I find the API usage examples and reference docs?",
+    "expected_mode": "mock-rag",
+    "expected_citations": ["docs/api/usage-examples.md", "docs/api/reference.md"]
+  },
+  {
+    "question": "How do the LLM endpoints work in this API?",
+    "expected_mode": "mock-rag",
+    "expected_citations": ["api/routers/llm.py"]
+  }
+]

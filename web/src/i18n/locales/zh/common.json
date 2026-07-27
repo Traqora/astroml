@@ -1,0 +1,169 @@
+{
+  "app": {
+    "title": "模型性能监控",
+    "loyalty": "忠诚度仪表板",
+    "transactions": "交易历史"
+  },
+  "monitoring": {
+    "title": "模型性能监控",
+    "metrics": {
+      "accuracy": "预测准确率",
+      "accuracy_desc": "最新的端到端模型准确率",
+      "f1": "F1 分数",
+      "f1_desc": "精确率和召回率的平衡",
+      "drift": "数据漂移",
+      "drift_desc": "最近一周的漂移分数",
+      "auc": "AUC",
+      "auc_desc": "链接预测分离度"
+    },
+    "charts": {
+      "accuracy_trend": "预测准确率趋势",
+      "drift_detection": "漂移检测",
+      "drift_description": "整体模型漂移适中。注意特征分布中的突然偏差。"
+    },
+    "errors": {
+      "loading": "加载监控数据出错: {message}",
+      "no_data": "没有可用的监控数据"
+    },
+    "export": {
+      "button": "导出CSV"
+    },
+    "model_selector": {
+      "label": "模型"
+    },
+    "comparison": {
+      "active": "比较 {count} 个模型",
+      "no_data": "没有可用的比较数据"
+    },
+    "last_updated": "最后更新",
+    "realtime": {
+      "active": "实时更新已激活"
+    }
+  },
+  "loyalty": {
+    "title": "忠诚度仪表板",
+    "current_tier": "当前等级",
+    "points_balance": "积分余额",
+    "tier_progress": "下一等级进度",
+    "top_tier": "已达到最高等级",
+    "points_to": "还需 {remaining} 积分达到 {tier}",
+    "benefits": "等级权益",
+    "redeem": {
+      "title": "兑换积分",
+      "button": "兑换",
+      "available": "可用: {balance}",
+      "errors": {
+        "positive": "请输入正数",
+        "exceeds_balance": "金额超过余额"
+      }
+    },
+    "referral": {
+      "title": "邀请好友",
+      "copy": "复制",
+      "share": "分享",
+      "copied": "推荐链接已复制！",
+      "share_title": "加入我！",
+      "share_text": "使用我的推荐链接",
+      "stats": "已邀请: {invited} • 奖励: {rewards}"
+    },
+    "history": {
+      "title": "积分历史",
+      "loading": "加载中...",
+      "no_data": "暂无交易",
+      "columns": {
+        "date": "日期",
+        "type": "类型",
+        "points": "积分",
+        "source": "来源",
+        "note": "备注"
+      }
+    },
+    "tiers": {
+      "comparison": "等级对比",
+      "threshold": "阈值",
+      "multiplier": "乘数",
+      "retention": "留存率"
+    }
+  },
+  "transactions": {
+    "title": "交易历史",
+    "subtitle": "查看和搜索 Stellar 区块链交易",
+    "filters": {
+      "source_account": "源账户",
+      "operation_type": "操作类型",
+      "start_date": "开始日期",
+      "end_date": "结束日期",
+      "clear": "清除筛选",
+      "all_types": "所有类型",
+      "types": {
+        "payment": "支付",
+        "create_account": "创建账户",
+        "change_trust": "更改信任",
+        "path_payment": "路径支付",
+        "manage_buy_offer": "管理买入报价"
+      }
+    },
+    "table": {
+      "title": "交易历史",
+      "prev": "上一页",
+      "next": "下一页",
+      "page": "第 {current} 页 / 共 {total} 页",
+      "loading": "加载中...",
+      "no_data": "未找到交易",
+      "columns": {
+        "hash": "哈希",
+        "ledger": "账本",
+        "source": "来源",
+        "destination": "目标",
+        "type": "类型",
+        "amount": "金额",
+        "asset": "资产",
+        "fee": "费用",
+        "status": "状态",
+        "date": "日期"
+      },
+      "fee_unit": "stroops",
+      "success": "成功",
+      "failed": "失败",
+      "placeholder": "-"
+    },
+    "showing": "显示 {start} 条，共 {total} 条交易"
+  },
+  "fraud": {
+    "title": "欺诈检测",
+    "stats": {
+      "total": "总警报数",
+      "high_risk": "高风险",
+      "medium_risk": "中风险",
+      "low_risk": "低风险"
+    },
+    "charts": {
+      "risk_score": "风险评分（14天）",
+      "risk_distribution": "风险分布"
+    },
+    "alerts": {
+      "title": "最近警报",
+      "columns": {
+        "account": "账户",
+        "pattern": "模式",
+        "score": "评分",
+        "detected": "检测时间",
+        "description": "描述"
+      },
+      "patterns": {
+        "sybil_cluster": "Sybil 集群",
+        "wash_trading_loop": "洗盘交易",
+        "anomaly": "异常"
+      }
+    },
+    "loading": "加载欺诈数据中..."
+  },
+  "realtime": {
+    "title": "实时 Stellar 交易",
+    "latest": "最新: {amount} XLM 来自 {source}",
+    "waiting": "等待数据流..."
+  },
+  "common": {
+    "loading": "加载中..."
+  }
+}

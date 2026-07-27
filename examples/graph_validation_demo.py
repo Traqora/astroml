@@ -2,8 +2,20 @@
 
 This script demonstrates how to use the graph validation utilities
 to check graph integrity before training ML models.
+
+This demo can be run from any working directory.
 """
+import sys
+from pathlib import Path
+
 import pandas as pd
+
+# Add the parent directory to the path to import astroml
+# This allows the example to run from any working directory
+script_dir = Path(__file__).parent.resolve()
+repo_root = script_dir.parent
+sys.path.insert(0, str(repo_root))
+
 from astroml.features import graph_validation
 
 

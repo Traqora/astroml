@@ -11,6 +11,12 @@ from typing import Optional
 
 from astroml.db.schema import Effect, Ledger, Operation, Transaction
 
+# Path payment operation types from Horizon
+_PATH_PAYMENT_TYPES = {
+    "path_payment_strict_send",
+    "path_payment_strict_receive",
+}
+
 
 def _parse_datetime(iso_string: str) -> datetime:
     """Parse an ISO 8601 timestamp from Horizon into a timezone-aware datetime."""

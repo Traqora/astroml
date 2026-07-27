@@ -5,14 +5,14 @@
 ### 1.1 Access Control
 - [x] Admin-only functions (`register_validator`, `update_config`, `deactivate_validator`, `update_validator_reputation`) verify the caller matches the stored admin address
 - [x] Non-admin callers receive `Error::Unauthorized`
-- [ ] **REVIEW:** `__init__` has no guard against re-initialization — a second call overwrites the admin; add a storage-existence check before writing
+- [x] **FIXED (SC-1):** `initialize` now has a guard against re-initialization using `env.storage().instance().has(&DATA_KEY)` check
 - [ ] Admin key rotation mechanism is not implemented; document the operational runbook for key compromise
 
 ### 1.2 Input Validation
 - [x] `confidence` and `reputation` values > 100 are rejected with `Error::InvalidInput`
 - [x] Boundary values 0 and 100 are accepted as valid
-- [ ] **REVIEW:** Empty `reason` string is not rejected; add minimum-length check to prevent griefing with no-evidence reports
-- [ ] `consensus_threshold` of 0 would mark every account as fraudulent immediately; add a lower-bound check (≥ 1)
+- [x] **FIXED (SC-3):** Empty `reason` string is now rejected with `Error::InvalidInput`
+- [x] **FIXED (SC-2):** `consensus_threshold` of 0 is rejected with `Error::InvalidInput` in `update_config`
 
 ### 1.3 Replay / Duplicate Prevention
 - [x] Duplicate reports from the same validator for the same account are blocked via `Error::AlreadyReported`
@@ -33,7 +33,7 @@
 - [x] Single `DATA_KEY` storage is atomic per ledger operation; no partial-write risk
 
 ### 1.7 Denial of Service
-- [ ] `get_active_validators` iterates all validators — unbounded; large validator sets could exhaust gas; consider pagination
+- [x] **FIXED (SC-4):** `get_active_validators` now accepts an optional `limit` parameter (default 100) to prevent unbounded iteration
 - [ ] `get_fraud_reports` iterates all reports per account — same concern for heavily-targeted accounts
 
 ---
@@ -85,10 +85,10 @@
 
 | ID   | Severity | Finding                                      | Status   |
 |------|----------|----------------------------------------------|----------|
-| SC-1 | High     | `__init__` can be called again, overwriting admin | Open |
-| SC-2 | Medium   | `consensus_threshold = 0` marks all accounts fraudulent | Open |
-| SC-3 | Low      | Empty `reason` string accepted               | Open |
-| SC-4 | Medium   | `get_active_validators` unbounded iteration  | Open |
+| SC-1 | High     | `__init__` can be called again, overwriting admin | Resolved |
+| SC-2 | Medium   | `consensus_threshold = 0` marks all accounts fraudulent | Resolved |
+| SC-3 | Low      | Empty `reason` string accepted               | Resolved |
+| SC-4 | Medium   | `get_active_validators` unbounded iteration  | Resolved |
 | PY-1 | High     | Confirm no hard-coded credentials in source  | Open |
 | PY-2 | High     | Run `pip-audit`; remediate CVE findings      | Open |
 | PY-3 | Medium   | Pickle load from untrusted path              | Open |

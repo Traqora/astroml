@@ -1,0 +1,46 @@
+# AstroML FastAPI Service Requirements
+
+# Core Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Database
+sqlalchemy==2.0.23
+asyncpg==0.29.0
+aiosqlite==0.19.0
+greenlet==3.0.1
+alembic==1.13.0
+
+# Authentication & Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# CORS is handled by FastAPI's built-in fastapi.middleware.cors.CORSMiddleware
+# (see api/app.py) — no separate package is needed. The `python-cors==1.0.0`
+# pin previously here doesn't correspond to a real PyPI package and made this
+# file uninstallable; removed while wiring up requirements-api.txt (#561).
+
+# HTTP Client
+httpx==0.25.2
+
+# Observability - OpenTelemetry (issue #336)
+opentelemetry-api==1.21.0
+opentelemetry-sdk==1.21.0
+opentelemetry-instrumentation-fastapi==0.42b0
+opentelemetry-instrumentation-sqlalchemy==0.42b0
+opentelemetry-instrumentation-httpx==0.42b0
+opentelemetry-exporter-jaeger==1.21.0
+opentelemetry-exporter-zipkin==1.21.0
+
+# Utilities
+python-dotenv==1.0.0
+# Report Generation
+matplotlib==3.8.2
+markdown==3.5.1
+weasyprint==60.1
+
+# GraphQL dependencies
+strawberry-graphql[fastapi]>=0.237.0

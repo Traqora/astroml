@@ -1,0 +1,169 @@
+{
+  "app": {
+    "title": "Monitoreo de Rendimiento de Modelos",
+    "loyalty": "Panel de Lealtad",
+    "transactions": "Historial de Transacciones"
+  },
+  "monitoring": {
+    "title": "Monitoreo de Rendimiento de Modelos",
+    "metrics": {
+      "accuracy": "Precisión de Predicción",
+      "accuracy_desc": "Precisión del modelo de extremo a extremo más reciente",
+      "f1": "Puntuación F1",
+      "f1_desc": "Equilibrio entre precisión y exhaustividad",
+      "drift": "Deriva de Datos",
+      "drift_desc": "Puntuación de deriva en la última semana",
+      "auc": "AUC",
+      "auc_desc": "Separabilidad de predicción de enlaces"
+    },
+    "charts": {
+      "accuracy_trend": "Tendencia de Precisión de Predicción",
+      "drift_detection": "Detección de Deriva",
+      "drift_description": "La deriva del modelo es moderada. Vigile las desviaciones repentinas en las distribuciones de características."
+    },
+    "errors": {
+      "loading": "Error al cargar datos de monitoreo: {message}",
+      "no_data": "No hay datos de monitoreo disponibles"
+    },
+    "export": {
+      "button": "Exportar CSV"
+    },
+    "model_selector": {
+      "label": "Modelo"
+    },
+    "comparison": {
+      "active": "Comparando {count} modelos",
+      "no_data": "No hay datos de comparación disponibles"
+    },
+    "last_updated": "Última actualización",
+    "realtime": {
+      "active": "Actualizaciones en vivo activas"
+    }
+  },
+  "loyalty": {
+    "title": "Panel de Lealtad",
+    "current_tier": "Nivel Actual",
+    "points_balance": "Saldo de Puntos",
+    "tier_progress": "Progreso al Siguiente Nivel",
+    "top_tier": "Nivel máximo alcanzado",
+    "points_to": "{remaining} puntos para {tier}",
+    "benefits": "Beneficios del Nivel",
+    "redeem": {
+      "title": "Canjear Puntos",
+      "button": "Canjear",
+      "available": "Disponible: {balance}",
+      "errors": {
+        "positive": "Ingrese una cantidad positiva",
+        "exceeds_balance": "La cantidad excede el saldo"
+      }
+    },
+    "referral": {
+      "title": "Invitar Amigos",
+      "copy": "Copiar",
+      "share": "Compartir",
+      "copied": "¡Enlace de referencia copiado!",
+      "share_title": "¡Únete a mí!",
+      "share_text": "Usa mi enlace de referencia",
+      "stats": "Invitados: {invited} • Recompensas: {rewards}"
+    },
+    "history": {
+      "title": "Historial de Puntos",
+      "loading": "Cargando...",
+      "no_data": "Sin transacciones",
+      "columns": {
+        "date": "Fecha",
+        "type": "Tipo",
+        "points": "Puntos",
+        "source": "Fuente",
+        "note": "Nota"
+      }
+    },
+    "tiers": {
+      "comparison": "Comparación de Niveles",
+      "threshold": "Umbral",
+      "multiplier": "Multiplicador",
+      "retention": "Retención"
+    }
+  },
+  "transactions": {
+    "title": "Historial de Transacciones",
+    "subtitle": "Ver y buscar transacciones de la blockchain Stellar",
+    "filters": {
+      "source_account": "Cuenta Fuente",
+      "operation_type": "Tipo de Operación",
+      "start_date": "Fecha de Inicio",
+      "end_date": "Fecha de Fin",
+      "clear": "Limpiar Filtros",
+      "all_types": "Todos los Tipos",
+      "types": {
+        "payment": "Pago",
+        "create_account": "Crear Cuenta",
+        "change_trust": "Cambiar Confianza",
+        "path_payment": "Pago por Ruta",
+        "manage_buy_offer": "Gestionar Oferta de Compra"
+      }
+    },
+    "table": {
+      "title": "Historial de Transacciones",
+      "prev": "Anterior",
+      "next": "Siguiente",
+      "page": "Página {current} / {total}",
+      "loading": "Cargando...",
+      "no_data": "No se encontraron transacciones",
+      "columns": {
+        "hash": "Hash",
+        "ledger": "Libro Mayor",
+        "source": "Fuente",
+        "destination": "Destino",
+        "type": "Tipo",
+        "amount": "Cantidad",
+        "asset": "Activo",
+        "fee": "Comisión",
+        "status": "Estado",
+        "date": "Fecha"
+      },
+      "fee_unit": "stroops",
+      "success": "Éxito",
+      "failed": "Fallido",
+      "placeholder": "-"
+    },
+    "showing": "Mostrando {start} de {total} transacciones"
+  },
+  "fraud": {
+    "title": "Detección de Fraude",
+    "stats": {
+      "total": "Total de Alertas",
+      "high_risk": "Alto Riesgo",
+      "medium_risk": "Riesgo Medio",
+      "low_risk": "Bajo Riesgo"
+    },
+    "charts": {
+      "risk_score": "Puntuación de Riesgo (14 días)",
+      "risk_distribution": "Distribución de Riesgo"
+    },
+    "alerts": {
+      "title": "Alertas Recientes",
+      "columns": {
+        "account": "Cuenta",
+        "pattern": "Patrón",
+        "score": "Puntuación",
+        "detected": "Detectado",
+        "description": "Descripción"
+      },
+      "patterns": {
+        "sybil_cluster": "Clúster Sybil",
+        "wash_trading_loop": "Lavado de Comercio",
+        "anomaly": "Anomalía"
+      }
+    },
+    "loading": "Cargando datos de fraude..."
+  },
+  "realtime": {
+    "title": "Transacciones Stellar en Vivo",
+    "latest": "Última: {amount} XLM de {source}",
+    "waiting": "Esperando transmisión..."
+  },
+  "common": {
+    "loading": "Cargando..."
+  }
+}

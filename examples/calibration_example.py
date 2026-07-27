@@ -5,14 +5,25 @@ to evaluate fraud detection models in the AstroML framework.
 """
 from __future__ import annotations
 
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
+from pathlib import Path
 from typing import Dict, Tuple
+
+# Add the parent directory to the path to import astroml
+# This allows the example to run from any working directory
+script_dir = Path(__file__).parent.resolve()
+repo_root = script_dir.parent
+sys.path.insert(0, str(repo_root))
 
 from astroml.validation.calibration import (
     CalibrationAnalyzer,
     create_sample_fraud_data
 )
+
+# Use script-relative paths for outputs
+OUTPUT_DIR = script_dir
 
 
 def create_realistic_fraud_models() -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
@@ -83,8 +94,9 @@ def demonstrate_single_model_calibration():
     print(report)
     
     # Save the plot
-    fig.savefig('examples/single_model_calibration.png', dpi=300, bbox_inches='tight')
-    print("\nPlot saved as 'single_model_calibration.png'")
+    output_path = OUTPUT_DIR / 'single_model_calibration.png'
+    fig.savefig(output_path, dpi=300, bbox_inches='tight')
+    print(f"\nPlot saved as '{output_path}'")
     
     plt.show()
 
@@ -129,8 +141,9 @@ def demonstrate_multi_model_comparison():
             print("  → Model is reasonably calibrated")
     
     # Save the comparison plot
-    fig.savefig('examples/multi_model_calibration.png', dpi=300, bbox_inches='tight')
-    print("\nComparison plot saved as 'multi_model_calibration.png'")
+    output_path = OUTPUT_DIR / 'multi_model_calibration.png'
+    fig.savefig(output_path, dpi=300, bbox_inches='tight')
+    print(f"\nComparison plot saved as '{output_path}'")
     
     plt.show()
 
@@ -185,8 +198,9 @@ def demonstrate_calibration_improvement():
     print(f"  Brier Score Improvement: {brier_improvement:.1f}%")
     
     # Save the plot
-    fig.savefig('examples/calibration_improvement.png', dpi=300, bbox_inches='tight')
-    print("\nImprovement plot saved as 'calibration_improvement.png'")
+    output_path = OUTPUT_DIR / 'calibration_improvement.png'
+    fig.savefig(output_path, dpi=300, bbox_inches='tight')
+    print(f"\nImprovement plot saved as '{output_path}'")
     
     plt.show()
 
@@ -312,8 +326,9 @@ def demonstrate_threshold_optimization():
     print(f"  Calibration Error: {optimal_cal_error:.3f}")
     
     plt.tight_layout()
-    fig.savefig('examples/threshold_optimization.png', dpi=300, bbox_inches='tight')
-    print("\nThreshold optimization plot saved as 'threshold_optimization.png'")
+    output_path = OUTPUT_DIR / 'threshold_optimization.png'
+    fig.savefig(output_path, dpi=300, bbox_inches='tight')
+    print(f"\nThreshold optimization plot saved as '{output_path}'")
     
     plt.show()
 
@@ -323,9 +338,8 @@ def main():
     print("AstroML Calibration Analysis Examples")
     print("=====================================")
     
-    # Create examples directory
-    import os
-    os.makedirs('examples', exist_ok=True)
+    # Create output directory
+    OUTPUT_DIR.mkdir(exist_ok=True)
     
     # Run demonstrations
     demonstrate_single_model_calibration()
@@ -335,7 +349,7 @@ def main():
     
     print("\n" + "=" * 60)
     print("All calibration analysis examples completed!")
-    print("Check the 'examples/' directory for generated plots.")
+    print(f"Check the '{OUTPUT_DIR}' directory for generated plots.")
     print("=" * 60)
 
 

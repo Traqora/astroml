@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: astroml-ingestion
+  namespace: astroml
+  labels:
+    app: astroml-ingestion
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: http
+  selector:
+    app: astroml-ingestion
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: astroml-training
+  namespace: astroml
+  labels:
+    app: astroml-training
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6006
+    targetPort: 6006
+    name: tensorboard
+  selector:
+    app: astroml-training
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: astroml-api
+  namespace: astroml
+  labels:
+    app: astroml-api
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: http
+  selector:
+    app: astroml-api

@@ -15,6 +15,7 @@ alerting:
 # Alert rules files
 rule_files:
   - 'alert_rules.yml'
+  - 'alert_rules_llm_cost.yml'  # Appended cleanly from your branch
 
 # Scrape configurations
 scrape_configs:
@@ -90,3 +91,13 @@ scrape_configs:
       - source_labels: [__address__]
         target_label: instance
         replacement: 'production'
+
+  # FastAPI API service metrics (Preserved from Main)
+  - job_name: 'astroml-api'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['api:8000']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'api'

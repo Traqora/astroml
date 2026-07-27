@@ -56,12 +56,39 @@ def test_snapshot_last_n_days_window():
     edges = make_edges(hours, start_ts=start_ts, step=step)
     now_ts = start_ts + (hours - 1) * step  # last edge timestamp
 
-    # last 2 days should include last 48 edges
+    # last 2 days with inclusive bounds should include 49 hourly edges
     nodes, win = snapshot_last_n_days(edges, now_ts=now_ts, days=2, presorted=True)
-    assert len(win) == 48
+    assert len(win) == 49
     # Validate boundaries inclusive
-    assert win[0].timestamp == now_ts - (48 - 1) * step
+    assert win[0].timestamp == now_ts - 2 * 86400
     assert win[-1].timestamp == now_ts
+
+
+def test_snapshot_last_n_days_includes_exact_cutoff_boundary():
+    now_ts = 30 * 86400
+    edges = [
+        Edge(src="excluded", dst="x", timestamp=now_ts - 30 * 86400 - 1),
+        Edge(src="cutoff", dst="y", timestamp=now_ts - 30 * 86400),
+        Edge(src="inside", dst="z", timestamp=now_ts),
+    ]
+
+    nodes, win = snapshot_last_n_days(edges, now_ts=now_ts, days=30, presorted=True)
+
+    assert [e.timestamp for e in win] == [now_ts - 30 * 86400, now_ts]
+    assert {e.src for e in win} == {"cutoff", "inside"}
+    assert nodes == {"cutoff", "inside", "y", "z"}
+
+
+def test_snapshot_last_n_days_clamps_negative_start_to_zero():
+    now_ts = 10
+    edges = [
+        Edge(src="zero", dst="a", timestamp=0),
+        Edge(src="inside", dst="b", timestamp=10),
+    ]
+
+    _, win = snapshot_last_n_days(edges, now_ts=now_ts, days=30, presorted=True)
+
+    assert [e.timestamp for e in win] == [0, 10]
 
 
 def test_invalid_params():

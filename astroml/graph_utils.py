@@ -33,7 +33,14 @@ def graph_to_pyg_data(
         node_features = node_features.astype(np.float32)
     
     if isinstance(edge_index, list):
-        edge_index = np.array(edge_index, dtype=np.int64)
+        try:
+            edge_index = np.array(edge_index, dtype=np.int64)
+        except (ValueError, TypeError):
+            # Handle inhomogeneous lists
+            edge_index = np.array(edge_index, dtype=object)
+            if edge_index.ndim != 2:
+                raise ValueError(f"edge_index must be 2D array, got shape {edge_index.shape}")
+            edge_index = edge_index.astype(np.int64)
     elif isinstance(edge_index, np.ndarray):
         edge_index = edge_index.astype(np.int64)
     
@@ -50,11 +57,12 @@ def graph_to_pyg_data(
     elif edge_index.shape[0] != 2:
         raise ValueError(f"edge_index must have shape [2, num_edges] or [num_edges, 2], got {edge_index.shape}")
     
-    # Validate edge indices are within bounds
-    if edge_index.max() >= num_nodes:
-        raise ValueError(f"Edge index contains node ID {edge_index.max()} which is >= num_nodes ({num_nodes})")
-    if edge_index.min() < 0:
-        raise ValueError("Edge index contains negative node IDs")
+    # Validate edge indices are within bounds (skip if no edges)
+    if edge_index.size > 0:
+        if edge_index.max() >= num_nodes:
+            raise ValueError(f"Edge index contains node ID {edge_index.max()} which is >= num_nodes ({num_nodes})")
+        if edge_index.min() < 0:
+            raise ValueError("Edge index contains negative node IDs")
     
     # Convert to tensors
     x = torch.from_numpy(node_features)  # [num_nodes, num_node_features]
@@ -98,7 +106,7 @@ def graph_to_pyg_data(
                 f"got {node_labels.shape[0]}"
             )
         
-        y = torch.from_numpy(node_labels)  # [num_nodes]
+        y = torch.from_numpy(node_labels).to(torch.int64)  # [num_nodes]
     
     # Create PyG Data object
     data = Data(

@@ -1,0 +1,11 @@
+# ============================================================================
+# MLflow experiment tracking — additive on top of whichever base you're
+# already using (requirements-train.txt, requirements.txt, etc). Split out
+# on its own because not every training environment runs a tracking server
+# (e.g. a quick local smoke run doesn't need it), and because mlflow's own
+# dependency footprint (Flask, alembic, gitpython, ...) is sizeable enough
+# to be worth opting into explicitly. See REQUIREMENTS.md.
+#
+#   pip install -r requirements-train.txt -r requirements-mlflow.txt
+# ============================================================================
+mlflow>=2.10.0

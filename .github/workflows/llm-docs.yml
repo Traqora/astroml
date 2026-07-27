@@ -1,0 +1,304 @@
+name: LLM Documentation Generator
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'astroml/**/*.py'
+      - 'astroml/**/*.sql'
+      - 'astroml/**/*.yaml'
+      - 'astroml/**/*.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'astroml/**/*.py'
+      - 'astroml/**/*.sql'
+      - 'astroml/**/*.yaml'
+      - 'astroml/**/*.yml'
+  workflow_dispatch:
+    inputs:
+      doc_type:
+        description: 'Type of documentation to generate'
+        required: false
+        default: 'code'
+        type: choice
+        options:
+          - code
+          - api
+          - architecture
+          - tutorial
+      format:
+        description: 'Output format'
+        required: false
+        default: 'markdown'
+        type: choice
+        options:
+          - markdown
+          - rst
+          - html
+
+jobs:
+  generate-docs:
+    name: Generate Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v44
+        with:
+          files: |
+            astroml/**/*.py
+            astroml/**/*.sql
+            astroml/**/*.yaml
+            astroml/**/*.yml
+
+      - name: Generate code documentation
+        if: steps.changed-files.outputs.any_changed == 'true'
+        run: |
+          python - << 'EOF'
+          import sys
+          sys.path.insert(0, '/home/runner/work/astroml/astroml')
+
+          from astroml.llm.docs.generator import DocumentationGenerator, GenerationConfig, DocType, OutputFormat
+          from pathlib import Path
+
+          # Get doc type from input or default
+          doc_type_str = '${{ github.event.inputs.doc_type }}' or 'code'
+          format_str = '${{ github.event.inputs.format }}' or 'markdown'
+
+          config = GenerationConfig(
+              doc_type=DocType(doc_type_str),
+              output_format=OutputFormat(format_str),
+              output_dir='generated_docs',
+              include_private=False,
+              include_internal=False,
+              include_examples=True,
+              include_type_hints=True,
+              validate_after_generation=True,
+          )
+
+          generator = DocumentationGenerator(config)
+
+          # Generate documentation for astroml package
+          result = generator.generate_from_directory(
+              source_dir='/home/runner/work/astroml/astroml/astroml',
+              output_dir='generated_docs'
+          )
+
+          if result.success:
+              print(f"✓ Documentation generated successfully")
+              print(f"  Files generated: {len(result.files_generated)}")
+              for file in result.files_generated:
+                  print(f"    - {file}")
+              print(f"  Duration: {result.duration_seconds:.2f}s")
+
+              if result.validation_result:
+                  print(f"\nValidation Results:")
+                  print(f"  Valid: {result.validation_result.is_valid}")
+                  print(f"  Completeness Score: {result.validation_result.completeness_score:.1f}/100")
+                  print(f"  Readability Score: {result.validation_result.readability_score:.1f}/100")
+                  print(f"  Issues: {len(result.validation_result.issues)}")
+
+                  # Exit with error if validation fails
+                  if not result.validation_result.is_valid:
+                      sys.exit(1)
+          else:
+              print(f"✗ Documentation generation failed")
+              print(f"  Error: {result.error}")
+              sys.exit(1)
+
+          EOF
+
+      - name: Generate API documentation
+        if: steps.changed-files.outputs.any_changed == 'true'
+        run: |
+          python - << 'EOF'
+          import sys
+          sys.path.insert(0, '/home/runner/work/astroml/astroml')
+
+          from astroml.llm.docs.generator import DocumentationGenerator, GenerationConfig
+          from pathlib import Path
+
+          config = GenerationConfig(
+              output_dir='generated_docs',
+              validate_after_generation=True,
+          )
+
+          generator = DocumentationGenerator(config)
+
+          # Find API files
+          api_dir = Path('/home/runner/work/astroml/astroml/astroml/api')
+          if api_dir.exists():
+              for api_file in api_dir.rglob('*.py'):
+                  if 'route' in api_file.name or 'endpoint' in api_file.name or api_file.name == 'main.py':
+                      print(f"Generating API docs for {api_file}")
+                      result = generator.generate_api_docs(str(api_file))
+                      if result.success:
+                          print(f"  ✓ Generated: {result.files_generated}")
+                      else:
+                          print(f"  ✗ Failed: {result.error}")
+
+          EOF
+
+      - name: Upload generated documentation
+        if: steps.changed-files.outputs.any_changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-docs
+          path: generated_docs/
+          retention-days: 7
+
+      - name: Check for outdated documentation
+        run: |
+          python - << 'EOF'
+          import sys
+          sys.path.insert(0, '/home/runner/work/astroml/astroml')
+
+          from astroml.llm.docs.updater import DocumentationUpdater
+
+          updater = DocumentationUpdater(metadata_dir='.doc_metadata')
+
+          # Check existing docs directory
+          docs_dir = Path('/home/runner/work/astroml/astroml/docs')
+          if docs_dir.exists():
+              outdated = updater.detect_outdated_docs(str(docs_dir))
+              
+              if outdated:
+                  print(f"⚠️ Found {len(outdated)} outdated documentation file(s):")
+                  for doc in outdated:
+                      print(f"  - {doc}")
+                  print("\nConsider running documentation update to sync with code changes.")
+              else:
+                  print("✓ Documentation is up to date")
+          else:
+              print("No existing docs directory found")
+
+          EOF
+
+      - name: Create PR comment with results
+        if: github.event_name == 'pull_request' && steps.changed-files.outputs.any_changed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            let comment = "## 📚 Documentation Generation Results\n\n";
+            
+            // Check if docs were generated
+            if (fs.existsSync('generated_docs')) {
+              comment += "✅ Documentation has been generated for the changed files.\n\n";
+              comment += "The generated documentation has been uploaded as an artifact.\n\n";
+              comment += "You can download and review the generated documentation from the workflow artifacts.\n";
+            } else {
+              comment += "ℹ️ No documentation was generated (no relevant code changes).\n";
+            }
+
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('📚 Documentation Generation Results')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: comment
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            }
+
+  validate-existing-docs:
+    name: Validate Existing Documentation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Validate documentation
+        run: |
+          python - << 'EOF'
+          import sys
+          sys.path.insert(0, '/home/runner/work/astroml/astroml')
+
+          from astroml.llm.docs.validator import DocumentationValidator
+          from pathlib import Path
+
+          validator = DocumentationValidator()
+
+          docs_dir = Path('/home/runner/work/astroml/astroml/docs')
+          if not docs_dir.exists():
+              print("No docs directory found")
+              sys.exit(0)
+
+          print(f"Validating documentation in {docs_dir}...")
+
+          total_issues = 0
+          total_files = 0
+
+          for doc_file in docs_dir.rglob('*.md'):
+              total_files += 1
+              result = validator.validate_documentation(str(doc_file))
+              
+              print(f"\n{doc_file.relative_to(docs_dir)}:")
+              print(f"  Valid: {result.is_valid}")
+              print(f"  Completeness: {result.completeness_score:.1f}/100")
+              print(f"  Readability: {result.readability_score:.1f}/100")
+              
+              if result.issues:
+                  total_issues += len(result.issues)
+                  print(f"  Issues: {len(result.issues)}")
+                  for issue in result.issues[:3]:  # Show first 3 issues
+                      print(f"    - [{issue.severity.value}] {issue.message}")
+
+          print(f"\n{'='*50}")
+          print(f"Total files validated: {total_files}")
+          print(f"Total issues found: {total_issues}")
+
+          if total_issues > 10:
+              print("\n⚠️ High number of issues found. Consider improving documentation quality.")
+              sys.exit(1)
+
+          EOF

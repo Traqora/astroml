@@ -3,15 +3,114 @@
 This module is designed for backfills with millions of rows. It keeps work in
 Polars lazy expressions end-to-end so data can be streamed from source files to
 columnar output with low memory overhead.
+
+Idempotent backfill is ensured by tracking processed ledgers in the database.
 """
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Literal
+from typing import Iterable, Literal, Optional
+from datetime import datetime
 
 import polars as pl
+import logging
+
+from sqlalchemy import select, or_, insert
+from sqlalchemy.orm import Session
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+from astroml.db.session import get_session
+from astroml.db.schema import ProcessedLedger
+
+logger = logging.getLogger(__name__)
 
 BackfillFormat = Literal["parquet", "csv", "ndjson", "jsonl"]
+
+
+def upsert_processed_ledger(
+    session: Session,
+    ledger_sequence: int,
+    source: str,
+    status: str,
+    num_operations: Optional[int] = None,
+    num_transactions: Optional[int] = None,
+    error_message: Optional[str] = None,
+) -> ProcessedLedger:
+    """Upsert a processed ledger record with idempotent behavior.
+    
+    Uses PostgreSQL ON CONFLICT for proper upsert semantics when available,
+    falling back to merge for SQLite compatibility.
+    
+    Args:
+        session: Database session
+        ledger_sequence: Ledger sequence number
+        source: Source of the ledger data
+        status: Processing status
+        num_operations: Number of operations processed
+        num_transactions: Number of transactions processed
+        error_message: Error message if failed
+        
+    Returns:
+        The ProcessedLedger record
+    """
+    # Try PostgreSQL-specific upsert first
+    try:
+        stmt = pg_insert(ProcessedLedger).values(
+            ledger_sequence=ledger_sequence,
+            source=source,
+            status=status,
+            processed_at=datetime.utcnow(),
+            num_operations=num_operations,
+            num_transactions=num_transactions,
+            error_message=error_message,
+        )
+        
+        # On conflict, update the record
+        stmt = stmt.on_conflict_do_update(
+            index_elements=['ledger_sequence'],
+            set_=dict(
+                status=stmt.excluded.status,
+                processed_at=stmt.excluded.processed_at,
+                num_operations=stmt.excluded.num_operations,
+                num_transactions=stmt.excluded.num_transactions,
+                error_message=stmt.excluded.error_message,
+            )
+        )
+        
+        session.execute(stmt)
+        session.commit()
+        
+        # Return the updated record
+        return session.execute(
+            select(ProcessedLedger).where(ProcessedLedger.ledger_sequence == ledger_sequence)
+        ).scalar_one()
+        
+    except Exception:
+        # Fallback to SQLAlchemy merge for SQLite or other databases
+        existing = session.execute(
+            select(ProcessedLedger).where(ProcessedLedger.ledger_sequence == ledger_sequence)
+        ).scalar_one_or_none()
+        
+        if existing:
+            existing.status = status
+            existing.processed_at = datetime.utcnow()
+            existing.num_operations = num_operations
+            existing.num_transactions = num_transactions
+            existing.error_message = error_message
+        else:
+            new_ledger = ProcessedLedger(
+                ledger_sequence=ledger_sequence,
+                source=source,
+                status=status,
+                processed_at=datetime.utcnow(),
+                num_operations=num_operations,
+                num_transactions=num_transactions,
+                error_message=error_message,
+            )
+            session.add(new_ledger)
+        
+        session.commit()
+        return existing or new_ledger
 
 
 def _col_or_null(name: str, existing: set[str]) -> pl.Expr:
@@ -150,8 +249,7 @@ def preprocess_ledger_backfill(frame: pl.LazyFrame) -> pl.LazyFrame:
         pl.when(raw_timestamp.is_null())
         .then(None)
         .otherwise(
-            raw_timestamp.cast(pl.String).str.to_datetime(strict=False, time_zone="UTC")
-        )
+            raw_timestamp.cast(pl.String).str.to_datetime(strict=False, time_zone="UTC"))
         .alias("timestamp")
     )
     transaction_hash = pl.coalesce(
@@ -204,12 +302,74 @@ def preprocess_to_parquet(
     input_path: str | Path,
     output_path: str | Path,
     input_format: BackfillFormat | None = None,
+    skip_processed: bool = True,
 ) -> Path:
-    """Read a backfill dataset, normalize it, and write Parquet output."""
-    frame = scan_backfill_dataset(input_path=input_path, input_format=input_format)
-    processed = preprocess_ledger_backfill(frame)
+    """Read a backfill dataset, normalize it, and write Parquet output.
 
-    out = Path(output_path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    processed.sink_parquet(str(out), compression="zstd")
+    Idempotent: Skips ledgers that have already been processed.
+
+    Args:
+        input_path: File or directory containing backfill rows.
+        output_path: Path to write Parquet output.
+        input_format: Optional explicit format. If omitted, inferred from path.
+        skip_processed: Whether to skip already processed ledgers (idempotent behavior).
+    """
+    source_path_str = str(input_path)
+    frame = scan_backfill_dataset(input_path=input_path, input_format=input_format)
+    
+    # Get processed ledgers from DB to skip
+    if skip_processed:
+        with get_session() as session:
+            stmt = select(ProcessedLedger.ledger_sequence).where(
+                ProcessedLedger.status == "completed"
+            )
+            processed_sequences = {row[0] for row in session.execute(stmt)}
+        
+        if processed_sequences:
+            logger.info("Skipping %d already processed ledgers", len(processed_sequences))
+            frame = frame.filter(~pl.col("ledger_sequence").is_in(processed_sequences))
+    
+    processed = preprocess_ledger_backfill(frame)
+    
+    # Collect stats from processed data
+    stats_df = processed.group_by("ledger_sequence").agg(
+        pl.col("operation_id").count().alias("num_operations"),
+        pl.col("transaction_hash").n_unique().alias("num_transactions")
+    ).collect()
+    
+    # Update processed_ledgers in DB using upsert for idempotency
+    if not stats_df.is_empty():
+        logger.info("Marking %d ledgers as processing", len(stats_df))
+        with get_session() as session:
+            # Mark as processing
+            for row in stats_df.iter_rows(named=True):
+                upsert_processed_ledger(
+                    session,
+                    ledger_sequence=row["ledger_sequence"],
+                    source=source_path_str,
+                    status="processing"
+                )
+        
+        # Write data
+        out = Path(output_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        processed.sink_parquet(str(out), compression="zstd")
+        
+        # Mark as completed
+        logger.info("Marking %d ledgers as completed", len(stats_df))
+        with get_session() as session:
+            for row in stats_df.iter_rows(named=True):
+                upsert_processed_ledger(
+                    session,
+                    ledger_sequence=row["ledger_sequence"],
+                    source=source_path_str,
+                    status="completed",
+                    num_operations=row["num_operations"],
+                    num_transactions=row["num_transactions"]
+                )
+    else:
+        out = Path(output_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        processed.sink_parquet(str(out), compression="zstd")
+    
     return out

@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader
 
 from ..models import GCN, LinkPredictor, InductiveSAGEEncoder, DeepSVDD
 from ..ingestion.service import IngestionService
+from ..artifacts import get_artifact_store
 
 
 @dataclass
@@ -291,7 +292,7 @@ class ModelBenchmark:
                 # Get probabilities for AUC
                 probs = torch.softmax(out, dim=1)[:, 1][data['test_mask']]
                 metrics["auc"] = roc_auc_score(y_true.cpu(), probs.cpu())
-            except:
+            except Exception:
                 metrics["auc"] = 0.0
         
         return metrics
@@ -366,6 +367,9 @@ class ModelBenchmark:
         # Save results
         self._save_results(result)
         
+        # Save configuration with environment info for reproducibility
+        self._save_config()
+        
         if self.config.save_model:
             self._save_model()
             
@@ -375,24 +379,106 @@ class ModelBenchmark:
         return result
     
     def _save_results(self, result: BenchmarkResult):
-        """Save benchmark results to file."""
-        output_path = Path(self.config.output_dir) / f"{result.model_name}_benchmark.json"
+        """Save benchmark results and configuration to file for reproducibility.
+        
+        Saves:
+        - result.json: Benchmark results with all metrics
+        - config.json: Full configuration including random seed
+        - metadata.json: Metadata linking config and result
+        """
+        import time
+        from datetime import datetime
+        
+        output_dir = Path(self.config.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate timestamp for unique run identification
+        timestamp = datetime.utcnow().isoformat()
+        run_id = f"{result.model_name}_{int(result.timestamp)}"
+        
+        # Save result
+        result_dict = asdict(result)
+        result_path = output_dir / f"{run_id}_result.json"
+        with open(result_path, 'w') as f:
+            json.dump(result_dict, f, indent=2, default=str)
+        print(f"Results saved to {result_path}")
+        
+        # Save configuration for reproducibility
+        config_dict = asdict(self.config)
+        config_path = output_dir / f"{run_id}_config.json"
+        with open(config_path, 'w') as f:
+            json.dump(config_dict, f, indent=2, default=str)
+        print(f"Configuration saved to {config_path}")
+        
+        # Save metadata linking config and result
+        metadata = {
+            "run_id": run_id,
+            "timestamp": timestamp,
+            "model_name": result.model_name,
+            "random_seed": result.random_seed,
+            "device": result.device,
+            "config_file": str(config_path),
+            "result_file": str(result_path),
+            "train_time_seconds": result.train_time,
+            "epochs_trained": result.epochs_trained,
+            "best_metrics": result.metrics,
+        }
+        metadata_path = output_dir / f"{run_id}_metadata.json"
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+        print(f"Metadata saved to {metadata_path}")
+    
+    def _save_config(self):
+        """Save benchmark configuration with environment info for reproducibility."""
+        from .utils import get_environment_info
+        
+        config_path = Path(self.config.output_dir) / "benchmark-config.yaml"
         
         # Create output directory if it doesn't exist
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Convert to dict for JSON serialization
-        result_dict = asdict(result)
+        # Collect environment information
+        env_info = get_environment_info()
         
-        with open(output_path, 'w') as f:
-            json.dump(result_dict, f, indent=2)
+        # Build config dict with environment info
+        config_dict = {
+            'benchmark_config': self.config.to_dict(),
+            'environment': env_info,
+            'timestamp': time.time()
+        }
         
-        print(f"Results saved to {output_path}")
+        # Save as YAML
+        import yaml
+        with open(config_path, 'w') as f:
+            yaml.dump(config_dict, f, default_flow_style=False, sort_keys=False)
+        
+        print(f"Configuration saved to {config_path}")
     
     def _save_model(self):
-        """Save trained model."""
+        """Save trained model to artifact store."""
         if self.model is not None:
-            model_path = Path(self.config.output_dir) / f"{self.config.model.name}_model.pt"
-            model_path.parent.mkdir(parents=True, exist_ok=True)
-            torch.save(self.model.state_dict(), model_path)
-            print(f"Model saved to {model_path}")
+            # Initialize artifact store with configured URI
+            store = get_artifact_store(self.config.artifact_uri)
+            
+            # Create model filename
+            model_filename = f"{self.config.model.name}_model.pt"
+            
+            # Save model to artifact store
+            try:
+                artifact_uri = store.save_model(
+                    self.model,
+                    model_filename,
+                    metadata={
+                        'model_name': self.config.model.name,
+                        'model_params': self.config.model.params,
+                        'timestamp': time.time(),
+                    }
+                )
+                print(f"Model saved to artifact store: {artifact_uri}")
+            except Exception as e:
+                print(f"Warning: Failed to save model to artifact store: {e}")
+                # Fallback to local save
+                model_path = Path(self.config.output_dir) / model_filename
+                model_path.parent.mkdir(parents=True, exist_ok=True)
+                torch.save(self.model.state_dict(), model_path)
+                print(f"Model saved locally to {model_path}")

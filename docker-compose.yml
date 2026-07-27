@@ -24,7 +24,7 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # Redis for caching and job queues
+  # Redis for caching (including LLM caching service) and job queues
   redis:
     image: redis:7-alpine
     container_name: astroml-redis
@@ -42,6 +42,96 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes
 
+  # FastAPI REST API Service
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: astroml-api
+    environment:
+      - DATABASE_URL=postgresql://astroml:astroml_password@postgres:5432/astroml
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=INFO
+      - ASTROML_ENV=container
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret-key-change-in-production}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config:/app/config:ro
+      - api_logs:/app/logs
+    networks:
+      - astroml-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # Celery worker — issue #296
+  celery-worker:
+    build: .
+    command: celery -A astroml.tasks.celery_app worker --loglevel=info
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    networks:
+      - astroml-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Flower — Celery monitoring UI — issue #296
+  flower:
+    build: .
+    command: celery -A astroml.tasks.celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    networks:
+      - astroml-network
+    depends_on:
+      - celery-worker
+    restart: unless-stopped
+
+  # Feature Store Service
+  feature-store:
+    build:
+      context: .
+      target: feature-store
+    container_name: astroml-feature-store
+    environment:
+      - DATABASE_URL=postgresql://astroml:astroml_password@postgres:5432/astroml
+      - REDIS_URL=redis://redis:6379/0
+      - FEATURE_STORE_PATH=/app/feature_store
+      - LOG_LEVEL=INFO
+      - ASTROML_ENV=container
+    ports:
+      - "8000:8000"
+      - "8080:8080"
+    volumes:
+      - feature_store_data:/app/feature_store
+      - feature_store_logs:/app/logs
+      - ./config:/app/config:ro
+    networks:
+      - astroml-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - feature-store
+      - full
+
   # Ingestion Service
   ingestion:
     build:
@@ -51,15 +141,18 @@ services:
     environment:
       - DATABASE_URL=postgresql://astroml:astroml_password@postgres:5432/astroml
       - REDIS_URL=redis://redis:6379/0
+      - FEATURE_STORE_PATH=/app/feature_store
       - LOG_LEVEL=INFO
       - STELLAR_NETWORK_PASSPHRASE=Public Global Stellar Network ; September 2015
+      - ASTROML_ENV=container
     ports:
-      - "8000:8000"
-      - "8080:8080"
+      - "8001:8000"
+      - "8081:8080"
     volumes:
       - ./config:/app/config:ro
       - ingestion_logs:/app/logs
       - ingestion_data:/app/data
+      - feature_store_data:/app/feature_store
     networks:
       - astroml-network
     depends_on:
@@ -67,6 +160,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      feature-store:
+        condition: service_started
     restart: unless-stopped
     command: ["python", "-m", "astroml.ingestion"]
 
@@ -79,14 +174,17 @@ services:
     environment:
       - DATABASE_URL=postgresql://astroml:astroml_password@postgres:5432/astroml
       - REDIS_URL=redis://redis:6379/0
+      - FEATURE_STORE_PATH=/app/feature_store
       - LOG_LEVEL=INFO
       - STELLAR_HORIZON_URL=https://horizon.stellar.org
       - STELLAR_NETWORK_PASSPHRASE=Public Global Stellar Network ; September 2015
+      - ASTROML_ENV=container
     ports:
-      - "8001:8000"
+      - "8002:8000"
     volumes:
       - ./config:/app/config:ro
       - streaming_logs:/app/logs
+      - feature_store_data:/app/feature_store
     networks:
       - astroml-network
     depends_on:
@@ -94,6 +192,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      feature-store:
+        condition: service_started
     restart: unless-stopped
     command: ["python", "-m", "astroml.ingestion.enhanced_stream"]
 
@@ -105,8 +205,11 @@ services:
     container_name: astroml-training-gpu
     environment:
       - DATABASE_URL=postgresql://astroml:astroml_password@postgres:5432/astroml
+      - REDIS_URL=redis://redis:6379/0
+      - FEATURE_STORE_PATH=/app/feature_store
       - CUDA_VISIBLE_DEVICES=0
       - PYTHONPATH=/app
+      - ASTROML_ENV=container
     ports:
       - "6006:6006"  # TensorBoard
     volumes:
@@ -114,14 +217,20 @@ services:
       - training_models:/app/models
       - training_data:/app/data
       - training_logs:/app/logs
+      - feature_store_data:/app/feature_store
     networks:
       - astroml-network
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      feature-store:
+        condition: service_started
     restart: "no"  # Training jobs are typically run once
     profiles:
       - gpu
+      - full
     deploy:
       resources:
         reservations:
@@ -138,7 +247,10 @@ services:
     container_name: astroml-training-cpu
     environment:
       - DATABASE_URL=postgresql://astroml:astroml_password@postgres:5432/astroml
+      - REDIS_URL=redis://redis:6379/0
+      - FEATURE_STORE_PATH=/app/feature_store
       - PYTHONPATH=/app
+      - ASTROML_ENV=container
     ports:
       - "6007:6006"  # TensorBoard
     volumes:
@@ -146,14 +258,20 @@ services:
       - training_models:/app/models
       - training_data:/app/data
       - training_logs:/app/logs
+      - feature_store_data:/app/feature_store
     networks:
       - astroml-network
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      feature-store:
+        condition: service_started
     restart: "no"
     profiles:
       - cpu
+      - full
 
   # Development Environment
   dev:
@@ -164,15 +282,18 @@ services:
     environment:
       - DATABASE_URL=postgresql://astroml:astroml_password@postgres:5432/astroml
       - REDIS_URL=redis://redis:6379/0
+      - FEATURE_STORE_PATH=/app/feature_store
       - PYTHONPATH=/app
+      - ASTROML_ENV=container
     ports:
-      - "8002:8000"
+      - "8003:8000"
       - "8888:8888"  # Jupyter
       - "6008:6006"  # TensorBoard
     volumes:
       - .:/app
       - dev_logs:/app/logs
       - dev_data:/app/data
+      - feature_store_data:/app/feature_store
     networks:
       - astroml-network
     depends_on:
@@ -180,9 +301,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      feature-store:
+        condition: service_started
     restart: unless-stopped
     profiles:
       - dev
+      - full
     command: ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root"]
 
   # Production Service
@@ -194,13 +318,16 @@ services:
     environment:
       - DATABASE_URL=postgresql://astroml:astroml_password@postgres:5432/astroml
       - REDIS_URL=redis://redis:6379/0
+      - FEATURE_STORE_PATH=/app/feature_store
       - LOG_LEVEL=WARNING
+      - ASTROML_ENV=container
     ports:
-      - "8000:8000"
+      - "8004:8000"
     volumes:
       - ./config:/app/config:ro
       - production_logs:/app/logs
       - production_data:/app/data
+      - feature_store_data:/app/feature_store
     networks:
       - astroml-network
     depends_on:
@@ -208,9 +335,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      feature-store:
+        condition: service_started
     restart: unless-stopped
     profiles:
       - prod
+      - full
 
   # Monitoring with Prometheus (optional)
   prometheus:
@@ -317,6 +447,10 @@ volumes:
     driver: local
   redis_data:
     driver: local
+  feature_store_data:
+    driver: local
+  feature_store_logs:
+    driver: local
   ingestion_logs:
     driver: local
   ingestion_data:
@@ -346,4 +480,6 @@ volumes:
   soroban_wasm:
     driver: local
   soroban_logs:
+    driver: local
+  api_logs:
     driver: local

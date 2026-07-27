@@ -43,6 +43,18 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="Optional explicit input format.",
     )
 
+    # Agent subcommand
+    agent = sub.add_parser("agent", help="LLM Agent Framework — multi-step reasoning and autonomous task execution")
+    agent.add_argument("agent_command", choices=["run", "tools"], help="Agent subcommand")
+    agent.add_argument("task", nargs="?", default=None, help="Task description (for 'run')")
+    agent.add_argument("--agent-type", choices=["react", "cot", "planner"], default="planner", help="Agent type")
+    agent.add_argument("--provider", choices=["mock", "openai", "anthropic"], default="mock", help="LLM provider")
+    agent.add_argument("--model", default="gpt-3.5-turbo", help="Model name")
+    agent.add_argument("--api-key", default=None, help="API key")
+    agent.add_argument("--max-steps", type=int, default=50, help="Max reasoning steps")
+    agent.add_argument("--verbose", action="store_true", help="Verbose output")
+    agent.add_argument("--json", action="store_true", help="Output as JSON")
+
     args = parser.parse_args(argv)
 
     if args.command == "ingest":
@@ -82,6 +94,46 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
         print(json.dumps({"output": str(output_path)}, indent=2))
         return 0
+
+    if args.command == "agent":
+        from .agent.config import AgentConfig, LLMConfig, MemoryConfig, ExecutorConfig
+        from .agent.executor import AutonomousExecutor
+        from .agent.tools import create_default_registry
+
+        if args.agent_command == "tools":
+            registry = create_default_registry()
+            print(json.dumps({"tools": sorted(registry.list_tools())}, indent=2))
+            return 0
+
+        # agent run
+        llm_config = LLMConfig(
+            provider=args.provider,
+            model=args.model,
+            api_key=args.api_key,
+        )
+        agent_config = AgentConfig(
+            llm=llm_config,
+            agent_type=args.agent_type,
+            verbose=args.verbose,
+        )
+        executor = AutonomousExecutor(agent_config=agent_config)
+        result = executor.run(task_description=args.task or "")
+
+        if args.json:
+            print(json.dumps(result.to_dict(), indent=2, default=str))
+        elif args.verbose:
+            print(json.dumps({
+                "task": result.task,
+                "success": result.success,
+                "output": result.output,
+                "elapsed_seconds": result.elapsed_seconds,
+                "steps": len(result.steps),
+                "error": result.error,
+            }, indent=2))
+        else:
+            print(result.output)
+
+        return 0 if result.success else 1
 
     parser.print_help()
     return 1

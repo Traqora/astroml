@@ -1,0 +1,38 @@
+# LLM Agent Framework configuration
+# Used by: astroml.agent, astroml.cli (agent subcommand)
+
+# Agent type: "react", "cot", or "planner"
+agent_type: "planner"
+name: "astroml-agent"
+description: "Autonomous LLM agent for AstroML tasks"
+verbose: false
+
+# LLM provider configuration
+llm:
+  # Provider: "mock" (default, no API key needed), "openai", or "anthropic"
+  provider: "mock"
+  model: "gpt-3.5-turbo"
+  # api_key: null  # Set via ASTROML_AGENT_LLM_API_KEY env var or here
+  # api_base: null  # Custom API base URL
+  max_tokens: 4096
+  temperature: 0.7
+  top_p: 1.0
+  timeout_seconds: 60.0
+  max_retries: 3
+
+# Memory configuration
+memory:
+  short_term_limit: 20       # Max messages in sliding window
+  long_term_limit: 1000      # Max entries in long-term memory
+  episode_limit: 100         # Max completed episodes to retain
+  persist_long_term: false   # Whether to persist to disk
+  # persist_path: null       # Path for persistence
+
+# Executor configuration
+executor:
+  max_steps: 50              # Max reasoning steps per task
+  max_iterations: 10         # Max plan-execute-refine iterations
+  step_timeout: 120.0        # Per-step timeout (seconds)
+  task_timeout: 600.0        # Overall task timeout (seconds)
+  auto_approve_tools: true   # Execute tools without confirmation
+  recovery_attempts: 2       # Retry failed tasks with different agent type

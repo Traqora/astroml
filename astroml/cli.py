@@ -2,52 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import pathlib
-from typing import Optional
-from sqlalchemy import select, update, func
 
-from .db.session import load_database_config
-from .ingestion.service import IngestionService
-from .ingestion.state import StateStore
-from .db.schema import Base
-from api.database import _sync_session_factory
-from api.models.orm import ModelRegistry
-
-
-CLI_DESCRIPTION = """\
-AstroML utilities CLI — manage ingestion, configuration, and the
-quick-start pipeline from a single entrypoint.
-
-For full usage, see the README "Usage" section:
-  https://github.com/Traqora/astroml#usage
-"""
-
-CLI_EPILOG = """\
-Examples:
-  # Run incremental ingestion for a ledger range
-  python -m astroml.cli ingest --start 1000 --end 1100
-
-  # Print the effective database configuration that AstroML will use
-  python -m astroml.cli config --print-db
-
-  # Same, but read the YAML config from a custom path
-  python -m astroml.cli --config ./custom/database.yaml config --print-db
-
-  # Run the end-to-end quick start with sample data
-  python -m astroml.cli quickstart --num-ledgers 200 --epochs 5
-
-  # Preprocess a backfill dataset into Parquet
-  python -m astroml.cli preprocess-backfill --input data.csv --output out.parquet
-
-  # Select a runtime environment (sets ASTROML_ENV for downstream loaders)
-  python -m astroml.cli --env production config --print-db
-
-Environment variables:
-  ASTROML_DATABASE_URL  Overrides the database URL from config/database.yaml.
-  ASTROML_ENV           Runtime environment name (development | production).
-                        Set automatically by --env when provided.
-"""
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -80,64 +35,6 @@ def main(argv: Optional[list[str]] = None) -> int:
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True)
-    
-    # LLM subcommand
-    llm_parser = sub.add_parser("llm", help="LLM operations (generate, chat, rag, prompts, eval, models, cost, cache)")
-    llm_sub = llm_parser.add_subparsers(dest="llm_command", required=True)
-    from .cli_llm.commands import register_llm_subcommands
-    register_llm_subcommands(llm_sub)
-    
-    # Models subcommand
-    models_parser = sub.add_parser("models", help="Model registry commands")
-    models_sub = models_parser.add_subparsers(dest="subcommand", required=True)
-    
-    # Register a model
-    register_parser = models_sub.add_parser("register", help="Register a new model")
-    register_parser.add_argument("--name", required=True, help="Model name")
-    register_parser.add_argument("--version", required=True, help="Model version")
-    register_parser.add_argument("--path", required=True, help="Path to model file")
-    register_parser.add_argument("--owner", help="Model owner")
-    register_parser.add_argument("--tags", nargs="*", help="Model tags (space-separated)")
-    register_parser.add_argument("--mlflow-run-id", help="MLflow run ID to associate")
-    register_parser.add_argument("--metrics", help="Model metrics (JSON string)")
-    register_parser.add_argument("--status", default="inactive", choices=["inactive", "active", "deprecated"], help="Model status")
-    
-    # Add a version
-    version_parser = models_sub.add_parser("version", help="Add a new version to a model")
-    version_parser.add_argument("--model-name", required=True, help="Model name")
-    version_parser.add_argument("--version", required=True, help="New version number")
-    version_parser.add_argument("--path", required=True, help="Path to model file")
-    version_parser.add_argument("--owner", help="Model owner")
-    version_parser.add_argument("--tags", nargs="*", help="Model tags (space-separated)")
-    version_parser.add_argument("--mlflow-run-id", help="MLflow run ID to associate")
-    version_parser.add_argument("--metrics", help="Model metrics (JSON string)")
-    version_parser.add_argument("--status", default="inactive", choices=["inactive", "active", "deprecated"], help="Model status")
-    
-    # Load run metadata
-    load_parser = models_sub.add_parser("load-metadata", help="Load MLflow run metadata for a model version")
-    load_parser.add_argument("--model-name", required=True, help="Model name")
-    load_parser.add_argument("--version", required=True, help="Model version")
-    
-    # Transition version status
-    transition_parser = models_sub.add_parser("transition", help="Transition a model version status")
-    transition_parser.add_argument("--model-name", required=True, help="Model name")
-    transition_parser.add_argument("--version", required=True, help="Model version")
-    transition_parser.add_argument("--stage", required=True, choices=["inactive", "active", "deprecated"], help="Target status/stage")
-    
-    # List models
-    list_parser = models_sub.add_parser("list", help="List registered models")
-    list_parser.add_argument("--owner", help="Filter by owner")
-    list_parser.add_argument("--tags", nargs="*", help="Filter by tags (space-separated)")
-    list_parser.add_argument("--name", help="Filter by model name")
-    list_parser.add_argument("--status", help="Filter by status")
-    list_parser.add_argument("--page", type=int, default=1, help="Page number")
-    list_parser.add_argument("--page-size", type=int, default=20, help="Items per page")
-    
-    # Compare models
-    compare_parser = models_sub.add_parser("compare", help="Compare model versions")
-    compare_parser.add_argument("--model-name", required=True, help="Model name")
-    compare_parser.add_argument("--version1", required=True, help="First version to compare")
-    compare_parser.add_argument("--version2", required=True, help="Second version to compare")
 
     ingest = sub.add_parser("ingest", help="Incremental ingestion of ledgers")
     ingest.add_argument("--start", type=int, default=None, help="Start ledger id (inclusive)")
@@ -206,13 +103,6 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="Optional explicit input format.",
     )
 
-    args = parser.parse_args(argv)
-
-    # Wire the top-level --env flag into ASTROML_ENV so downstream loaders
-    # (see docs/api/configuration.md) see the requested environment.
-    # Do not overwrite an env var the operator already set explicitly.
-    if args.env and "ASTROML_ENV" not in os.environ:
-        os.environ["ASTROML_ENV"] = args.env
 
     if args.command == "ingest":
         store = StateStore(path=args.state_file) if args.state_file else StateStore()
@@ -478,6 +368,46 @@ def main(argv: Optional[list[str]] = None) -> int:
             return 0
         llm_parser.print_help()
         return 1
+
+    if args.command == "agent":
+        from .agent.config import AgentConfig, LLMConfig, MemoryConfig, ExecutorConfig
+        from .agent.executor import AutonomousExecutor
+        from .agent.tools import create_default_registry
+
+        if args.agent_command == "tools":
+            registry = create_default_registry()
+            print(json.dumps({"tools": sorted(registry.list_tools())}, indent=2))
+            return 0
+
+        # agent run
+        llm_config = LLMConfig(
+            provider=args.provider,
+            model=args.model,
+            api_key=args.api_key,
+        )
+        agent_config = AgentConfig(
+            llm=llm_config,
+            agent_type=args.agent_type,
+            verbose=args.verbose,
+        )
+        executor = AutonomousExecutor(agent_config=agent_config)
+        result = executor.run(task_description=args.task or "")
+
+        if args.json:
+            print(json.dumps(result.to_dict(), indent=2, default=str))
+        elif args.verbose:
+            print(json.dumps({
+                "task": result.task,
+                "success": result.success,
+                "output": result.output,
+                "elapsed_seconds": result.elapsed_seconds,
+                "steps": len(result.steps),
+                "error": result.error,
+            }, indent=2))
+        else:
+            print(result.output)
+
+        return 0 if result.success else 1
 
     parser.print_help()
     return 1

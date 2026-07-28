@@ -159,7 +159,7 @@ jobs:
 
       - name: Upload generated documentation
         if: steps.changed-files.outputs.any_changed == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: generated-docs
           path: generated_docs/

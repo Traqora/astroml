@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import bisect
+import logging
 from collections.abc import Generator, Iterator, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from ...cache import cached_graph_snapshot
+
+logger = logging.getLogger(__name__)
 
 # Issue #199 — default chunk size for the streaming graph builder. SQLAlchemy
 # fetches rows from the DB in batches of this many; the iterator yields each
@@ -448,3 +452,177 @@ def iter_db_snapshots(
 
         window_start += step_delta
         index += 1
+
+
+# ---------------------------------------------------------------------------
+# Parallel snapshot construction — issue #768
+# ---------------------------------------------------------------------------
+
+
+def _build_snapshot_window_single(args: tuple) -> SnapshotWindow:
+    """Build a single snapshot window — top-level for pickling by joblib."""
+    index, window_start, window_end, chunk_size = args
+    return _build_snapshot_window(index, window_start, window_end, chunk_size)
+
+
+def parallel_build_snapshots(
+    window: str = "7d",
+    t0: datetime | None = None,
+    t_now: datetime | None = None,
+    step: str | None = None,
+    chunk_size: int = 100_000,
+    n_jobs: int = -1,
+    backend: str = "loky",
+    batch_size: int | None = None,
+) -> list[SnapshotWindow]:
+    """Build multiple snapshot windows in parallel using joblib.
+
+    This speeds up snapshot construction for large time ranges by distributing
+    independent window builds across CPU cores.  Determinism is preserved:
+    results are returned in chronological order regardless of completion time.
+
+    Args:
+        window: Window size string, e.g. ``'7d'``, ``'24h'``, ``'3600s'``.
+        t0: Start of the first window. Defaults to earliest DB timestamp.
+        t_now: End of the last window. Defaults to ``datetime.now(UTC)``.
+        step: Slide step between windows (defaults to ``window`` for
+            non-overlapping).
+        chunk_size: Rows to stream per DB fetch per window.
+        n_jobs: Number of parallel workers. ``-1`` uses all CPUs.
+        backend: joblib backend (``'loky'`` for processes, ``'threading'``
+            for threads).
+        batch_size: If set, process windows in batches of this many to
+            cap peak memory. ``None`` (default) processes all at once.
+
+    Returns:
+        List of :class:`SnapshotWindow` instances in chronological order.
+    """
+    try:
+        from joblib import Parallel, delayed
+    except ImportError:
+        logger.warning(
+            "joblib not installed — falling back to sequential snapshot build"
+        )
+        return list(
+            iter_db_snapshots(
+                window=window,
+                t0=t0,
+                t_now=t_now,
+                step=step,
+                chunk_size=chunk_size,
+                workers=1,
+            )
+        )
+
+    win_delta = _parse_window_size(window)
+    step_delta = _parse_window_size(step) if step else win_delta
+
+    # Resolve time bounds
+    from sqlalchemy import func as sqlfunc
+    from sqlalchemy import select
+
+    from astroml.db.schema import NormalizedTransaction
+    from astroml.db.session import get_session
+
+    session = get_session()
+    try:
+        if t_now is None:
+            t_now = datetime.now(timezone.utc)
+
+        if t0 is None:
+            result = session.execute(
+                select(sqlfunc.min(NormalizedTransaction.timestamp))
+            ).scalar()
+            if result is None:
+                return []  # empty DB
+            t0 = result if result.tzinfo else result.replace(tzinfo=timezone.utc)
+
+        if t_now.tzinfo is None:
+            t_now = t_now.replace(tzinfo=timezone.utc)
+        if t0.tzinfo is None:
+            t0 = t0.replace(tzinfo=timezone.utc)
+    finally:
+        session.close()
+
+    # Pre-compute all window arguments
+    windows_args: list[tuple[int, datetime, datetime, int]] = []
+    window_start = t0
+    index = 0
+    while window_start < t_now:
+        window_end = min(window_start + win_delta, t_now)
+        windows_args.append((index, window_start, window_end, chunk_size))
+        window_start += step_delta
+        index += 1
+
+    if not windows_args:
+        return []
+
+    logger.info(
+        "Parallel snapshot build: %d windows, n_jobs=%d, batch_size=%s",
+        len(windows_args),
+        n_jobs,
+        batch_size or "all",
+    )
+
+    # Optionally batch to cap peak memory
+    if batch_size and batch_size > 0:
+        all_results: list[SnapshotWindow] = []
+        for batch_start in range(0, len(windows_args), batch_size):
+            batch = windows_args[batch_start : batch_start + batch_size]
+            results = Parallel(n_jobs=n_jobs, backend=backend)(
+                delayed(_build_snapshot_window_single)(args) for args in batch
+            )
+            # Sort by index to preserve chronological order
+            results.sort(key=lambda sw: sw.index)
+            all_results.extend(results)
+        return all_results
+
+    results = Parallel(n_jobs=n_jobs, backend=backend)(
+        delayed(_build_snapshot_window_single)(args) for args in windows_args
+    )
+    # Sort by index to preserve chronological order
+    results.sort(key=lambda sw: sw.index)
+    return results
+
+
+def compute_node_features_parallel(
+    node_ids: Sequence[str],
+    compute_fn: Any,
+    n_jobs: int = -1,
+    backend: str = "loky",
+    batch_size: int = 1000,
+) -> dict[str, Any]:
+    """Compute node features in parallel for independent nodes.
+
+    Each node's feature computation is independent, making this embarrassingly
+    parallel.  Determinism is preserved because results are keyed by node ID.
+
+    Args:
+        node_ids: Sequence of node identifiers to compute features for.
+        compute_fn: Callable ``(node_id) -> features`` that computes features
+            for a single node.
+        n_jobs: Number of parallel workers. ``-1`` uses all CPUs.
+        backend: joblib backend.
+        batch_size: Nodes per batch to limit peak memory.
+
+    Returns:
+        Dict mapping ``node_id -> computed features``.
+    """
+    try:
+        from joblib import Parallel, delayed
+    except ImportError:
+        logger.warning("joblib not installed — falling back to sequential")
+        return {nid: compute_fn(nid) for nid in node_ids}
+
+    all_results: dict[str, Any] = {}
+    node_list = list(node_ids)
+
+    for batch_start in range(0, len(node_list), batch_size):
+        batch = node_list[batch_start : batch_start + batch_size]
+        features = Parallel(n_jobs=n_jobs, backend=backend)(
+            delayed(compute_fn)(nid) for nid in batch
+        )
+        for nid, feat in zip(batch, features):
+            all_results[nid] = feat
+
+    return all_results

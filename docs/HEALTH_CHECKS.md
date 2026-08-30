@@ -141,6 +141,28 @@ Rules of thumb:
 - **Readiness is the traffic switch.** It is the only probe that should fail
   when a dependency is down.
 
+## Docker Compose probes
+
+`docker-compose.yml` wires each long-running service with:
+
+| Setting | Purpose |
+| --- | --- |
+| `restart: unless-stopped` | Auto-recover after host reboot or crash (one-off jobs use `restart: "no"`) |
+| `healthcheck` | Readiness probe — gates `depends_on: condition: service_healthy` |
+| `stop_grace_period` | Time for in-flight work to finish before SIGKILL |
+| `stop_signal: SIGTERM` | Default graceful stop signal |
+| `init: true` | Proper signal forwarding to PID 1 child processes |
+
+The API service healthcheck targets `GET /healthz/ready` so Docker marks the
+container unhealthy during shutdown — matching the Kubernetes readiness probe
+and the lifespan drain in `api/app.py`.
+
+Worker and batch images without HTTP servers use import/ping probes that mirror
+the `HEALTHCHECK` instructions in each Dockerfile stage.
+
+See `docker-compose.yml` extension fields (`x-graceful-shutdown`,
+`x-healthcheck-defaults`) for shared defaults (issue #775).
+
 ## Related
 
 - Metric definitions: [METRICS_REFERENCE.md](METRICS_REFERENCE.md)

@@ -19,6 +19,8 @@ import os
 import pathlib
 import pickle
 import re
+import shutil
+import subprocess
 import tempfile
 import textwrap
 from typing import Any
@@ -807,3 +809,35 @@ horizon:
         # yaml.load with SafeLoader must produce the same result.
         result_explicit = yaml.load(benign_doc, Loader=yaml.SafeLoader)  # noqa: S506
         assert result_explicit == result_safe
+
+
+# ---------------------------------------------------------------------------
+# 9. Secret-scanning CI gate
+# ---------------------------------------------------------------------------
+
+
+class TestSecretScanningGate:
+    """The dedicated secrets-scan workflow must exist and match the guide."""
+
+    def test_secrets_scan_workflow_exists_and_uses_baseline(self):
+        workflow_path = pathlib.Path('.github/workflows/secrets-scan.yml')
+        assert workflow_path.exists(), 'secrets-scan workflow must exist'
+        text = workflow_path.read_text(encoding='utf-8')
+        assert 'detect-secrets' in text
+        assert '.secrets.baseline' in text
+
+    def test_no_new_secrets_detected(self):
+        detect_secrets = shutil.which('detect-secrets')
+        if detect_secrets is None:
+            pytest.skip('detect-secrets not installed')
+
+        baseline = pathlib.Path('.secrets.baseline')
+        if not baseline.exists():
+            pytest.skip('no .secrets.baseline present')
+
+        result = subprocess.run(
+            ['detect-secrets', 'scan', '--baseline', str(baseline), '--all-files'],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"New secrets detected:\n{result.stdout}\n{result.stderr}"

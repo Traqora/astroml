@@ -28,6 +28,7 @@ from .model_registry import (
     SemanticVersion,
 )
 from .run_comparator import RunComparator, RunMetrics
+from .training_report import EpochRecord, TrainingReport
 from .visualizations import ChartData, ExperimentVisualizer
 
 __all__ = [
@@ -36,8 +37,10 @@ __all__ = [
     "ExperimentDashboard",
     "ExperimentReport",
     "MLflowTracker",
+    "EpochRecord",
     "ModelRegistry",
     "ModelStage",
+    "TrainingReport",
     "DeploymentEnvironment",
     "SemanticVersion",
     "ModelMetadata",

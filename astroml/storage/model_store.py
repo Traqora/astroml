@@ -54,8 +54,34 @@ class ModelStore:
         model_object: Any,
         filename: str = "model.pkl",
         metadata: dict[str, Any] | None = None,
+        dataset: Any = None,
+        training_duration: float | None = None,
+        training_config: dict[str, Any] | None = None,
+        sample_input: Any = None,
     ) -> str:
-        """Serialize and save an ML model object (pickle / torch / custom)."""
+        """Serialize and save an ML model object (pickle / torch / custom).
+
+        Parameters
+        ----------
+        model_name : str
+            Name of the model.
+        version : str
+            Version string.
+        model_object : Any
+            Model to serialize.
+        filename : str
+            Target filename within the version directory.
+        metadata : dict | None
+            User-defined metadata (stored under ``custom_metadata``).
+        dataset : optional
+            Training dataset for checksum computation (issue #765).
+        training_duration : float | None
+            Training wall-clock seconds (issue #765).
+        training_config : dict | None
+            Training hyperparameters (issue #765).
+        sample_input : optional
+            Sample input tensor for output schema inference (issue #765).
+        """
         vdir = self._get_version_dir(model_name, version)
         target_file = vdir / filename
 
@@ -80,6 +106,17 @@ class ModelStore:
 
         checksum = self._compute_sha256(target_file)
 
+        # Collect enriched metadata (issue #765)
+        from astroml.storage.artifact_metadata import collect_metadata
+
+        enriched = collect_metadata(
+            model=model_object,
+            dataset=dataset,
+            training_duration=training_duration,
+            training_config=training_config,
+            sample_input=sample_input,
+        )
+
         # Save metadata sidecar
         meta_payload = {
             "model_name": model_name,
@@ -88,6 +125,17 @@ class ModelStore:
             "checksum_sha256": checksum,
             "size_bytes": target_file.stat().st_size,
             "custom_metadata": metadata or {},
+            # Enriched fields (issue #765)
+            "framework_version": enriched.framework_version,
+            "torch_version": enriched.torch_version,
+            "sklearn_version": enriched.sklearn_version,
+            "dataset_checksum": enriched.dataset_checksum,
+            "training_duration_seconds": enriched.training_duration_seconds,
+            "output_schema": enriched.output_schema,
+            "model_type": enriched.model_type,
+            "git_commit": enriched.git_commit,
+            "training_config": enriched.training_config or {},
+            "registered_at": enriched.registered_at,
         }
         meta_file = vdir / f"{filename}.meta.json"
         with open(meta_file, "w", encoding="utf-8") as f:
@@ -200,10 +248,27 @@ class ModelStore:
 
         meta_file = vdir / f"{filename}.meta.json"
         custom_meta = {}
+        enriched_meta: dict[str, Any] = {}
         if meta_file.exists():
             try:
                 with open(meta_file, "r", encoding="utf-8") as f:
-                    custom_meta = json.load(f).get("custom_metadata", {})
+                    full_meta = json.load(f)
+                    custom_meta = full_meta.get("custom_metadata", {})
+                    # Include enriched fields (issue #765)
+                    for key in (
+                        "framework_version",
+                        "torch_version",
+                        "sklearn_version",
+                        "dataset_checksum",
+                        "training_duration_seconds",
+                        "output_schema",
+                        "model_type",
+                        "git_commit",
+                        "training_config",
+                        "registered_at",
+                    ):
+                        if key in full_meta and full_meta[key] is not None:
+                            enriched_meta[key] = full_meta[key]
             except Exception:
                 pass
 
@@ -215,6 +280,7 @@ class ModelStore:
             "size_bytes": size,
             "checksum_sha256": checksum,
             "custom_metadata": custom_meta,
+            **enriched_meta,
         }
 
     def list_version_artifacts(self, model_name: str, version: str) -> list[str]:

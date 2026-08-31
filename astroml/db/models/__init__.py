@@ -287,6 +287,7 @@ class ModelVersion(Base):
     # it believed it was recording was silently discarded.
     lineage: Mapped[Optional[dict]] = mapped_column(
         JSON().with_variant(JSONB(), "postgresql"))
+    mlflow_run_id: Mapped[Optional[str]] = mapped_column(String(128))
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         nullable=False, server_default=func.now(), onupdate=func.now())

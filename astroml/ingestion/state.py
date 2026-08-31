@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
+
+from astroml.ingestion.metrics import INGESTION_LAST_PROCESSED_AT
 
 DEFAULT_STATE_DIR = os.path.join(os.getcwd(), ".astroml_state")
 DEFAULT_STATE_FILE = os.path.join(DEFAULT_STATE_DIR, "ingestion_state.json")
@@ -12,12 +15,14 @@ DEFAULT_STATE_FILE = os.path.join(DEFAULT_STATE_DIR, "ingestion_state.json")
 class IngestionState:
     last_processed_ledger: int | None
     processed_ledgers: set[int]
+    last_processed_at: str | None = None
 
     def to_dict(self) -> dict:
         return {
             "last_processed_ledger": self.last_processed_ledger,
             # store as sorted list for readability
             "processed_ledgers": sorted(self.processed_ledgers),
+            "last_processed_at": self.last_processed_at,
         }
 
     @staticmethod
@@ -25,6 +30,7 @@ class IngestionState:
         return IngestionState(
             last_processed_ledger=data.get("last_processed_ledger"),
             processed_ledgers=set(data.get("processed_ledgers", [])),
+            last_processed_at=data.get("last_processed_at"),
         )
 
 
@@ -60,6 +66,11 @@ class StateStore:
             state.last_processed_ledger = ledger_id
         else:
             state.last_processed_ledger = max(state.last_processed_ledger, ledger_id)
+        state.last_processed_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        try:
+            INGESTION_LAST_PROCESSED_AT.set(datetime.now(timezone.utc).timestamp())
+        except Exception:
+            pass  # metrics registry may not be initialised in tests/CLI
         self.save(state)
         return state
 

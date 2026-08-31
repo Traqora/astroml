@@ -61,3 +61,9 @@ BATCH_FLUSH_DURATION = Histogram(
     "astroml_ingestion_batch_flush_seconds",
     "Time spent flushing a batch of models",
 )
+
+# Heartbeat / stale-data metric (Issue #758)
+INGESTION_LAST_PROCESSED_AT = Gauge(
+    "astroml_ingestion_last_processed_at_seconds",
+    "Unix timestamp of the most recently processed ledger",
+)

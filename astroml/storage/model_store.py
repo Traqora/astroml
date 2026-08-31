@@ -12,13 +12,40 @@ import json
 import logging
 import os
 import pickle
+import platform
 import shutil
+import sys
 from pathlib import Path
 from typing import Any
 
 from astroml.storage.artifact_store import ArtifactStore, LocalArtifactStore
 
 logger = logging.getLogger(__name__)
+
+
+def _collect_framework_metadata() -> dict[str, str]:
+    """Collect runtime framework versions for enriched artifact metadata."""
+    meta: dict[str, str] = {
+        "python_version": sys.version.split()[0],
+        "platform": platform.platform(),
+    }
+    try:
+        import torch  # type: ignore
+        meta["torch_version"] = torch.__version__
+        meta["torch_cuda_available"] = str(torch.cuda.is_available())
+    except ImportError:
+        pass
+    try:
+        import sklearn  # type: ignore
+        meta["sklearn_version"] = sklearn.__version__
+    except ImportError:
+        pass
+    try:
+        import numpy as np  # type: ignore
+        meta["numpy_version"] = np.__version__
+    except ImportError:
+        pass
+    return meta
 
 
 class ModelStore:
@@ -54,8 +81,24 @@ class ModelStore:
         model_object: Any,
         filename: str = "model.pkl",
         metadata: dict[str, Any] | None = None,
+        training_duration_secs: float | None = None,
+        dataset_checksum: str | None = None,
+        output_schema: dict[str, Any] | None = None,
     ) -> str:
-        """Serialize and save an ML model object (pickle / torch / custom)."""
+        """Serialize and save an ML model object (pickle / torch / custom).
+
+        Args:
+            model_name: Logical model name for registry lookup.
+            version: Version string (e.g. ``"v1.2.0"``).
+            model_object: The model to persist.
+            filename: Artifact filename inside the version directory.
+            metadata: Arbitrary caller-supplied key/value metadata.
+            training_duration_secs: Wall-clock training time in seconds.
+            dataset_checksum: SHA-256 (or similar) digest of the training
+                dataset, used for lineage tracking.
+            output_schema: Mapping that describes the model's output tensor /
+                DataFrame schema (e.g. ``{"labels": ["class_0", "class_1"]}``).
+        """
         vdir = self._get_version_dir(model_name, version)
         target_file = vdir / filename
 
@@ -81,14 +124,21 @@ class ModelStore:
         checksum = self._compute_sha256(target_file)
 
         # Save metadata sidecar
-        meta_payload = {
+        meta_payload: dict[str, Any] = {
             "model_name": model_name,
             "version": version,
             "filename": filename,
             "checksum_sha256": checksum,
             "size_bytes": target_file.stat().st_size,
+            "framework": _collect_framework_metadata(),
             "custom_metadata": metadata or {},
         }
+        if training_duration_secs is not None:
+            meta_payload["training_duration_secs"] = training_duration_secs
+        if dataset_checksum is not None:
+            meta_payload["dataset_checksum"] = dataset_checksum
+        if output_schema is not None:
+            meta_payload["output_schema"] = output_schema
         meta_file = vdir / f"{filename}.meta.json"
         with open(meta_file, "w", encoding="utf-8") as f:
             json.dump(meta_payload, f, indent=2)
@@ -199,23 +249,28 @@ class ModelStore:
         size = target_file.stat().st_size
 
         meta_file = vdir / f"{filename}.meta.json"
-        custom_meta = {}
+        sidecar: dict[str, Any] = {}
         if meta_file.exists():
             try:
                 with open(meta_file, "r", encoding="utf-8") as f:
-                    custom_meta = json.load(f).get("custom_metadata", {})
+                    sidecar = json.load(f)
             except Exception:
                 pass
 
-        return {
+        info: dict[str, Any] = {
             "model_name": model_name,
             "version": version,
             "filename": filename,
             "path": str(target_file),
             "size_bytes": size,
             "checksum_sha256": checksum,
-            "custom_metadata": custom_meta,
+            "custom_metadata": sidecar.get("custom_metadata", {}),
+            "framework": sidecar.get("framework", {}),
         }
+        for enriched_key in ("training_duration_secs", "dataset_checksum", "output_schema"):
+            if enriched_key in sidecar:
+                info[enriched_key] = sidecar[enriched_key]
+        return info
 
     def list_version_artifacts(self, model_name: str, version: str) -> list[str]:
         """List all artifact filenames for a model version."""

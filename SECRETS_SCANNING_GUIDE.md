@@ -27,7 +27,12 @@ The `.secrets.baseline` file stores known secrets that have been reviewed and wh
 
 ### CI Integration
 
-Secrets scanning runs in CI via the pre-commit workflow (`.github/workflows/pre-commit.yml`). The CI job will fail if new secrets are detected that aren't in the baseline.
+Secrets scanning runs in CI via two workflows:
+
+1. **Dedicated secrets scan** (.github/workflows/secrets-scan.yml): runs detect-secrets on every push and pull request. This workflow fails the build if any new secret not in the baseline is detected.
+2. **Pre-commit workflow** (.github/workflows/pre-commit.yml): runs the full pre-commit hook suite, including the detect-secrets hook.
+
+Both workflows will fail if new secrets are detected that aren't in the baseline.
 
 ## Usage
 

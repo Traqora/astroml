@@ -19,6 +19,7 @@ __all__ = [
     "fairness",
     "great_expectations",
     "hashing",
+    "ingestion_schema",
     "integrity",
     "leakage",
     "model_validator",

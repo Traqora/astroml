@@ -1,7 +1,11 @@
 from datetime import datetime
 
 import numpy as np
-import torch
+import pandas as pd
+from typing import List, Dict, Tuple, Optional, Union
+from datetime import datetime, timedelta
+import math
+import polars as pl
 
 
 class TemporalDataProcessor:
@@ -169,54 +173,67 @@ class TemporalGraphBuilder:
         Returns:
             Dictionary with graph components
         """
-        # Extract unique nodes
-        nodes = set()
-        for tx in transactions:
-            nodes.add(tx["source_account"])
-            nodes.add(tx["target_account"])
+        if not transactions:
+            empty_features = torch.empty((0, 0), dtype=torch.float32)
+            return {
+                'edge_index': torch.empty((2, 0), dtype=torch.long),
+                'edge_times': torch.empty(0, dtype=torch.float32),
+                'edge_weights': torch.empty(0, dtype=torch.float32),
+                'edge_features': torch.empty((0, 2), dtype=torch.float32),
+                'node_features': empty_features,
+                'node_times': torch.empty(0, dtype=torch.float32),
+                'num_nodes': 0,
+                'node_mapping': {}
+            }
 
-        node_list = list(nodes)
+        tx_frame = pl.DataFrame(transactions)
+        required = {'source_account', 'target_account', 'timestamp'}
+        missing = required.difference(tx_frame.columns)
+        if missing:
+            raise KeyError(f"transactions missing required columns: {sorted(missing)}")
+
+        if 'amount' not in tx_frame.columns:
+            tx_frame = tx_frame.with_columns(pl.lit(1.0).alias('amount'))
+        if 'operation_type' not in tx_frame.columns:
+            tx_frame = tx_frame.with_columns(pl.lit('payment').alias('operation_type'))
+
+        node_series = pl.concat([
+            tx_frame.select(pl.col('source_account').alias('node')),
+            tx_frame.select(pl.col('target_account').alias('node')),
+        ]).get_column('node').unique(maintain_order=True)
+        node_list = node_series.to_list()
         node_to_idx = {node: i for i, node in enumerate(node_list)}
 
-        # Build edge information
-        edges = []
-        edge_times = []
-        edge_weights = []
-        edge_features = []
+        indexed = tx_frame.with_columns(
+            source_idx=pl.col('source_account').replace(node_to_idx).cast(pl.Int64),
+            target_idx=pl.col('target_account').replace(node_to_idx).cast(pl.Int64),
+            amount_filled=pl.col('amount').fill_null(1.0).cast(pl.Float32),
+            feature_amount=pl.col('amount').fill_null(0.0).cast(pl.Float32),
+        )
 
-        for tx in transactions:
-            source_idx = node_to_idx[tx["source_account"]]
-            target_idx = node_to_idx[tx["target_account"]]
+        edge_index_np = indexed.select(['source_idx', 'target_idx']).to_numpy().T
+        edge_index = torch.from_numpy(np.ascontiguousarray(edge_index_np, dtype=np.int64))
+        edge_times = torch.from_numpy(indexed.get_column('timestamp').cast(pl.Float32).to_numpy())
+        edge_weights = torch.from_numpy(indexed.get_column('amount_filled').to_numpy())
 
-            edges.append([source_idx, target_idx])
-            edge_times.append(tx["timestamp"])
-            edge_weights.append(tx.get("amount", 1.0))
+        operation_hash = indexed.get_column('operation_type').map_elements(
+            lambda value: hash(value if value is not None else 'payment') % 1000 / 1000.0,
+            return_dtype=pl.Float32,
+        ).to_numpy()
+        edge_features_np = np.column_stack([
+            indexed.get_column('feature_amount').to_numpy(),
+            operation_hash,
+        ]).astype(np.float32, copy=False)
+        edge_features = torch.from_numpy(edge_features_np)
 
-            # Edge features (amount, operation type, etc.)
-            edge_feature = torch.tensor(
-                [
-                    tx.get("amount", 0.0),
-                    hash(tx.get("operation_type", "payment")) % 1000 / 1000.0,  # Normalized hash
-                ],
-                dtype=torch.float32,
-            )
-            edge_features.append(edge_feature)
-
-        # Convert to tensors
-        edge_index = torch.tensor(edges, dtype=torch.long).t().contiguous()
-        edge_times = torch.tensor(edge_times, dtype=torch.float32)
-        edge_weights = torch.tensor(edge_weights, dtype=torch.float32)
-        edge_features = torch.stack(edge_features)
-
-        # Node timestamps (last activity time)
-        node_timestamps = torch.zeros(len(node_list))
-        for tx in transactions:
-            source_idx = node_to_idx[tx["source_account"]]
-            target_idx = node_to_idx[tx["target_account"]]
-            tx_time = tx["timestamp"]
-
-            node_timestamps[source_idx] = max(node_timestamps[source_idx], tx_time)
-            node_timestamps[target_idx] = max(node_timestamps[target_idx], tx_time)
+        activity = pl.concat([
+            indexed.select(pl.col('source_idx').alias('node_idx'), pl.col('timestamp')),
+            indexed.select(pl.col('target_idx').alias('node_idx'), pl.col('timestamp')),
+        ]).group_by('node_idx').agg(pl.col('timestamp').max().alias('last_timestamp'))
+        node_timestamps_np = np.zeros(len(node_list), dtype=np.float32)
+        activity_idx = activity.get_column('node_idx').to_numpy().astype(np.int64, copy=False)
+        node_timestamps_np[activity_idx] = activity.get_column('last_timestamp').cast(pl.Float32).to_numpy()
+        node_timestamps = torch.from_numpy(node_timestamps_np)
 
         # Normalize timestamps
         normalized_node_times = self.processor.normalize_timestamps(node_timestamps)
@@ -246,29 +263,32 @@ class TemporalGraphBuilder:
         self, nodes: list[str], transactions: list[dict]
     ) -> torch.Tensor:
         """Create basic node features from transaction data."""
-        node_to_idx = {node: i for i, node in enumerate(nodes)}
         num_nodes = len(nodes)
+        if num_nodes == 0:
+            return torch.empty((0, 4), dtype=torch.float32)
 
-        # Initialize features
-        features = torch.zeros(num_nodes, 4)  # [degree, total_sent, total_received, balance]
+        tx_frame = pl.DataFrame(transactions)
+        if 'amount' not in tx_frame.columns:
+            tx_frame = tx_frame.with_columns(pl.lit(0.0).alias('amount'))
 
-        for tx in transactions:
-            source_idx = node_to_idx[tx["source_account"]]
-            target_idx = node_to_idx[tx["target_account"]]
-            amount = tx.get("amount", 0.0)
+        node_to_idx = {node: i for i, node in enumerate(nodes)}
+        indexed = tx_frame.with_columns(
+            source_idx=pl.col('source_account').replace(node_to_idx).cast(pl.Int64),
+            target_idx=pl.col('target_account').replace(node_to_idx).cast(pl.Int64),
+            amount_filled=pl.col('amount').fill_null(0.0).cast(pl.Float32),
+        )
+        source_idx = indexed.get_column('source_idx').to_numpy().astype(np.int64, copy=False)
+        target_idx = indexed.get_column('target_idx').to_numpy().astype(np.int64, copy=False)
+        amounts = indexed.get_column('amount_filled').to_numpy()
 
-            # Update degree
-            features[source_idx, 0] += 1  # out-degree
-            features[target_idx, 0] += 1  # in-degree
+        features_np = np.zeros((num_nodes, 4), dtype=np.float32)
+        np.add.at(features_np[:, 0], source_idx, 1.0)
+        np.add.at(features_np[:, 0], target_idx, 1.0)
+        np.add.at(features_np[:, 1], source_idx, amounts)
+        np.add.at(features_np[:, 2], target_idx, amounts)
+        features_np[:, 3] = features_np[:, 2] - features_np[:, 1]
 
-            # Update transaction amounts
-            features[source_idx, 1] += amount  # total sent
-            features[target_idx, 2] += amount  # total received
-
-        # Compute balance (received - sent)
-        features[:, 3] = features[:, 2] - features[:, 1]
-
-        return features
+        return torch.from_numpy(features_np)
 
 
 class TemporalFeatureExtractor:

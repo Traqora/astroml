@@ -1,8 +1,8 @@
 # AstroML
 //WIP
 
-[![CI](https://github.com/lordemaverick/astroml/actions/workflows/pytest.yml/badge.svg)](https://github.com/lordemaverick/astroml/actions/workflows/pytest.yml)
-[![codecov](https://codecov.io/gh/lordemaverick/astroml/branch/main/graph/badge.svg)](https://codecov.io/gh/lordemaverick/astroml)
+[![CI](https://github.com/Traqora/astroml/actions/workflows/ci.yml/badge.svg)](https://github.com/Traqora/astroml/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Traqora/astroml/branch/main/graph/badge.svg)](https://codecov.io/gh/Traqora/astroml)
 [![Code Complexity](https://img.shields.io/badge/complexity-A-brightgreen)](https://github.com/mombu/xenon)
 
 ## Dynamic Graph Machine Learning Framework for the Stellar Network

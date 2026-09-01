@@ -48,9 +48,9 @@ RUN mkdir -p /app/logs
 # Expose ports
 EXPOSE 8000 8443
 
-# Health check
+# Health check — readiness probe (issue #775, #569)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:8000/healthz/ready || exit 1
 
 # Run the application
 # For production with HTTPS, set environment variables:

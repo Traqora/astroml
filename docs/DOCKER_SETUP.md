@@ -461,12 +461,23 @@ docker-compose logs --since="1h" feature-store
 #### Health Checks
 
 ```bash
-# Check service health
+# Check service health (Docker marks containers healthy/unhealthy from compose probes)
 docker-compose ps
+
+# API readiness probe wired in compose (issue #775)
+curl -f http://localhost:8000/healthz/ready
 
 # Run a manual health check
 docker-compose exec feature-store python -c "import astroml.features"
 ```
+
+Each long-running service in `docker-compose.yml` declares:
+
+- `restart: unless-stopped` (one-off jobs use `restart: "no"`)
+- A `healthcheck` targeting the service readiness probe
+- `stop_grace_period` and `init: true` for graceful shutdown
+
+See [docs/HEALTH_CHECKS.md](./HEALTH_CHECKS.md) for probe endpoint details.
 
 ### Production Deployment
 

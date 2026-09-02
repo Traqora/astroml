@@ -59,12 +59,8 @@ class LedgerReader:
             return []
 
         files = []
-        for f in self._data_dir.iterdir():
+        for f in self._data_dir.rglob("ledger_*.json"):
             if not f.is_file():
-                continue
-            if not f.name.startswith("ledger_") or not (
-                f.name.endswith(".json") or f.name.endswith(".jsonl")
-            ):
                 continue
             seq = self._extract_sequence(f.name)
             if seq is None:
@@ -216,12 +212,26 @@ class LedgerReader:
         Streams the file to find the matching record without loading
         the entire directory.
         """
-        file_path = self._data_dir / f"ledger_{sequence}.json"
-        if not file_path.exists():
+        file_path = self._find_ledger_file(sequence)
+        if file_path is None:
             return None
         for record in self.stream_file(file_path):
             if record.get("sequence") == sequence:
                 return record
+        return None
+
+    def _find_ledger_file(self, sequence: int) -> Optional[pathlib.Path]:
+        """Find a ledger file by sequence, supporting both flat and partitioned layouts."""
+        # Fast path: current default partitioning scheme
+        bucket_start = (sequence // 10_000) * 10_000
+        partitioned = self._data_dir / f"ledger_bucket_{bucket_start:08d}" / f"ledger_{sequence}.json"
+        if partitioned.exists():
+            return partitioned
+
+        # Fallback: legacy flat layout or custom partitioning
+        for f in self._data_dir.rglob(f"ledger_{sequence}.json"):
+            if f.is_file():
+                return f
         return None
 
     @staticmethod

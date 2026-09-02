@@ -120,6 +120,26 @@ class TestLedgerReader:
         reader = LedgerReader(str(ledger_dir))
         ledger = reader.read_ledger(999)
         assert ledger is None
+    def test_read_ledger_partitioned_layout(self, tmp_path):
+        # Place a ledger inside a bucket directory and ensure the reader finds it.
+        bucket = tmp_path / 'ledger_bucket_00000000'
+        bucket.mkdir(parents=True)
+        (bucket / 'ledger_102.json').write_text('{"sequence": 102}')
+        reader = LedgerReader(str(tmp_path))
+        ledger = reader.read_ledger(102)
+        assert ledger is not None
+        assert ledger["sequence"] == 102
+
+    def test_list_ledger_files_partitioned_layout(self, tmp_path):
+        bucket = tmp_path / 'ledger_bucket_00010000'
+        bucket.mkdir(parents=True)
+        (bucket / 'ledger_10001.json').write_text('{"sequence": 10001}')
+        (bucket / 'ledger_10002.json').write_text('{"sequence": 10002}')
+        reader = LedgerReader(str(tmp_path))
+        files = reader.list_ledger_files()
+        assert len(files) == 2
+        assert reader.count() == 2
+
 
     def test_empty_directory(self, tmp_path):
         reader = LedgerReader(str(tmp_path))

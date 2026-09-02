@@ -123,9 +123,7 @@ class _MemoryGraphStore:
                 self._data.clear()
                 self._access_order.clear()
                 return count
-            keys_to_remove = [
-                k for k in self._data if k.startswith(prefix)
-            ]
+            keys_to_remove = [k for k in self._data if k.startswith(prefix)]
             for k in keys_to_remove:
                 del self._data[k]
                 self._access_order.remove(k)
@@ -177,9 +175,7 @@ class GraphComputationCache:
                 self._redis_client = redis.from_url(self.config.redis_url)
                 self._redis_client.ping()
             except Exception as e:
-                logger.warning(
-                    "Redis unavailable for graph cache, falling back to memory: %s", e
-                )
+                logger.warning("Redis unavailable for graph cache, falling back to memory: %s", e)
                 self._config.backend = GraphCacheBackend.MEMORY
                 self._store = _MemoryGraphStore(self.config.max_size)
 
@@ -260,6 +256,24 @@ class GraphComputationCache:
                     return 0
             else:
                 return self._store.clear(prefix)  # type: ignore[union-attr]
+
+    def clear(self) -> int:
+        """Clear all entries from the graph computation cache and reset statistics."""
+        if self.config.backend == GraphCacheBackend.REDIS and self._redis_client:
+            try:
+                keys = self._redis_client.keys("graph:*")
+                count = len(keys)
+                if keys:
+                    self._redis_client.delete(*keys)
+                self.reset_stats()
+                return count
+            except Exception:
+                self.reset_stats()
+                return 0
+        else:
+            count = self._store.clear("") if self._store else 0
+            self.reset_stats()
+            return count
 
     def get_stats(self) -> GraphCacheStats:
         return self._stats
@@ -361,18 +375,10 @@ class GraphComputationCache:
 # Module-level singleton for convenience
 # ---------------------------------------------------------------------------
 
-_graph_cache: GraphComputationCache | None = None
-_graph_cache_lock = threading.Lock()
-
 
 def get_graph_cache(config: GraphCacheConfig | None = None) -> GraphComputationCache:
     """Get or create the singleton graph computation cache."""
-    global _graph_cache
-    if _graph_cache is None:
-        with _graph_cache_lock:
-            if _graph_cache is None:
-                _graph_cache = GraphComputationCache(config)
-    return _graph_cache
+    return GraphComputationCache(config)
 
 
 def invalidate_graph_cache(prefix: str = "", key: str | None = None) -> int:
@@ -388,7 +394,4 @@ def invalidate_graph_cache(prefix: str = "", key: str | None = None) -> int:
     cache = get_graph_cache()
     if prefix:
         return cache.invalidate(prefix, key)
-    count = 0
-    for p in ("graph:adjacency", "graph:edge_features", "graph:node_features"):
-        count += cache.invalidate(p)
-    return count
+    return cache.clear()

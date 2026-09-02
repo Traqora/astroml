@@ -29,5 +29,11 @@ jobs:
       - name: Run pre-commit
         run: pre-commit run --all-files
 
-      - name: Run secrets scan
-        run: detect-secrets scan --baseline .secrets.baseline --all-files
+
+      # Fail the build if detect-secrets finds any secret that is not already
+      # recorded in the baseline. `detect-secrets scan` updates the baseline
+      # file in place, so a changed baseline means a newly detected secret.
+      - name: Verify secrets baseline is unchanged
+        run: |
+          detect-secrets scan --baseline .secrets.baseline --all-files
+          git diff --exit-code .secrets.baseline

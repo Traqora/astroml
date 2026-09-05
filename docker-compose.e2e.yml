@@ -4,6 +4,9 @@ services:
   postgres-e2e:
     image: postgres:15-alpine
     container_name: astroml-e2e-postgres
+    stop_grace_period: 30s
+    stop_signal: SIGTERM
+    init: true
     environment:
       POSTGRES_USER: test
       POSTGRES_PASSWORD: test
@@ -17,10 +20,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   redis-e2e:
     image: redis:7-alpine
     container_name: astroml-e2e-redis
+    stop_grace_period: 30s
+    stop_signal: SIGTERM
+    init: true
     ports:
       - "6380:6379"
     volumes:
@@ -30,12 +37,16 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   api-e2e:
     build:
       context: .
       dockerfile: api/Dockerfile
     container_name: astroml-e2e-api
+    stop_grace_period: 30s
+    stop_signal: SIGTERM
+    init: true
     ports:
       - "8001:8000"
     environment:
@@ -48,16 +59,21 @@ services:
       redis-e2e:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz/ready"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 40s
+    restart: unless-stopped
 
   pytest-e2e:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: astroml-e2e-tests
+    stop_grace_period: 30s
+    stop_signal: SIGTERM
+    init: true
     environment:
       DATABASE_URL: postgresql://test:test@postgres-e2e:5432/astroml_test
       REDIS_URL: redis://redis-e2e:6379
@@ -77,6 +93,7 @@ services:
       --cov=api
       --cov-report=html:/app/test-results/coverage
       --cov-report=term-missing
+    restart: "no"
 
 volumes:
   postgres-e2e-data:

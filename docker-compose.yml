@@ -1,8 +1,29 @@
 version: '3.8'
 
+# Shared restart, healthcheck, and graceful-shutdown defaults (issue #775).
+# Long-running services use unless-stopped; one-off jobs (training, soroban-build)
+# keep restart: "no". Healthchecks target each service's readiness probe — HTTP
+# /healthz/ready for the API, native probes for infra, import/ping checks for workers.
+x-graceful-shutdown: &graceful-shutdown
+  stop_grace_period: 30s
+  stop_signal: SIGTERM
+  init: true
+
+x-graceful-shutdown-long: &graceful-shutdown-long
+  stop_grace_period: 60s
+  stop_signal: SIGTERM
+  init: true
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 40s
+
 services:
   # PostgreSQL Database
   postgres:
+    <<: *graceful-shutdown
     image: postgres:15-alpine
     container_name: astroml-postgres
     environment:
@@ -26,6 +47,7 @@ services:
 
   # Redis for caching (including LLM caching service) and job queues
   redis:
+    <<: *graceful-shutdown
     image: redis:7-alpine
     container_name: astroml-redis
     ports:
@@ -44,6 +66,7 @@ services:
 
   # FastAPI REST API Service
   api:
+    <<: *graceful-shutdown
     build:
       context: .
       dockerfile: api/Dockerfile
@@ -68,7 +91,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz/ready"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -77,6 +100,7 @@ services:
 
   # Celery worker — issue #296
   celery-worker:
+    <<: *graceful-shutdown-long
     build: .
     command: celery -A astroml.tasks.celery_app worker --loglevel=info
     environment:
@@ -87,10 +111,15 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A astroml.tasks.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      <<: *healthcheck-defaults
+      start_period: 60s
     restart: unless-stopped
 
   # Flower — Celery monitoring UI — issue #296
   flower:
+    <<: *graceful-shutdown
     build: .
     command: celery -A astroml.tasks.celery_app flower --port=5555
     ports:
@@ -98,11 +127,17 @@ services:
     networks:
       - astroml-network
     depends_on:
-      - celery-worker
+      celery-worker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5555/"]
+      <<: *healthcheck-defaults
+      start_period: 60s
     restart: unless-stopped
 
   # Feature Store Service
   feature-store:
+    <<: *graceful-shutdown
     build:
       context: .
       target: feature-store
@@ -127,6 +162,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "from astroml.features import create_feature_store; create_feature_store('/app/feature_store')"]
+      <<: *healthcheck-defaults
     restart: unless-stopped
     profiles:
       - feature-store
@@ -134,6 +172,7 @@ services:
 
   # Ingestion Service
   ingestion:
+    <<: *graceful-shutdown-long
     build:
       context: .
       target: ingestion
@@ -162,11 +201,15 @@ services:
         condition: service_healthy
       feature-store:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import astroml.ingestion; import astroml.features"]
+      <<: *healthcheck-defaults
     restart: unless-stopped
     command: ["python", "-m", "astroml.ingestion"]
 
   # Enhanced Streaming Service
   streaming:
+    <<: *graceful-shutdown-long
     build:
       context: .
       target: ingestion
@@ -194,11 +237,17 @@ services:
         condition: service_healthy
       feature-store:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import astroml.ingestion.enhanced_stream"]
+      <<: *healthcheck-defaults
     restart: unless-stopped
     command: ["python", "-m", "astroml.ingestion.enhanced_stream"]
 
   # Training Service (GPU-enabled)
   training-gpu:
+    stop_grace_period: 120s
+    stop_signal: SIGTERM
+    init: true
     build:
       context: .
       target: training
@@ -228,6 +277,10 @@ services:
       feature-store:
         condition: service_started
     restart: "no"  # Training jobs are typically run once
+    healthcheck:
+      test: ["CMD", "python", "-c", "import torch; import astroml.features"]
+      <<: *healthcheck-defaults
+      start_period: 120s
     profiles:
       - gpu
       - full
@@ -241,6 +294,9 @@ services:
 
   # Training Service (CPU-only)
   training-cpu:
+    stop_grace_period: 120s
+    stop_signal: SIGTERM
+    init: true
     build:
       context: .
       target: training-cpu
@@ -269,12 +325,17 @@ services:
       feature-store:
         condition: service_started
     restart: "no"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import torch; import astroml.features"]
+      <<: *healthcheck-defaults
+      start_period: 120s
     profiles:
       - cpu
       - full
 
   # Development Environment
   dev:
+    <<: *graceful-shutdown
     build:
       context: .
       target: development
@@ -303,6 +364,10 @@ services:
         condition: service_healthy
       feature-store:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/api"]
+      <<: *healthcheck-defaults
+      start_period: 60s
     restart: unless-stopped
     profiles:
       - dev
@@ -311,6 +376,7 @@ services:
 
   # Production Service
   production:
+    <<: *graceful-shutdown-long
     build:
       context: .
       target: production
@@ -337,6 +403,9 @@ services:
         condition: service_healthy
       feature-store:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import astroml; import astroml.features"]
+      <<: *healthcheck-defaults
     restart: unless-stopped
     profiles:
       - prod
@@ -344,6 +413,7 @@ services:
 
   # Monitoring with Prometheus (optional)
   prometheus:
+    <<: *graceful-shutdown
     image: prom/prometheus:latest
     container_name: astroml-prometheus
     ports:
@@ -354,12 +424,19 @@ services:
       - prometheus_data:/prometheus
     networks:
       - astroml-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     profiles:
       - monitoring
     restart: unless-stopped
 
   # Grafana for visualization (optional)
   grafana:
+    <<: *graceful-shutdown
     image: grafana/grafana:latest
     container_name: astroml-grafana
     environment:
@@ -373,13 +450,21 @@ services:
     networks:
       - astroml-network
     depends_on:
-      - prometheus
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     profiles:
       - monitoring
     restart: unless-stopped
 
   # Soroban Contract Development
   soroban-dev:
+    <<: *graceful-shutdown
     build:
       context: .
       dockerfile: Dockerfile.soroban
@@ -398,12 +483,19 @@ services:
       - soroban_logs:/app/logs
     networks:
       - astroml-network
+    healthcheck:
+      test: ["CMD", "soroban", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
     profiles:
       - soroban
 
   # Soroban Contract Build
   soroban-build:
+    restart: "no"
     build:
       context: .
       dockerfile: Dockerfile.soroban
@@ -421,6 +513,7 @@ services:
 
   # Soroban Contract Testing
   soroban-test:
+    restart: "no"
     build:
       context: .
       dockerfile: Dockerfile.soroban

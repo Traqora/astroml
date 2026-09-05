@@ -12,6 +12,7 @@ from astroml.preprocessing.feature_selection.hybrid import (
 )
 from astroml.preprocessing.feature_selection.wrapper import WrapperSelector
 
+
 # ---------------------------------------------------------------------------
 # Test data
 # ---------------------------------------------------------------------------
@@ -237,7 +238,8 @@ def test_embedded_fit_transform() -> None:
 
 def _get_estimator():
     try:
-        from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+        from sklearn.ensemble import RandomForestClassifier
+        from sklearn.ensemble import RandomForestRegressor
     except ImportError:
         return None
 

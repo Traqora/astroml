@@ -348,3 +348,60 @@ async def delete_model_version(model_name: str, version: str) -> dict[str, Any]:
         "status": "success",
         "message": f"Version '{version}' of model '{model_name}' deleted.",
     }
+
+
+@router.get(
+    "/{model_name}/versions/{version}/mlflow-run",
+    summary="Get linked MLflow run details",
+)
+async def get_mlflow_run_details(model_name: str, version: str) -> dict[str, Any]:
+    """Retrieve the MLflow run details linked to a model version.
+
+    Returns run metadata (metrics, params, tags, artifact URI) from MLflow
+    for the run stored on this registry version via ``mlflow_run_id``.
+    """
+    if model_name not in _in_memory_models:
+        raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found.")
+    versions = _in_memory_versions.get(model_name, {})
+    if version not in versions:
+        raise HTTPException(status_code=404, detail=f"Version '{version}' not found.")
+
+    ver_data = versions[version]
+    mlflow_run_id = ver_data.get("mlflow_run_id")
+
+    if not mlflow_run_id:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Version '{version}' of model '{model_name}' has no linked MLflow run.",
+        )
+
+    try:
+        import mlflow
+
+        run = mlflow.get_run(mlflow_run_id)
+        return {
+            "status": "success",
+            "model_name": model_name,
+            "version": version,
+            "mlflow_run": {
+                "run_id": run.info.run_id,
+                "experiment_id": run.info.experiment_id,
+                "status": run.info.status,
+                "start_time": run.info.start_time,
+                "end_time": run.info.end_time,
+                "metrics": dict(run.data.metrics),
+                "params": dict(run.data.params),
+                "tags": dict(run.data.tags),
+                "artifact_uri": run.info.artifact_uri,
+            },
+        }
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="mlflow package is not installed. Install it with: pip install mlflow",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to fetch MLflow run {mlflow_run_id}: {exc}",
+        )

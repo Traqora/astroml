@@ -20,6 +20,7 @@ from __future__ import annotations
 from astroml.cache.decorators import cache_feature_store
 from astroml.cache.graph_cache import (
     GraphComputationCache,
+    cached_graph_computation,
     GraphCacheConfig,
     GraphCacheStats,
     get_graph_cache,
@@ -47,6 +48,8 @@ __all__ = [
     "cached_prediction",
     "cached_graph_snapshot",
     "cache_feature_store",
+    "GraphComputationCache",
+    "cached_graph_computation",
     "invalidate_cache",
     "get_cache_stats",
     "clear_all_caches",

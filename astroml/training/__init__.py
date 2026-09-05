@@ -16,6 +16,14 @@ __all__ = [
     "QuantizationConfig",
     "ContinuousLearningPipeline",
     "ModelVersionManager",
+    "GraphObjective",
+    "NodeClassificationObjective",
+    "LinkPredictionObjective",
+    "get_objective",
+    "register_objective",
+    "available_objectives",
+    "validate_edge_index",
+    "validate_masks",
 ]
 
 _LAZY = {
@@ -34,6 +42,20 @@ _LAZY = {
     "OptimizerConfig": ("astroml.training.config", "OptimizerConfig"),
     "ContinuousLearningPipeline": ("astroml.training.continuous_learning", "ContinuousLearningPipeline"),
     "ModelVersionManager": ("astroml.training.continuous_learning", "ModelVersionManager"),
+    "GraphObjective": ("astroml.training.graph_objectives", "GraphObjective"),
+    "NodeClassificationObjective": (
+        "astroml.training.graph_objectives",
+        "NodeClassificationObjective",
+    ),
+    "LinkPredictionObjective": (
+        "astroml.training.graph_objectives",
+        "LinkPredictionObjective",
+    ),
+    "get_objective": ("astroml.training.graph_objectives", "get_objective"),
+    "register_objective": ("astroml.training.graph_objectives", "register_objective"),
+    "available_objectives": ("astroml.training.graph_objectives", "available_objectives"),
+    "validate_edge_index": ("astroml.training.graph_objectives", "validate_edge_index"),
+    "validate_masks": ("astroml.training.graph_objectives", "validate_masks"),
 }
 
 

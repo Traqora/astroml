@@ -414,7 +414,15 @@ class ModelRegistry:
         if not version:
             return None
 
-        version.metrics.update(metrics)
+        # Reassign rather than mutate in place (issue #738).
+        #
+        # ``metrics`` is a plain JSON column, so SQLAlchemy compares it by
+        # identity: an in-place ``dict.update`` leaves the attribute pointing
+        # at the same object, the instance is never marked dirty, ``commit``
+        # writes nothing, and the ``refresh`` below then reloads the old value
+        # over the change. The update was discarded in silence — the caller
+        # got a version object back and no error.
+        version.metrics = {**(version.metrics or {}), **metrics}
         self.session.commit()
         self.session.refresh(version)
         logger.info("Updated metrics for model version: %s (id=%d)", version.version, version_id)

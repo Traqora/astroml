@@ -1,3 +1,14 @@
+"""Graph computation cache — issue #767.
+
+Caches intermediate graph outputs (adjacency lists, edge features) keyed by
+data version and window parameters so repeated experiments on the same slice
+of the ledger avoid redundant reconstruction.
+
+The cache uses the existing :class:`~astroml.cache.redis_cache.RedisCache`
+layer and therefore inherits its TTL configuration, hit/miss metrics, and
+Redis connection pooling.  A local in-process LRU layer sits in front to
+short-circuit Redis for the most recently accessed windows within a single
+process.
 """Graph computation cache for repeated graph outputs — issue #767.
 
 Caches intermediate graph outputs (adjacency lists, edge features, node
@@ -7,51 +18,53 @@ experiments.  Supports both in-memory (default) and Redis backends.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import logging
-import threading
-from collections.abc import Callable
-from dataclasses import dataclass, field
-from enum import Enum
-from functools import wraps
-from typing import Any, TypeVar
+from collections import OrderedDict
+from typing import Any
+
+from astroml.cache.redis_cache import CacheKeyPrefix, RedisCache
 
 logger = logging.getLogger(__name__)
 
-F = TypeVar("F", bound=Callable[..., Any])
+_ADJACENCY_PREFIX = CacheKeyPrefix.GRAPH_WINDOW
+_EDGE_FEATURE_PREFIX = CacheKeyPrefix.GRAPH_SNAPSHOT
+
+# Default in-process LRU capacity (number of entries, not bytes).
+_DEFAULT_LRU_CAPACITY = 128
 
 
-class GraphCacheBackend(Enum):
-    """Backend for graph computation cache."""
-
-    MEMORY = "memory"
-    REDIS = "redis"
-
-
-@dataclass
-class GraphCacheConfig:
-    """Configuration for graph computation cache."""
-
-    backend: GraphCacheBackend = GraphCacheBackend.MEMORY
-    max_size: int = 512
-    default_ttl_seconds: int = 3600  # 1 hour
-    redis_url: str = "redis://localhost:6379"
-    # Per-prefix TTL overrides (seconds)
-    adjacency_ttl: int = 3600
-    edge_feature_ttl: int = 1800
-    node_feature_ttl: int = 1800
-    snapshot_ttl: int = 3600
+def _window_key(data_version: str, start_ts: int, end_ts: int, extra: str = "") -> str:
+    """Stable cache key from window parameters."""
+    payload = f"{data_version}:{start_ts}:{end_ts}:{extra}"
+    digest = hashlib.sha256(payload.encode()).hexdigest()[:16]
+    return digest
 
 
-@dataclass
-class GraphCacheStats:
-    """Graph cache hit/miss statistics."""
+class _LRUCache:
+    """Minimal thread-unsafe in-process LRU backed by an OrderedDict."""
 
-    hits: int = 0
-    misses: int = 0
-    sets: int = 0
-    evictions: int = 0
+    def __init__(self, capacity: int = _DEFAULT_LRU_CAPACITY) -> None:
+        self._cap = max(1, capacity)
+        self._store: OrderedDict[str, Any] = OrderedDict()
+
+    def get(self, key: str) -> Any:
+        if key not in self._store:
+            return None
+        self._store.move_to_end(key)
+        return self._store[key]
+
+    def set(self, key: str, value: Any) -> None:
+        if key in self._store:
+            self._store.move_to_end(key)
+        self._store[key] = value
+        if len(self._store) > self._cap:
+            self._store.popitem(last=False)
+
+    def invalidate(self, key: str) -> None:
+        self._store.pop(key, None)
 
     @property
     def hit_rate(self) -> float:
@@ -135,18 +148,28 @@ class _MemoryGraphStore:
 
 
 class GraphComputationCache:
-    """Cache for graph computation results — adjacency lists, edge features,
-    node features, and intermediate outputs keyed by data version and window.
+    """Two-level cache (in-process LRU → Redis) for graph intermediate outputs.
 
-    Usage::
+    Adjacency lists and edge feature tensors/dicts can be expensive to rebuild
+    for large windows.  This class stores them under a key derived from
+    ``data_version`` and the window bounds so experiments that share the same
+    data slice reuse the cached result.
+
+    Args:
+        redis_ttl_adjacency: Redis TTL for adjacency list entries in seconds
+            (default 30 minutes).
+        redis_ttl_edge_features: Redis TTL for edge feature entries in seconds
+            (default 1 hour).
+        lru_capacity: Number of entries to keep in the in-process LRU.
+
+    Example::
 
         cache = GraphComputationCache()
 
-        @cache.cached_adjacency(version="v3", window="7d")
-        def build_adjacency(window_edges):
-            ...
-
-        adj = build_adjacency(edges)  # cached per (version, window, edges_hash)
+        adj = cache.get_adjacency("v1.2", start_ts=1_000_000, end_ts=1_010_000)
+        if adj is None:
+            adj = build_adjacency(edges, start_ts, end_ts)
+            cache.set_adjacency("v1.2", 1_000_000, 1_010_000, adj)
     """
 
     _instance: GraphComputationCache | None = None
@@ -285,63 +308,39 @@ class GraphComputationCache:
 
     def cached_adjacency(
         self,
-        version: str = "latest",
-        window: str = "7d",
-        ttl_seconds: int | None = None,
-    ) -> Callable[[F], F]:
-        """Cache adjacency list computation per data version and window."""
+        data_version: str,
+        start_ts: int,
+        end_ts: int,
+    ) -> None:
+        """Evict an adjacency entry from both cache levels."""
+        key = self._adj_key(data_version, start_ts, end_ts)
+        self._lru.invalidate(key)
+        self._redis.delete(key)
 
-        def decorator(func: F) -> F:
-            @wraps(func)
-            def wrapper(*args: Any, **kwargs: Any) -> Any:
-                arg_hash = self._hash_args(*args, **kwargs)
-                cache_key = f"adj:{version}:{window}:{arg_hash}"
-                cached_value = self.get("graph:adjacency", cache_key)
-                if cached_value is not None:
-                    return cached_value
-                result = func(*args, **kwargs)
-                self.set(
-                    "graph:adjacency",
-                    cache_key,
-                    result,
-                    ttl_seconds or self.config.adjacency_ttl,
-                )
-                return result
+    # ------------------------------------------------------------------ #
+    # Edge feature caching
+    # ------------------------------------------------------------------ #
 
-            return wrapper  # type: ignore[return-value]
-
-        return decorator
-
-    def cached_edge_features(
+    def get_edge_features(
         self,
-        version: str = "latest",
-        window: str = "7d",
-        ttl_seconds: int | None = None,
-    ) -> Callable[[F], F]:
-        """Cache edge feature computation per data version and window."""
+        data_version: str,
+        start_ts: int,
+        end_ts: int,
+        feature_set: str = "default",
+    ) -> Any | None:
+        """Return cached edge features or ``None`` on miss."""
+        key = self._ef_key(data_version, start_ts, end_ts, feature_set)
+        hit = self._lru.get(key)
+        if hit is not None:
+            logger.debug("GraphComputationCache: edge_features LRU hit for %s", key[:12])
+            return hit
+        value = self._redis.get(key)
+        if value is not None:
+            logger.debug("GraphComputationCache: edge_features Redis hit for %s", key[:12])
+            self._lru.set(key, value)
+        return value
 
-        def decorator(func: F) -> F:
-            @wraps(func)
-            def wrapper(*args: Any, **kwargs: Any) -> Any:
-                arg_hash = self._hash_args(*args, **kwargs)
-                cache_key = f"ef:{version}:{window}:{arg_hash}"
-                cached_value = self.get("graph:edge_features", cache_key)
-                if cached_value is not None:
-                    return cached_value
-                result = func(*args, **kwargs)
-                self.set(
-                    "graph:edge_features",
-                    cache_key,
-                    result,
-                    ttl_seconds or self.config.edge_feature_ttl,
-                )
-                return result
-
-            return wrapper  # type: ignore[return-value]
-
-        return decorator
-
-    def cached_node_features(
+    def set_edge_features(
         self,
         version: str = "latest",
         window: str = "7d",
@@ -384,12 +383,42 @@ def get_graph_cache(config: GraphCacheConfig | None = None) -> GraphComputationC
 def invalidate_graph_cache(prefix: str = "", key: str | None = None) -> int:
     """Invalidate graph cache entries.
 
-    Args:
-        prefix: Cache prefix (e.g. ``'graph:adjacency'``). Empty string clears all.
-        key: Specific key within prefix. ``None`` clears all for the prefix.
+    @property
+    def lru_size(self) -> int:
+        """Number of entries currently in the in-process LRU."""
+        return len(self._lru)
 
-    Returns:
-        Number of entries invalidated.
+    # ------------------------------------------------------------------ #
+    # Private helpers
+    # ------------------------------------------------------------------ #
+
+    def _adj_key(self, version: str, start: int, end: int) -> str:
+        digest = _window_key(version, start, end)
+        return f"{_ADJACENCY_PREFIX.value}:adj:{digest}"
+
+    def _ef_key(self, version: str, start: int, end: int, feature_set: str) -> str:
+        digest = _window_key(version, start, end, feature_set)
+        return f"{_EDGE_FEATURE_PREFIX.value}:ef:{digest}"
+
+
+def cached_graph_computation(
+    data_version_arg: str = "data_version",
+    start_ts_arg: str = "start_ts",
+    end_ts_arg: str = "end_ts",
+    cache: GraphComputationCache | None = None,
+    ttl_seconds: int = 1_800,
+):
+    """Decorator that caches graph computation outputs per data version and window.
+
+    The decorated function must accept ``data_version``, ``start_ts``, and
+    ``end_ts`` keyword arguments (or positional args whose names match
+    ``data_version_arg``, ``start_ts_arg``, ``end_ts_arg``).
+
+    Example::
+
+        @cached_graph_computation()
+        def build_adjacency(data_version: str, start_ts: int, end_ts: int):
+            ...  # expensive graph construction
     """
     cache = get_graph_cache()
     if prefix:

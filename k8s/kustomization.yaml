@@ -16,6 +16,8 @@ resources:
   - monitoring.yaml
   - logging.yaml
   - rbac.yaml
+  - horizontal-pod-autoscaler.yaml
+  - serving-worker-hpa.yaml
 
 commonLabels:
   managed-by: kustomize

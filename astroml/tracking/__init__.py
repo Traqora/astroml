@@ -22,6 +22,7 @@ from .llm_usage_tracker import (
 from .mlflow_tracker import MLflowTracker
 from .model_registry import ModelRegistry
 from .run_comparator import RunComparator, RunMetrics
+from .training_report import EpochRecord, TrainingReport
 from .visualizations import ChartData, ExperimentVisualizer
 
 __all__ = [
@@ -30,7 +31,15 @@ __all__ = [
     "ExperimentDashboard",
     "ExperimentReport",
     "MLflowTracker",
+    "EpochRecord",
     "ModelRegistry",
+    "ModelStage",
+    "TrainingReport",
+    "DeploymentEnvironment",
+    "SemanticVersion",
+    "ModelMetadata",
+    "ModelFramework",
+    "TaskType",
     "LLMUsage",
     "LLMPrices",
     "LLMUsageTracker",

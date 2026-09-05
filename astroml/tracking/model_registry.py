@@ -280,6 +280,7 @@ class ModelRegistry:
         version: str | None = None,
         metadata: dict[str, Any] | None = None,
         auto_version: bool = True,
+        mlflow_run_id: str | None = None,
     ) -> ModelVersion:
         """Create a new model version.
 
@@ -292,6 +293,7 @@ class ModelRegistry:
             version: Optional version string. If not provided and auto_version=True, auto-generates.
             metadata: Optional additional metadata
             auto_version: Whether to auto-generate version if not provided
+            mlflow_run_id: Optional MLflow run ID to link this version to
 
         Returns:
             Created ModelVersion instance
@@ -325,6 +327,7 @@ class ModelRegistry:
             metrics=metrics or {},
             status=status,
             metadata=metadata or {},
+            mlflow_run_id=mlflow_run_id,
         )
         self.session.add(model_version)
         self.session.commit()
@@ -411,7 +414,15 @@ class ModelRegistry:
         if not version:
             return None
 
-        version.metrics.update(metrics)
+        # Reassign rather than mutate in place (issue #738).
+        #
+        # ``metrics`` is a plain JSON column, so SQLAlchemy compares it by
+        # identity: an in-place ``dict.update`` leaves the attribute pointing
+        # at the same object, the instance is never marked dirty, ``commit``
+        # writes nothing, and the ``refresh`` below then reloads the old value
+        # over the change. The update was discarded in silence — the caller
+        # got a version object back and no error.
+        version.metrics = {**(version.metrics or {}), **metrics}
         self.session.commit()
         self.session.refresh(version)
         logger.info("Updated metrics for model version: %s (id=%d)", version.version, version_id)
@@ -619,6 +630,7 @@ class ModelRegistry:
                     "version": version.version,
                     "status": version.status,
                     "metrics": version.metrics,
+                    "mlflow_run_id": version.mlflow_run_id,
                     "created_at": version.created_at.isoformat(),
                     "deployed_at": version.deployed_at.isoformat() if version.deployed_at else None,
                     "metadata": version.metadata,
@@ -648,7 +660,15 @@ class ModelRegistry:
                 all_metrics.update(v.metrics.keys())
 
         comparison = {
-            "versions": [{"id": v.id, "version": v.version, "status": v.status} for v in versions],
+            "versions": [
+                {
+                    "id": v.id,
+                    "version": v.version,
+                    "status": v.status,
+                    "mlflow_run_id": v.mlflow_run_id,
+                }
+                for v in versions
+            ],
             "metrics": {},
             "summary": {},
         }
@@ -827,6 +847,57 @@ class ModelRegistry:
             return []
 
         return version.metadata.get("deployments", []) if version.metadata else []
+
+    # ------------------------------------------------------------------
+    # MLflow run linkage (issue #764)
+    # ------------------------------------------------------------------
+
+    def get_mlflow_run_details(
+        self,
+        model_id: int,
+        version: str,
+    ) -> dict[str, Any] | None:
+        """Retrieve MLflow run details for a registered model version.
+
+        Looks up the ``mlflow_run_id`` stored on the version and fetches
+        the corresponding run data from the MLflow tracking server.
+
+        Args:
+            model_id: Parent model ID.
+            version: Version string.
+
+        Returns:
+            A dict with run metadata (run_id, experiment_id, status,
+            metrics, params, tags, artifact_uri) or ``None`` if the
+            version has no linked run or MLflow is unavailable.
+        """
+        mv = self.get_model_version(model_id, version)
+        if not mv or not mv.mlflow_run_id:
+            return None
+
+        try:
+            import mlflow
+
+            run = mlflow.get_run(mv.mlflow_run_id)
+            return {
+                "run_id": run.info.run_id,
+                "experiment_id": run.info.experiment_id,
+                "status": run.info.status,
+                "start_time": run.info.start_time,
+                "end_time": run.info.end_time,
+                "metrics": dict(run.data.metrics),
+                "params": dict(run.data.params),
+                "tags": dict(run.data.tags),
+                "artifact_uri": run.info.artifact_uri,
+            }
+        except ImportError:
+            logger.warning("mlflow package not installed — cannot fetch run details")
+            return None
+        except Exception as exc:
+            logger.warning(
+                "Failed to fetch MLflow run %s: %s", mv.mlflow_run_id, exc
+            )
+            return None
 
     # ------------------------------------------------------------------
     # Validation helpers

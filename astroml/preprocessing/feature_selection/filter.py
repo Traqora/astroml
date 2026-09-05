@@ -259,7 +259,7 @@ def _filter_mutual_info(
         return np.ones(n_features, dtype=np.float64)
 
     try:
-        from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
+        from sklearn.feature_selection import mutual_info_regression, mutual_info_classif
     except ImportError:
         logger.warning("sklearn not installed; falling back to correlation")
         return _filter_correlation(X, y)

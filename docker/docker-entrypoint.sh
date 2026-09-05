@@ -172,7 +172,7 @@ main() {
     start_service "$1"
 }
 
-# Handle signals gracefully
+# Handle signals gracefully — forward SIGTERM to the child started via exec
 trap 'log "Received shutdown signal, exiting..."; exit 0' SIGTERM SIGINT
 
 # Execute main function

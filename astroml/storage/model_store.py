@@ -123,6 +123,17 @@ class ModelStore:
 
         checksum = self._compute_sha256(target_file)
 
+        # Collect enriched metadata (issue #765)
+        from astroml.storage.artifact_metadata import collect_metadata
+
+        enriched = collect_metadata(
+            model=model_object,
+            dataset=dataset,
+            training_duration=training_duration,
+            training_config=training_config,
+            sample_input=sample_input,
+        )
+
         # Save metadata sidecar
         meta_payload: dict[str, Any] = {
             "model_name": model_name,
@@ -132,6 +143,17 @@ class ModelStore:
             "size_bytes": target_file.stat().st_size,
             "framework": _collect_framework_metadata(),
             "custom_metadata": metadata or {},
+            # Enriched fields (issue #765)
+            "framework_version": enriched.framework_version,
+            "torch_version": enriched.torch_version,
+            "sklearn_version": enriched.sklearn_version,
+            "dataset_checksum": enriched.dataset_checksum,
+            "training_duration_seconds": enriched.training_duration_seconds,
+            "output_schema": enriched.output_schema,
+            "model_type": enriched.model_type,
+            "git_commit": enriched.git_commit,
+            "training_config": enriched.training_config or {},
+            "registered_at": enriched.registered_at,
         }
         if training_duration_secs is not None:
             meta_payload["training_duration_secs"] = training_duration_secs

@@ -9,6 +9,11 @@ layer and therefore inherits its TTL configuration, hit/miss metrics, and
 Redis connection pooling.  A local in-process LRU layer sits in front to
 short-circuit Redis for the most recently accessed windows within a single
 process.
+"""Graph computation cache for repeated graph outputs — issue #767.
+
+Caches intermediate graph outputs (adjacency lists, edge features, node
+features) per data version and window to avoid recomputation across
+experiments.  Supports both in-memory (default) and Redis backends.
 """
 
 from __future__ import annotations

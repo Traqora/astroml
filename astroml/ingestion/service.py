@@ -26,6 +26,7 @@ from astroml.core.abstracts import IngestionResult as BaseIngestionResult
 from astroml.core.abstracts import Ingestor
 from astroml.utils.validators import validate_positive_int, validate_range
 
+from .batch_metrics import BatchMetricsRecorder
 from .state import StateStore
 
 logger = logging.getLogger("astroml.ingestion.service")
@@ -222,6 +223,8 @@ class IngestionService(Ingestor):
         from astroml.observability.metrics import track_active_job
 
         pending_flush = 0
+        batch_metrics = BatchMetricsRecorder()
+        batch_metrics.start()
         try:
             # Active ingestion jobs gauge (issue #567). Entering the context
             # here keeps the gauge balanced even if the caller abandons the
@@ -229,10 +232,16 @@ class IngestionService(Ingestor):
             with track_active_job("ingestion"):
                 for offset, ledger_id in enumerate(range(start_ledger, end_ledger + 1), start=1):
                     if ledger_id in processed_set:
-                        yield ledger_id, LedgerOutcome(ledger_id=ledger_id, status="skipped")
+                        outcome = LedgerOutcome(ledger_id=ledger_id, status="skipped")
                     else:
-                        payload = fetch(ledger_id)
-                        process(ledger_id, payload)
+                        try:
+                            payload = fetch(ledger_id)
+                            process(ledger_id, payload)
+                        except Exception as exc:
+                            batch_metrics.observe(LedgerOutcome(ledger_id=ledger_id, status="error"))
+                            batch_metrics.finish()
+                            logger.error("Ingestion error for ledger %d: %s", ledger_id, exc)
+                            raise
                         processed_set.add(ledger_id)
                         state.last_processed_ledger = (
                             ledger_id
@@ -243,9 +252,14 @@ class IngestionService(Ingestor):
                         if pending_flush >= batch_size:
                             self.state.save(state)
                             pending_flush = 0
-                        yield ledger_id, LedgerOutcome(ledger_id=ledger_id, status="processed")
+                        outcome = LedgerOutcome(ledger_id=ledger_id, status="processed")
+
+                    batch_metrics.observe(outcome)
+                    yield ledger_id, outcome
 
                     if offset % batch_size == 0:
+                        batch_metrics.finish()
+                        batch_metrics.start()
                         logger.info(
                             "ingest_stream progress: %d/%d ledgers (up to %d)",
                             offset,
@@ -255,6 +269,7 @@ class IngestionService(Ingestor):
         finally:
             if pending_flush:
                 self.state.save(state)
+            batch_metrics.finish()
 
     def ingest_incremental(
         self,

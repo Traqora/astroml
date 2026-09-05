@@ -15,8 +15,9 @@ Dependencies:
 
 from __future__ import annotations
 
+import gc
 import logging
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator, Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Literal, Optional
@@ -365,6 +366,96 @@ class IngestionService(Ingestor):
             end_time=now,
             errors=[],
         )
+
+    def ingest_backfill_chunked(
+        self,
+        start_ledger: int,
+        end_ledger: int,
+        chunk_size: int = 10_000,
+        fetch_fn: Callable[[int], object] | None = None,
+        process_fn: Callable[[int, object], None] | None = None,
+        batch_size: int = 100,
+    ) -> Generator[dict[str, Any], None, None]:
+        """Memory-efficient backfill for very large ledger ranges — issue #766.
+
+        For multi-million-ledger ranges :meth:`ingest` keeps every ledger id
+        in three Python lists (attempted/processed/skipped) for the duration
+        of the call. At 100M ledgers that alone exceeds 1 GiB of resident
+        memory before any payload work begins.
+
+        This method partitions the range into ``chunk_size`` sub-ranges and
+        processes each independently via :meth:`ingest_stream`, discarding
+        accumulated ids and explicitly running the garbage collector between
+        chunks. Peak RSS is therefore proportional to ``chunk_size`` instead
+        of the full range length.
+
+        Yields one summary ``dict`` per chunk:
+
+        .. code-block:: python
+
+            {
+                "chunk_start": int,
+                "chunk_end": int,
+                "processed": int,
+                "skipped": int,
+                "errors": int,
+            }
+
+        Args:
+            start_ledger: First ledger to process (inclusive).
+            end_ledger: Last ledger to process (inclusive).
+            chunk_size: Number of ledgers per memory-bounded batch. Default 10 000.
+            fetch_fn: Forwarded to :meth:`ingest_stream`.
+            process_fn: Forwarded to :meth:`ingest_stream`.
+            batch_size: State-flush cadence inside each chunk, forwarded to
+                :meth:`ingest_stream`.
+        """
+        if end_ledger < start_ledger:
+            raise ValueError("end_ledger must be >= start_ledger")
+        if chunk_size < 1:
+            raise ValueError("chunk_size must be >= 1")
+
+        current = start_ledger
+        while current <= end_ledger:
+            chunk_end = min(current + chunk_size - 1, end_ledger)
+            n_processed = 0
+            n_skipped = 0
+            n_errors = 0
+
+            try:
+                for _ledger_id, outcome in self.ingest_stream(
+                    start_ledger=current,
+                    end_ledger=chunk_end,
+                    fetch_fn=fetch_fn,
+                    process_fn=process_fn,
+                    batch_size=batch_size,
+                ):
+                    if outcome.status == "processed":
+                        n_processed += 1
+                    else:
+                        n_skipped += 1
+            except Exception as exc:
+                logger.error(
+                    "Backfill chunk %d-%d failed: %s",
+                    current,
+                    chunk_end,
+                    exc,
+                )
+                n_errors += 1
+
+            yield {
+                "chunk_start": current,
+                "chunk_end": chunk_end,
+                "processed": n_processed,
+                "skipped": n_skipped,
+                "errors": n_errors,
+            }
+
+            # Release per-chunk temporaries and compact the heap before the
+            # next chunk's fetch allocations begin.  gc.collect() is a no-op
+            # when the GC would have run anyway, so the overhead is negligible.
+            gc.collect()
+            current = chunk_end + 1
 
     def get_status(self) -> Dict[str, Any]:
         """Get current status of the ingestor (issue #573).

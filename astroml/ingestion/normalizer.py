@@ -1,5 +1,22 @@
 """Transaction normalizer for extracting structured data from Horizon operations.
 
+Two entry points cover the full operation surface:
+
+- :func:`normalize_operation` — the general-purpose path. Use this for every
+  operation type *except* path payments (``path_payment_strict_send`` /
+  ``path_payment_strict_receive``). It always returns exactly one
+  :class:`~astroml.db.schema.NormalizedTransaction`.
+- :func:`normalize_path_payment_hops` — the path-payment-aware path. Path
+  payments route funds through one or more intermediate assets, so a single
+  Horizon operation can represent several distinct graph edges (one per hop).
+  This function decomposes the operation into one
+  :class:`~astroml.db.schema.NormalizedTransaction` per hop via
+  :func:`astroml.ingestion.parsers.extract_path_payment_hops`, and
+  transparently falls back to :func:`normalize_operation` for non-path-payment
+  types (or if hop extraction finds nothing to expand), so callers that don't
+  know the operation type ahead of time can call it uniformly instead of
+  branching on ``data["type"]`` themselves.
+
 Also usable as a CLI: ``python -m astroml.ingestion.normalizer --help``.
 """
 

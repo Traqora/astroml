@@ -17,9 +17,28 @@ from typing import Any
 
 from astroml.utils.exceptions import AstroMLError
 
-from .encryption import encrypt_backup_file
+from .encryption import (
+    encrypt_backup_file,
+    encrypt_file,
+    is_encryption_enabled,
+    is_env_encryption_enabled,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _encrypt_if_enabled(config: BackupConfig, backup_file: Path) -> tuple[Path, bool]:
+    """Encrypt with the configured key (issue #958) or the env key (#965).
+
+    Returns the final on-disk path and whether it is encrypted. Backups stay
+    plaintext when neither key source is configured, which preserves the
+    original behavior for callers that have not opted in.
+    """
+    if is_encryption_enabled(config) and config.encryption_key:
+        return encrypt_file(backup_file, config.encryption_key), True
+    if is_env_encryption_enabled():
+        return encrypt_backup_file(backup_file), True
+    return backup_file, False
 
 
 class BackupType(Enum):
@@ -65,6 +84,11 @@ class BackupConfig:
 
     # Model artifacts
     model_artifacts_dir: str = "/tmp/model_artifacts"
+
+    # Encryption at rest (#958). A Fernet key from
+    # ``astroml.backup.encryption.generate_encryption_key``. Backups are
+    # written as plaintext when this is None/empty (existing behavior).
+    encryption_key: str | None = None
 
 
 @dataclass
@@ -193,15 +217,19 @@ class BackupService:
             else:
                 raise ValueError(f"Unsupported database URL format: {db_url}")
 
-            # Encrypt at rest (issue #965): the gzip step above is
-            # compression only, not confidentiality. This dump can contain
-            # PII and credentials embedded in seed/config data, so the
-            # plaintext .sql.gz is never the file that gets persisted,
-            # uploaded, or checksummed below.
-            backup_file = encrypt_backup_file(backup_file)
-
-            # Calculate checksum
+            # Checksum and verification describe the pg_dump/gzip output,
+            # so both run on the plaintext archive before encryption.
+            # Encryption at rest (issues #958 and #965) is applied only when
+            # a configured or environment-derived key is available.
             checksum = self._calculate_checksum(backup_file)
+            is_verified = False
+            if self.config.verify_after_backup:
+                from .verification import BackupVerifier
+
+                verifier = BackupVerifier(self.config)
+                is_verified = verifier.verify_backup(backup_file, checksum)
+
+            backup_file, is_encrypted = _encrypt_if_enabled(self.config, backup_file)
             size_bytes = backup_file.stat().st_size
 
             # Save metadata
@@ -213,9 +241,9 @@ class BackupService:
                 checksum=checksum,
                 storage_path=str(backup_file),
                 storage_backend=StorageBackend.LOCAL,
-                is_verified=False,
+                is_verified=is_verified,
                 description=description,
-                is_encrypted=True,
+                is_encrypted=is_encrypted,
             )
 
             self._save_metadata(metadata)
@@ -223,14 +251,6 @@ class BackupService:
             # Upload to cloud storage if configured
             if self.config.storage_backend != StorageBackend.LOCAL:
                 self._upload_to_storage(backup_file, backup_id)
-
-            # Verify backup if enabled
-            if self.config.verify_after_backup:
-                from .verification import BackupVerifier
-
-                verifier = BackupVerifier(self.config)
-                metadata.is_verified = verifier.verify_backup(backup_file, checksum)
-                self._save_metadata(metadata)
 
             logger.info(f"Database backup created successfully: {backup_id}")
             return metadata
@@ -277,12 +297,11 @@ class BackupService:
                 for item in artifacts_dir.iterdir():
                     tar.add(item, arcname=item.name)
 
-        # Encrypt at rest (issue #965): model artifacts can embed
-        # proprietary weights or, via training config, credentials.
-        backup_file = encrypt_backup_file(backup_file)
-
-        # Calculate checksum
+        # Checksum the plaintext tar.gz before encryption at rest
+        # (issues #958 and #965).
         checksum = self._calculate_checksum(backup_file)
+
+        backup_file, is_encrypted = _encrypt_if_enabled(self.config, backup_file)
         size_bytes = backup_file.stat().st_size
 
         # Save metadata
@@ -296,7 +315,7 @@ class BackupService:
             storage_backend=StorageBackend.LOCAL,
             is_verified=False,
             description=description,
-            is_encrypted=True,
+            is_encrypted=is_encrypted,
         )
 
         self._save_metadata(metadata)

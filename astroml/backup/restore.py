@@ -2,16 +2,85 @@
 
 from __future__ import annotations
 
+import contextlib
 import gzip
 import logging
 import os
 import subprocess
 import tarfile
+import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
+from .encryption import ENCRYPTED_SUFFIX, BackupEncryptionError, is_encryption_enabled
 from .service import BackupConfig, BackupType
 
 logger = logging.getLogger(__name__)
+
+
+@contextlib.contextmanager
+def _plaintext_backup_file(
+    config: BackupConfig, backup_file: Path, *, is_encrypted: bool
+) -> Iterator[Path]:
+    """Yield a plaintext path for ``backup_file``, decrypting to a temp copy if needed.
+
+    Leaves the on-disk encrypted backup untouched (restores may run more than
+    once against the same archive) and always cleans up the temporary
+    plaintext copy, including when the caller raises.
+
+    Args:
+        config: Backup configuration; must have ``encryption_key`` set when
+            ``is_encrypted`` is True.
+        backup_file: Path to the (possibly encrypted) backup archive.
+        is_encrypted: Whether ``backup_file`` is Fernet-encrypted.
+
+    Yields:
+        A path to a plaintext archive: ``backup_file`` itself when not
+        encrypted, otherwise a temporary decrypted copy.
+
+    Raises:
+        BackupEncryptionError: If the backup is encrypted but no key is
+            configured, or decryption fails (wrong key / tampered archive).
+    """
+    if not is_encrypted:
+        yield backup_file
+        return
+
+    if not is_encryption_enabled(config) or not config.encryption_key:
+        raise BackupEncryptionError(
+            f"Backup {backup_file} is encrypted but no `encryption_key` is "
+            "configured on BackupConfig; cannot restore it."
+        )
+
+    from cryptography.fernet import Fernet, InvalidToken
+
+    try:
+        fernet = Fernet(config.encryption_key.encode("utf-8"))
+    except (ValueError, TypeError) as e:
+        raise BackupEncryptionError(f"Invalid backup encryption key: {e}") from e
+
+    plaintext_name = (
+        backup_file.name[: -len(ENCRYPTED_SUFFIX)]
+        if backup_file.name.endswith(ENCRYPTED_SUFFIX)
+        else backup_file.name
+    )
+    plaintext_suffix = "".join(Path(plaintext_name).suffixes) or ".tmp"
+
+    tmp = tempfile.NamedTemporaryFile(suffix=plaintext_suffix, delete=False)
+    tmp_path = Path(tmp.name)
+    tmp.close()
+    try:
+        ciphertext = backup_file.read_bytes()
+        try:
+            plaintext = fernet.decrypt(ciphertext)
+        except InvalidToken as e:
+            raise BackupEncryptionError(
+                f"Failed to decrypt {backup_file}: invalid key or corrupted/tampered backup"
+            ) from e
+        tmp_path.write_bytes(plaintext)
+        yield tmp_path
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 class RestoreService:
@@ -58,6 +127,21 @@ class RestoreService:
 
         logger.info(f"Restoring database from backup: {backup_id}")
 
+        try:
+            with _plaintext_backup_file(
+                self.config, backup_file, is_encrypted=data.get("is_encrypted", False)
+            ) as plaintext_file:
+                return self._restore_database_from_plaintext(
+                    plaintext_file, drop_existing, backup_id
+                )
+        except BackupEncryptionError as e:
+            logger.error(f"Database restore failed: {e}")
+            return False
+
+    def _restore_database_from_plaintext(
+        self, backup_file: Path, drop_existing: bool, backup_id: str
+    ) -> bool:
+        """Run the actual psql restore against a plaintext ``.sql.gz`` file."""
         try:
             # Extract database connection info
             db_url = self.config.database_url
@@ -198,17 +282,23 @@ class RestoreService:
         logger.info(f"Restoring model artifacts from backup: {backup_id}")
 
         try:
-            # Extract tar.gz archive
-            with tarfile.open(backup_file, "r:gz") as tar:
-                for member in tar.getmembers():
-                    member_path = Path(member.name).resolve()
-                    if not str(member_path).startswith(str(target_path)):
-                        raise ValueError(f"Invalid archive member path: {member.name}")
-                tar.extractall(path=target_path)
+            with _plaintext_backup_file(
+                self.config, backup_file, is_encrypted=data.get("is_encrypted", False)
+            ) as plaintext_file:
+                # Extract tar.gz archive
+                with tarfile.open(plaintext_file, "r:gz") as tar:
+                    for member in tar.getmembers():
+                        member_path = Path(member.name).resolve()
+                        if not str(member_path).startswith(str(target_path)):
+                            raise ValueError(f"Invalid archive member path: {member.name}")
+                    tar.extractall(path=target_path)
 
             logger.info(f"Model artifacts restored successfully from backup: {backup_id}")
             return True
 
+        except BackupEncryptionError as e:
+            logger.error(f"Model artifacts restore failed: {e}")
+            return False
         except Exception as e:
             logger.error(f"Model artifacts restore failed: {e}")
             return False

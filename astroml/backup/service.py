@@ -14,6 +14,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from .encryption import encrypt_file, is_encryption_enabled
+
 logger = logging.getLogger(__name__)
 
 
@@ -61,6 +63,11 @@ class BackupConfig:
     # Model artifacts
     model_artifacts_dir: str = "/tmp/model_artifacts"
 
+    # Encryption at rest (#958). A Fernet key from
+    # ``astroml.backup.encryption.generate_encryption_key``. Backups are
+    # written as plaintext when this is None/empty (existing behavior).
+    encryption_key: str | None = None
+
 
 @dataclass
 class BackupMetadata:
@@ -75,6 +82,7 @@ class BackupMetadata:
     storage_backend: StorageBackend
     is_verified: bool = False
     description: str | None = None
+    is_encrypted: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -87,6 +95,7 @@ class BackupMetadata:
             "storage_backend": self.storage_backend.value,
             "is_verified": self.is_verified,
             "description": self.description,
+            "is_encrypted": self.is_encrypted,
         }
 
 
@@ -177,8 +186,22 @@ class BackupService:
             else:
                 raise ValueError(f"Unsupported database URL format: {db_url}")
 
-            # Calculate checksum
+            # Calculate checksum over the plaintext archive, and verify
+            # against the plaintext too, before any encryption is applied —
+            # both operate on the actual pg_dump/gzip output.
             checksum = self._calculate_checksum(backup_file)
+            is_verified = False
+            if self.config.verify_after_backup:
+                from .verification import BackupVerifier
+
+                verifier = BackupVerifier(self.config)
+                is_verified = verifier.verify_backup(backup_file, checksum)
+
+            is_encrypted = False
+            if is_encryption_enabled(self.config) and self.config.encryption_key:
+                backup_file = encrypt_file(backup_file, self.config.encryption_key)
+                is_encrypted = True
+
             size_bytes = backup_file.stat().st_size
 
             # Save metadata
@@ -190,8 +213,9 @@ class BackupService:
                 checksum=checksum,
                 storage_path=str(backup_file),
                 storage_backend=StorageBackend.LOCAL,
-                is_verified=False,
+                is_verified=is_verified,
                 description=description,
+                is_encrypted=is_encrypted,
             )
 
             self._save_metadata(metadata)
@@ -199,14 +223,6 @@ class BackupService:
             # Upload to cloud storage if configured
             if self.config.storage_backend != StorageBackend.LOCAL:
                 self._upload_to_storage(backup_file, backup_id)
-
-            # Verify backup if enabled
-            if self.config.verify_after_backup:
-                from .verification import BackupVerifier
-
-                verifier = BackupVerifier(self.config)
-                metadata.is_verified = verifier.verify_backup(backup_file, checksum)
-                self._save_metadata(metadata)
 
             logger.info(f"Database backup created successfully: {backup_id}")
             return metadata
@@ -246,8 +262,15 @@ class BackupService:
                 for item in artifacts_dir.iterdir():
                     tar.add(item, arcname=item.name)
 
-        # Calculate checksum
+        # Calculate checksum over the plaintext archive, before any
+        # encryption is applied.
         checksum = self._calculate_checksum(backup_file)
+
+        is_encrypted = False
+        if is_encryption_enabled(self.config) and self.config.encryption_key:
+            backup_file = encrypt_file(backup_file, self.config.encryption_key)
+            is_encrypted = True
+
         size_bytes = backup_file.stat().st_size
 
         # Save metadata
@@ -261,6 +284,7 @@ class BackupService:
             storage_backend=StorageBackend.LOCAL,
             is_verified=False,
             description=description,
+            is_encrypted=is_encrypted,
         )
 
         self._save_metadata(metadata)
@@ -311,6 +335,7 @@ class BackupService:
                     storage_backend=StorageBackend(data["storage_backend"]),
                     is_verified=data.get("is_verified", False),
                     description=data.get("description"),
+                    is_encrypted=data.get("is_encrypted", False),
                 )
 
                 if backup_type is None or metadata.backup_type == backup_type:

@@ -1,4 +1,4 @@
-"""Centralized structured logging configuration (issues #195, #334, #568).
+"""Centralized structured logging configuration (issues #195, #334, #568, #960).
 
 Standardized log fields:
 - timestamp (ISO 8601)
@@ -7,6 +7,10 @@ Standardized log fields:
 - message
 - request_id (from context)
 - feature_name / ledger_id / etc. (contextual fields)
+
+All fields pass through :func:`mask_pii` before being serialized, so common
+PII (emails, phone numbers, SSNs, API keys/tokens) is redacted regardless of
+which module produced the log record.
 """
 
 from __future__ import annotations
@@ -15,9 +19,10 @@ import contextvars
 import json
 import logging
 import os
+import re
 import sys
 import uuid
-from typing import Any
+from typing import Any, Final
 
 _DEFAULT_LEVEL = "INFO"
 _DEFAULT_FORMAT = "json"
@@ -29,6 +34,45 @@ _correlation_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 _module_log_levels: dict[str, str] = {}
 _CONFIGURED = False
 
+#: Regex patterns for the PII we redact from log output before it is
+#: serialized. Applied in order; each substitution runs on the already
+#: partially-redacted text so patterns should not overlap.
+_PII_PATTERNS: Final[list[tuple[str, re.Pattern[str]]]] = [
+    ("[EMAIL]", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),
+    ("[SSN]", re.compile(r"\b\d{3}-\d{2}-\d{4}\b")),
+    (
+        "[PHONE]",
+        re.compile(r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"),
+    ),
+    (
+        "[CREDIT_CARD]",
+        re.compile(r"\b(?:\d[ -]?){13,16}\d\b"),
+    ),
+]
+
+#: ``key=value`` / ``key: value`` pairs whose value looks like a credential.
+_CREDENTIAL_ASSIGNMENT: Final[re.Pattern[str]] = re.compile(
+    r"(?i)\b(api[_-]?key|apikey|token|secret|password|passwd|pwd)\b(\s*[:=]\s*)\S+"
+)
+
+
+def mask_pii(text: str) -> str:
+    """Redact common PII (emails, phone numbers, SSNs, credentials) from ``text``.
+
+    Args:
+        text: Raw string that may contain PII.
+
+    Returns:
+        ``text`` with recognized PII patterns replaced by ``[TYPE]``
+        placeholders. Non-string or empty input is returned unchanged.
+    """
+    if not text:
+        return text
+    masked = _CREDENTIAL_ASSIGNMENT.sub(r"\1\2[REDACTED]", text)
+    for placeholder, pattern in _PII_PATTERNS:
+        masked = pattern.sub(placeholder, masked)
+    return masked
+
 
 class StructuredJsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
@@ -36,13 +80,13 @@ class StructuredJsonFormatter(logging.Formatter):
             "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
             "level": record.levelname,
             "logger": record.name,
-            "message": record.getMessage(),
+            "message": mask_pii(record.getMessage()),
         }
         request_id = _correlation_id.get()
         if request_id:
             payload["request_id"] = request_id
         if record.exc_info:
-            payload["exception"] = self.formatException(record.exc_info)
+            payload["exception"] = mask_pii(self.formatException(record.exc_info))
         for key, value in record.__dict__.items():
             if key in payload:
                 continue
@@ -71,11 +115,13 @@ class StructuredJsonFormatter(logging.Formatter):
                 "taskName",
             }:
                 continue
+            if isinstance(value, str):
+                value = mask_pii(value)
             try:
                 json.dumps(value)
                 payload[key] = value
             except (TypeError, ValueError):
-                payload[key] = repr(value)
+                payload[key] = mask_pii(repr(value))
         return json.dumps(payload, default=str)
 
 
@@ -171,6 +217,7 @@ __all__ = [
     "CorrelationId",
     "correlation_id",
     "sanitize_log_value",
+    "mask_pii",
 ]
 
 # Backward-compatible alias

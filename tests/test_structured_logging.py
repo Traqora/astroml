@@ -13,6 +13,7 @@ from astroml.utils.logging import (
     correlation_id,
     get_correlation_id,
     get_module_log_level,
+    mask_pii,
     set_correlation_id,
     set_module_log_level,
 )
@@ -97,6 +98,111 @@ class TestStructuredJsonFormatter:
             result = self._capture_log(record)
             assert "exception" in result
             assert "test error" in result["exception"]
+
+
+class TestPIIMaskingInLogs:
+    """Regression tests for PII masking in structured logs (issue #960)."""
+
+    def setup_method(self):
+        self.formatter = StructuredJsonFormatter()
+        self.logger = logging.getLogger("test_logger")
+        self.logger.setLevel(logging.DEBUG)
+
+    def _capture_log(self, record: logging.LogRecord) -> dict:
+        output = self.formatter.format(record)
+        return json.loads(output)
+
+    def test_masks_email_in_message(self):
+        record = self.logger.makeRecord(
+            "test_logger",
+            logging.INFO,
+            "test.py",
+            10,
+            "user contact: jane.doe@example.com",
+            (),
+            None,
+        )
+        result = self._capture_log(record)
+        assert "jane.doe@example.com" not in result["message"]
+        assert "[EMAIL]" in result["message"]
+
+    def test_masks_ssn_in_message(self):
+        record = self.logger.makeRecord(
+            "test_logger", logging.INFO, "test.py", 10, "ssn on file: 123-45-6789", (), None
+        )
+        result = self._capture_log(record)
+        assert "123-45-6789" not in result["message"]
+        assert "[SSN]" in result["message"]
+
+    def test_masks_phone_number_in_message(self):
+        record = self.logger.makeRecord(
+            "test_logger", logging.INFO, "test.py", 10, "call back at 555-123-4567", (), None
+        )
+        result = self._capture_log(record)
+        assert "555-123-4567" not in result["message"]
+        assert "[PHONE]" in result["message"]
+
+    def test_masks_credential_assignment_in_message(self):
+        record = self.logger.makeRecord(
+            "test_logger",
+            logging.INFO,
+            "test.py",
+            10,
+            "auth failed with api_key=sk_live_abcdef1234567890",
+            (),
+            None,
+        )
+        result = self._capture_log(record)
+        assert "sk_live_abcdef1234567890" not in result["message"]
+        assert "[REDACTED]" in result["message"]
+
+    def test_masks_pii_in_extra_string_fields(self):
+        record = self.logger.makeRecord("test_logger", logging.INFO, "test.py", 10, "msg", (), None)
+        record.user_email = "contact@astroml.io"
+        result = self._capture_log(record)
+        assert result["user_email"] == "[EMAIL]"
+
+    def test_does_not_mask_benign_message(self):
+        record = self.logger.makeRecord(
+            "test_logger", logging.INFO, "test.py", 10, "snapshot build completed", (), None
+        )
+        result = self._capture_log(record)
+        assert result["message"] == "snapshot build completed"
+
+    def test_masks_pii_in_exception_text(self):
+        import sys
+
+        try:
+            raise ValueError("failed for user jane.doe@example.com")
+        except ValueError:
+            exc_info = sys.exc_info()
+            record = self.logger.makeRecord(
+                "test_logger", logging.ERROR, "test.py", 10, "error occurred", (), exc_info=exc_info
+            )
+            result = self._capture_log(record)
+            assert "jane.doe@example.com" not in result["exception"]
+            assert "[EMAIL]" in result["exception"]
+
+
+class TestMaskPii:
+    """Unit tests for the standalone mask_pii helper (issue #960)."""
+
+    def test_empty_string_returned_unchanged(self):
+        assert mask_pii("") == ""
+
+    def test_no_pii_returned_unchanged(self):
+        text = "nothing sensitive here"
+        assert mask_pii(text) == text
+
+    def test_masks_multiple_pii_types(self):
+        text = "email jane@example.com, ssn 123-45-6789, phone 555-123-4567"
+        masked = mask_pii(text)
+        assert "jane@example.com" not in masked
+        assert "123-45-6789" not in masked
+        assert "555-123-4567" not in masked
+        assert "[EMAIL]" in masked
+        assert "[SSN]" in masked
+        assert "[PHONE]" in masked
 
 
 class TestCorrelationId:

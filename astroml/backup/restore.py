@@ -338,12 +338,16 @@ class RestoreService:
             with _plaintext_backup_file(
                 self.config, backup_file, is_encrypted=data.get("is_encrypted", False)
             ) as plaintext_file:
-                # Reject any member that would escape the target directory
-                # before extracting a single file (issue #304 hardening).
+                # Guard against path traversal before extracting any file:
+                # reject absolute names and `..` components explicitly, then
+                # confirm the resolved member still lives under target_path.
                 with tarfile.open(plaintext_file, "r:gz") as tar:
                     for member in tar.getmembers():
+                        if os.path.isabs(member.name) or ".." in Path(member.name).parts:
+                            raise ValueError(f"Invalid archive member path: {member.name}")
                         member_path = (target_path / member.name).resolve()
                         if not _is_within(member_path, target_path):
+
                             raise ValueError(f"Invalid archive member path: {member.name}")
                     tar.extractall(path=target_path)
 

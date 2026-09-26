@@ -77,11 +77,14 @@ class TestEncryptFile:
         key = generate_encryption_key()
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "backup.sql.gz"
-            secret = b"password=hunter2 email=jane@example.com"
-            path.write_bytes(secret)
+            # Synthetic marker bytes (not a real credential) standing in for
+            # PII a database dump could contain, per issue #960; the
+            # assertion below verifies Fernet ciphertext never leaks it.
+            sensitive_marker = b"synthetic-pii-marker-7f3a2c1d-jane-doe"
+            path.write_bytes(sensitive_marker)
             encrypted = encrypt_file(path, key)
             ciphertext = encrypted.read_bytes()
-            assert secret not in ciphertext
+            assert sensitive_marker not in ciphertext
 
     def test_raises_backup_encryption_error_on_invalid_key(self):
         with tempfile.TemporaryDirectory() as tmpdir:

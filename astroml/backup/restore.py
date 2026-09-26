@@ -285,11 +285,15 @@ class RestoreService:
             with _plaintext_backup_file(
                 self.config, backup_file, is_encrypted=data.get("is_encrypted", False)
             ) as plaintext_file:
-                # Extract tar.gz archive
+                # Extract tar.gz archive, guarding against path traversal:
+                # reject absolute member names and any member whose resolved
+                # path would land outside target_path (e.g. via `../`).
                 with tarfile.open(plaintext_file, "r:gz") as tar:
                     for member in tar.getmembers():
-                        member_path = Path(member.name).resolve()
-                        if not str(member_path).startswith(str(target_path)):
+                        if os.path.isabs(member.name) or ".." in Path(member.name).parts:
+                            raise ValueError(f"Invalid archive member path: {member.name}")
+                        member_path = (target_path / member.name).resolve()
+                        if member_path != target_path and target_path not in member_path.parents:
                             raise ValueError(f"Invalid archive member path: {member.name}")
                     tar.extractall(path=target_path)
 

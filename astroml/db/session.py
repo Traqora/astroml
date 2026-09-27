@@ -84,6 +84,16 @@ class DatabaseConfig(BaseModel):
         """Convert configuration to PostgreSQL URL."""
         return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
 
+    @property
+    def masked_url(self) -> str:
+        """Connection URL with the password masked, safe for logs/diagnostics.
+
+        Unlike :meth:`to_url`, never emits credentials in clear text
+        (see CodeQL rule py/clear-text-logging-sensitive-data).
+        """
+        masked = "***" if self.password else ""
+        return f"postgresql://{self.user}:{masked}@{self.host}:{self.port}/{self.name}"
+
     @classmethod
     def from_dict(cls, data: dict) -> DatabaseConfig:
         """Create configuration from dictionary with validation."""

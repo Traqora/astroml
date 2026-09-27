@@ -309,7 +309,7 @@ def main(argv: list[str] | None = None) -> int:
                             "name": db_config.name,
                             "user": db_config.user,
                             "password": "***" if db_config.password else "",
-                            "url": db_config.to_url(),
+                            "url": db_config.masked_url,
                         },
                         indent=2,
                     )

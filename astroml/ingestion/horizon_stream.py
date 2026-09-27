@@ -143,7 +143,7 @@ class HorizonStreamingClient:
 
             self._logger.info("Connected to Horizon stream: %s", self._request_path())
 
-            data_lines = []
+            data_lines: list[str] = []
             while not self._stop_event.is_set():
                 line = await reader.readline()
                 if not line:
@@ -185,11 +185,31 @@ class HorizonStreamingClient:
 
         paging_token = tx.get("paging_token")
         if paging_token is not None:
-            self._cursor = str(paging_token)
+            candidate = str(paging_token)
+            if self._should_rotate_baseline(candidate):
+                self._cursor = candidate
 
         result = on_transaction(tx)
         if inspect.isawaitable(result):
             await result
+
+    def _should_rotate_baseline(self, candidate: str) -> bool:
+        """Decide whether ``candidate`` may become the new cursor baseline (#939).
+
+        The cursor is the replay/skip baseline, so a stale event (a replayed
+        paging token lower than the current baseline) must never rewind it —
+        rewinding replays already-normalized transactions downstream. Tokens
+        that cannot be ordered (non-numeric) are accepted so custom cursor
+        schemes still advance; equal tokens are ignored.
+        """
+        if candidate == self._cursor:
+            return False
+        try:
+            return int(candidate) > int(self._cursor)
+        except ValueError:
+            # Either side is non-numeric (e.g. the initial "now" cursor or a
+            # custom scheme): accept the server-provided token.
+            return True
 
     def _request_path(self) -> str:
         query = urlencode({"cursor": self._cursor, "stream": "true"})

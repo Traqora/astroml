@@ -301,3 +301,20 @@ monitoring/data/
 local/
 dev/
 test_data/
+
+# Secrets & credentials - never bake these into an image (#940)
+# Inject at runtime via environment or a secrets manager instead.
+.env
+.env.*
+*.env
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+credentials.json
+client_secret*.json
+secrets/

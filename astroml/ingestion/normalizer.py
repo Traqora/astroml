@@ -91,15 +91,37 @@ _SNAPSHOT_FIELDS = ("transaction_hash", "sender", "receiver", "asset", "amount",
 
 
 def snapshot_transaction(tx: NormalizedTransaction) -> dict[str, Any]:
-    """Serialise a NormalizedTransaction into a JSON-safe snapshot dict (issue #978).
+    """Serialise a NormalizedTransaction into a JSON-safe snapshot dict (issue #978)."""
+    return {
+        "transaction_hash": tx.transaction_hash,
+        "sender": tx.sender,
+        "receiver": tx.receiver,
+        "asset": tx.asset,
+        "amount": float(tx.amount) if tx.amount is not None else None,
+        "timestamp": tx.timestamp.isoformat(),
+    }
 
-    Args:
-        tx: The normalized transaction to snapshot.
 
-    Returns:
-        Dict with the normalized fields; ``timestamp`` is ISO-8601 and
-        ``amount`` is a float (or None).
+def restore_transaction(snapshot: dict[str, Any]) -> NormalizedTransaction:
+    """Rebuild a NormalizedTransaction from :func:`snapshot_transaction` output (issue #978).
+
+    Raises:
+        ValueError: if a required field is missing or the timestamp is invalid.
     """
+    missing = [f for f in _SNAPSHOT_FIELDS if f not in snapshot]
+    if missing:
+        raise ValueError(f"snapshot missing fields: {missing}")
+    amount = snapshot["amount"]
+    return NormalizedTransaction(
+        transaction_hash=snapshot["transaction_hash"],
+        sender=snapshot["sender"],
+        receiver=snapshot["receiver"],
+        asset=snapshot["asset"],
+        amount=float(amount) if amount is not None else None,
+        timestamp=datetime.fromisoformat(snapshot["timestamp"]),
+    )
+
+
 # ---------------------------------------------------------------------------
 # CLI — issue #990
 # ---------------------------------------------------------------------------
@@ -141,11 +163,6 @@ def _to_record(tx: NormalizedTransaction) -> dict[str, Any]:
     }
 
 
-def restore_transaction(snapshot: dict[str, Any]) -> NormalizedTransaction:
-    """Rebuild a NormalizedTransaction from :func:`snapshot_transaction` output (issue #978).
-
-    Args:
-        snapshot: Snapshot dict containing every normalized field.
 _RECORD_FIELDS = ("transaction_hash", "sender", "receiver", "asset", "amount", "timestamp")
 
 
@@ -162,20 +179,6 @@ def restore_record(record: dict[str, Any]) -> NormalizedTransaction:
         A new, unpersisted NormalizedTransaction.
 
     Raises:
-        ValueError: if a required field is missing or the timestamp is invalid.
-    """
-    missing = [f for f in _SNAPSHOT_FIELDS if f not in snapshot]
-    if missing:
-        raise ValueError(f"snapshot missing fields: {missing}")
-    amount = snapshot["amount"]
-    return NormalizedTransaction(
-        transaction_hash=snapshot["transaction_hash"],
-        sender=snapshot["sender"],
-        receiver=snapshot["receiver"],
-        asset=snapshot["asset"],
-        amount=float(amount) if amount is not None else None,
-        timestamp=datetime.fromisoformat(snapshot["timestamp"]),
-    )
         ValueError: if a field is missing or the timestamp is not ISO-8601.
     """
     missing = [f for f in _RECORD_FIELDS if f not in record]

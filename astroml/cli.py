@@ -1,4 +1,83 @@
+from __future__ import annotations
 
+import argparse
+import json
+import os
+import pathlib
+
+from sqlalchemy import func, select, update
+
+from api.database import _sync_session_factory
+from api.models.orm import ModelRegistry
+
+from .db.session import load_database_config
+from .ingestion.service import IngestionService
+from .ingestion.state import StateStore
+
+CLI_DESCRIPTION = """\
+AstroML utilities CLI — manage ingestion, configuration, and the
+quick-start pipeline from a single entrypoint.
+
+For full usage, see the README "Usage" section:
+  https://github.com/Traqora/astroml#usage
+"""
+
+CLI_EPILOG = """\
+Examples:
+  # Run incremental ingestion for a ledger range
+  python -m astroml.cli ingest --start 1000 --end 1100
+
+  # Print the effective database configuration that AstroML will use
+  python -m astroml.cli config --print-db
+
+  # Same, but read the YAML config from a custom path
+  python -m astroml.cli --config ./custom/database.yaml config --print-db
+
+  # Run the end-to-end quick start with sample data
+  python -m astroml.cli quickstart --num-ledgers 200 --epochs 5
+
+  # Preprocess a backfill dataset into Parquet
+  python -m astroml.cli preprocess-backfill --input data.csv --output out.parquet
+
+  # Select a runtime environment (sets ASTROML_ENV for downstream loaders)
+  python -m astroml.cli --env production config --print-db
+
+Environment variables:
+  ASTROML_DATABASE_URL  Overrides the database URL from config/database.yaml.
+  ASTROML_ENV           Runtime environment name (development | production).
+                        Set automatically by --env when provided.
+"""
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="astroml",
+        description=CLI_DESCRIPTION,
+        epilog=CLI_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--config",
+        type=pathlib.Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to the database YAML config (default: config/database.yaml). "
+            "Used by `config --print-db` and any subcommand that reads the "
+            "database configuration."
+        ),
+    )
+    parser.add_argument(
+        "--env",
+        type=str,
+        default=None,
+        metavar="NAME",
+        help=(
+            "Runtime environment name (e.g., development, production). "
+            "When provided, sets ASTROML_ENV for downstream loaders unless "
+            "ASTROML_ENV is already set in the process environment."
+        ),
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     # LLM subcommand

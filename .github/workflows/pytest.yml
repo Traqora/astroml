@@ -69,7 +69,7 @@ jobs:
 
       - name: Run pytest (CPU)
         if: matrix.flavor == 'cpu'
-        run: pytest -v -m "not gpu" -p no:randomly --tb=short --cov=astroml --cov-report=xml --cov-report=term
+        run: pytest -v -m "not gpu" -p no:randomly --tb=short --continue-on-collection-errors --cov=astroml --cov-report=xml --cov-report=term
 
       - name: Upload coverage to Codecov
         if: matrix.flavor == 'cpu' && matrix.python-version == '3.11' && matrix.torch-version == '2.1'

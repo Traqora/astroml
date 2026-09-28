@@ -12,6 +12,11 @@ One-page reference for common development tasks. Print-friendly.
 # Run the full test suite
 pytest tests/
 
+# Run the full test suite without aborting on the first bad import.
+# A module that fails to import (e.g. a SyntaxError in astroml/) otherwise
+# stops collection and runs zero tests, hiding every other failure (#1027).
+pytest tests/ --continue-on-collection-errors
+
 # Run API tests only
 pytest api/tests/ -v --tb=short
 
@@ -23,6 +28,22 @@ pytest tests/ --cov=astroml --cov-report=term-missing
 
 # Run only fast (non-integration) tests
 pytest tests/ -m "not integration"
+```
+
+### When a whole test module fails to import
+
+A collection error is usually a defect in the library, not the test. Check what
+broke the import before touching the test:
+
+```bash
+# Show the import error instead of just the "ERROR" summary line
+pytest tests/test_some_module.py --continue-on-collection-errors -q
+
+# Compile the suspect module directly
+python -m py_compile astroml/path/to/module.py
+
+# Confirm the package still imports end to end
+python -c "import astroml.cache, astroml.features"
 ```
 
 ### Code Quality

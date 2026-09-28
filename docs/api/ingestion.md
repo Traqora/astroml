@@ -68,6 +68,33 @@ print(f"Processed: {len(result.processed)}")
 print(f"Skipped: {len(result.skipped)}")
 ```
 
+#### Failure notifications
+
+`IngestionService` accepts an optional `notifier` — any `(message) -> Any`
+callable — which is invoked with a one-line summary whenever an ingestion run
+fails. `SlackIntegration.send_webhook` is the intended implementation:
+
+```python
+from astroml.chat.slack import SlackConfig, SlackIntegration
+from astroml.ingestion import IngestionService
+
+slack = SlackIntegration(SlackConfig(webhook_url=os.environ["SLACK_WEBHOOK_URL"]))
+service = IngestionService(notifier=slack.send_webhook)
+```
+
+Behavior worth knowing:
+
+| Path | Notified? | Notes |
+|------|-----------|-------|
+| `ingest()` | Yes | Message names the last attempted ledger and how many succeeded. |
+| `ingest_incremental()` | Yes | Delegates to `ingest()`. |
+| `ingest_backfill_chunked()` | Yes, once per failed chunk | The chunk exception is caught so the backfill continues, but each failure is still reported (issue #993). |
+| No failure | No | A successful run never calls the notifier. |
+
+The notifier's return value is ignored, and an exception raised by the notifier
+is logged at `WARNING` rather than propagated — alerting can never mask or
+replace the original ingestion error.
+
 ### IngestionResult
 
 Container for ingestion operation results.
@@ -299,6 +326,72 @@ async def process_ledger(ledger):
 async for ledger in stream.stream_ledgers([process_ledger]):
     # Process each ledger
     pass
+```
+
+### HorizonStreamingClient
+
+SSE client for Horizon transaction events, with automatic reconnection.
+
+#### Delivery guarantees
+
+SSE plus automatic reconnection makes delivery **at-least-once**. When a
+connection drops, Horizon replays the tail of the page it had already begun
+sending, so the same transaction can arrive again — often many times per second
+of outage.
+
+That matters downstream. `ClaimService.submit_claim()` keys pending claims by
+`claim_reference` and rebuilds the submission, so a replayed transaction resets
+`retry_count` to `0` and restarts the retry budget for a claim that is already
+in flight. A handler that moves money has the same problem, one tier worse.
+
+`HorizonStreamingClient` drops replays for you. A transaction whose
+`paging_token` was already delivered is logged at `DEBUG` and counted in
+`duplicates_skipped` instead of reaching the handler again. The cursor still
+advances, so suppressing a replay never rewinds the stream.
+
+De-duplication is keyed on `paging_token` and bounded by `dedupe_capacity`
+tokens (default 1024), so memory stays constant on a long-running stream.
+Transactions with no `paging_token` cannot be identified and are always
+delivered.
+
+#### Constructor Parameters
+
+- `base_url` (str): Horizon base URL, must be `http` or `https`
+- `endpoint` (str): SSE path, default `/transactions`
+- `cursor` (str): Initial paging token, default `"now"`
+- `reconnect_delay` (float): Initial reconnect backoff, default `1.0`
+- `max_reconnect_delay` (float): Backoff ceiling, default `30.0`
+- `dedupe` (bool): Suppress replayed transactions, default `True`
+- `dedupe_capacity` (int): Recently delivered tokens to remember, default `1024`
+- `logger` (logging.Logger): Logger for disconnect and replay messages
+
+#### Properties
+
+- `cursor` (str): Current paging token, advanced as transactions are read
+- `duplicates_skipped` (int): Replays suppressed since construction
+
+#### Example
+
+```python
+from astroml.ingestion.horizon_stream import HorizonStreamingClient
+
+client = HorizonStreamingClient(base_url="https://horizon.stellar.org")
+
+async def submit_claim(tx):
+    # Reaches this handler once per transaction, replays excluded.
+    claim_service.submit_claim(claim_reference=tx["id"], ...)
+
+await client.start(submit_claim)
+
+print(f"suppressed {client.duplicates_skipped} replays")
+```
+
+If your handler is already idempotent (writes keyed on the transaction id into
+a table with a unique constraint, for example), opt out and take raw
+at-least-once delivery:
+
+```python
+client = HorizonStreamingClient(dedupe=False)
 ```
 
 ### EnhancedStream

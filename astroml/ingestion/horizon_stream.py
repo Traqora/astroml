@@ -7,6 +7,7 @@ import inspect
 import json
 import logging
 import ssl
+from collections import OrderedDict
 from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlencode, urlparse
@@ -14,13 +15,33 @@ from urllib.parse import urlencode, urlparse
 Transaction = dict[str, Any]
 TransactionHandler = Callable[[Transaction], Any]
 
+# How many recently delivered paging tokens are remembered for de-duplication.
+DEFAULT_DEDUPE_CAPACITY = 1024
+
 
 class HorizonStreamError(RuntimeError):
     """Raised when the Horizon stream returns an invalid HTTP response."""
 
 
 class HorizonStreamingClient:
-    """Consume Horizon transaction events over Server-Sent Events (SSE)."""
+    """Consume Horizon transaction events over Server-Sent Events (SSE).
+
+    SSE plus automatic reconnection makes delivery **at-least-once**: when a
+    connection drops, Horizon replays the tail of the stream it had already
+    started sending, so the same transaction can arrive again. A handler that
+    submits claims or moves money must therefore be idempotent, or must not see
+    the replay at all.
+
+    By default the client drops replays for you: a transaction whose
+    ``paging_token`` was already delivered is logged at ``DEBUG`` and counted in
+    :attr:`duplicates_skipped` instead of being handed to the handler again. The
+    cursor is still advanced, so skipping never rewinds the stream. Pass
+    ``dedupe=False`` to opt out and receive raw at-least-once delivery.
+
+    Transactions with no ``paging_token`` cannot be identified and are always
+    delivered. The memory used for de-duplication is bounded by
+    ``dedupe_capacity`` tokens.
+    """
 
     def __init__(
         self,
@@ -30,6 +51,8 @@ class HorizonStreamingClient:
         cursor: str = "now",
         reconnect_delay: float = 1.0,
         max_reconnect_delay: float = 30.0,
+        dedupe: bool = True,
+        dedupe_capacity: int = DEFAULT_DEDUPE_CAPACITY,
         logger: logging.Logger | None = None,
     ) -> None:
         parsed = urlparse(base_url)
@@ -39,20 +62,31 @@ class HorizonStreamingClient:
             raise ValueError("base_url must include a hostname")
         if reconnect_delay <= 0 or max_reconnect_delay <= 0:
             raise ValueError("Reconnect delays must be positive")
+        if dedupe_capacity < 1:
+            raise ValueError("dedupe_capacity must be >= 1")
 
         self._base_url = parsed
         self._endpoint = endpoint if endpoint.startswith("/") else f"/{endpoint}"
         self._cursor = str(cursor)
         self._reconnect_delay = reconnect_delay
         self._max_reconnect_delay = max_reconnect_delay
+        self._dedupe = dedupe
+        self._dedupe_capacity = dedupe_capacity
         self._logger = logger or logging.getLogger(__name__)
         self._stop_event = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
         self._writer: asyncio.StreamWriter | None = None
+        self._seen: OrderedDict[str, None] = OrderedDict()
+        self._duplicates_skipped = 0
 
     @property
     def cursor(self) -> str:
         return self._cursor
+
+    @property
+    def duplicates_skipped(self) -> int:
+        """Number of replayed transactions suppressed since construction."""
+        return self._duplicates_skipped
 
     async def start(self, on_transaction: TransactionHandler) -> None:
         if self._task and not self._task.done():
@@ -68,7 +102,7 @@ class HorizonStreamingClient:
             try:
                 await writer.wait_closed()
             except Exception:  # pragma: no cover - transport specific
-                pass
+                self._logger.debug("Error closing Horizon stream writer", exc_info=True)
 
         if self._task is not None:
             task = self._task
@@ -164,7 +198,7 @@ class HorizonStreamingClient:
             try:
                 await writer.wait_closed()
             except Exception:  # pragma: no cover - transport specific
-                pass
+                self._logger.debug("Error closing Horizon stream writer", exc_info=True)
             if self._writer is writer:
                 self._writer = None
 
@@ -183,15 +217,43 @@ class HorizonStreamingClient:
             self._logger.warning("Skipping non-object transaction payload: %r", tx)
             return
 
+        # Issue #983 — advance the cursor optimistically, but roll it back if
+        # the handler fails so the reconnect resumes from the last
+        # successfully handled transaction instead of skipping this one.
+        previous_cursor = self._cursor
         paging_token = tx.get("paging_token")
         if paging_token is not None:
             candidate = str(paging_token)
             if self._should_rotate_baseline(candidate):
                 self._cursor = candidate
+            if self._dedupe and self._already_delivered(candidate):
+                self._duplicates_skipped += 1
+                self._logger.debug("Horizon stream: skipping replayed paging_token %s", candidate)
+                return
+            self._remember(candidate)
 
-        result = on_transaction(tx)
-        if inspect.isawaitable(result):
-            await result
+        try:
+            result = on_transaction(tx)
+            if inspect.isawaitable(result):
+                await result
+        except BaseException:
+            self._cursor = previous_cursor
+            self._logger.warning(
+                "Transaction handler failed; cursor rolled back",
+                extra={"cursor": previous_cursor, "paging_token": paging_token},
+            )
+            raise
+
+    def _already_delivered(self, token: str) -> bool:
+        """Whether ``token`` was delivered within the de-duplication window."""
+        return token in self._seen
+
+    def _remember(self, token: str) -> None:
+        """Record ``token`` as delivered, evicting the oldest once full."""
+        self._seen[token] = None
+        self._seen.move_to_end(token)
+        while len(self._seen) > self._dedupe_capacity:
+            self._seen.popitem(last=False)
 
     def _should_rotate_baseline(self, candidate: str) -> bool:
         """Decide whether ``candidate`` may become the new cursor baseline (#939).

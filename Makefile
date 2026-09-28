@@ -37,7 +37,7 @@ quickstart-verbose:
 	python -m astroml.quick_start --num-ledgers 200 --num-accounts 100 --epochs 20
 
 test:
-	pytest tests/ -v
+	pytest tests/ -v --continue-on-collection-errors
 
 test-api:
 	pytest api/tests/ -v --tb=short

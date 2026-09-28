@@ -90,7 +90,7 @@ jobs:
         run: pip-audit
 
       - name: Run tests
-        run: pytest tests/ -v --tb=short -p no:randomly --cov=astroml --cov=api --cov-report=xml --junitxml=test-results/pytest-${{ matrix.python-version }}.xml
+        run: pytest tests/ -v --tb=short -p no:randomly --continue-on-collection-errors --cov=astroml --cov=api --cov-report=xml --junitxml=test-results/pytest-${{ matrix.python-version }}.xml
 
       - name: Upload test and coverage artifacts
         uses: actions/upload-artifact@v4

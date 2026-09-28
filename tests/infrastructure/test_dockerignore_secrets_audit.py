@@ -78,6 +78,7 @@ KNOWN_DEV_PASSWORDS = {
     "test",
     "postgres",
     "astroml_password",
+    "p",  # classic ``scheme://user:p@host`` test fixture
 }
 
 # URI with an embedded password: scheme://user:password@host/...
@@ -89,6 +90,8 @@ def _is_placeholder(uri: str) -> bool:
     password_part = uri.split("://", 1)[1].split("@", 1)[0].split(":", 1)[1]
     if password_part.lower() in KNOWN_DEV_PASSWORDS:
         return True
+    if password_part and set(password_part) <= {"*"}:
+        return True  # masked password (DatabaseConfig.masked_url) — safe by construction
     if any(char in password_part for char in TEMPLATE_CHARS):
         return True  # ${VAR} interpolation, {field} templates, regex fragments
     return any(marker in lowered for marker in PLACEHOLDER_MARKERS)
@@ -145,6 +148,17 @@ def test_no_credential_uris_in_build_context():
         + "\n(Dev defaults like astroml:astroml_password, ${VAR} interpolation, "
         "{field} templates and regex fragments are allowed; real secrets are not.)"
     )
+
+
+def test_masked_and_fixture_urls_are_allowed_real_secrets_are_not():
+    """The scanner must stay calibrated: masked passwords (as produced by
+    ``DatabaseConfig.masked_url``) and trivial ``user:p`` fixtures are safe,
+    while a realistic credential URI must still be flagged."""
+    assert _is_placeholder("postgresql://svc:***@db.internal:5432/ledger")
+    assert _is_placeholder("postgresql://u:p@h:5432/n")
+    # Built at runtime so this file itself contains no scannable credential URI.
+    realistic = "postgresql://svc:" + "sup3r-s3cret" + "@db.internal:5432/ledger"
+    assert not _is_placeholder(realistic)
 
 
 def test_scan_actually_covers_the_context():

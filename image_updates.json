@@ -1,0 +1,22 @@
+[
+  {
+    "dockerfile": "Dockerfile",
+    "line_number": 11,
+    "stage": "base",
+    "image": "python",
+    "current_tag": "3.11.9-slim-bookworm",
+    "latest_tag": "3.11.15-alpine3.24",
+    "current_ref": "python:3.11.9-slim-bookworm",
+    "new_ref": "python:3.11.15-alpine3.24"
+  },
+  {
+    "dockerfile": "Dockerfile",
+    "line_number": 90,
+    "stage": "training-base",
+    "image": "nvidia/cuda",
+    "current_tag": "12.1-runtime-base-ubuntu22.04",
+    "latest_tag": "12.4.0-base-ubuntu20.04",
+    "current_ref": "nvidia/cuda:12.1-runtime-base-ubuntu22.04",
+    "new_ref": "nvidia/cuda:12.4.0-base-ubuntu20.04"
+  }
+]

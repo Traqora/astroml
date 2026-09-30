@@ -20,10 +20,45 @@ AstroML provides end-to-end tooling for:
 * Anomaly detection
 * Temporal modeling
 * Reproducible ML experimentation
+* **LLM Agent Framework** for multi-step reasoning and autonomous task execution
 
 ---
 
-## 🧠 Core Idea
+## � LLM Agent Framework
+
+AstroML now includes a powerful **LLM Agent Framework** for autonomous task execution and multi-step reasoning:
+
+### Key Capabilities
+
+* **Multi-step reasoning** with think-act-observe loops
+* **Task planning** with automatic decomposition
+* **Tool calling** for autonomous execution
+* **Memory management** with conversation and vector storage
+* **Pre-configured agents** for fraud detection and model training
+
+### Quick Start
+
+```bash
+# Interactive agent mode
+python -m astroml agent interactive --agent-type fraud-detection
+
+# Run a single task
+python -m astroml agent run \
+  --agent-type model-training \
+  --task "Train a fraud detection model" \
+  --verbose
+
+# List available tools
+python -m astroml agent list-tools
+```
+
+### Documentation
+
+See [AGENTS_FRAMEWORK.md](./AGENTS_FRAMEWORK.md) for complete documentation.
+
+---
+
+## �🧠 Core Idea
 
 Blockchain networks are naturally **graph-structured systems**:
 

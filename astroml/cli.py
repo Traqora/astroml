@@ -43,6 +43,30 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="Optional explicit input format.",
     )
 
+    agent = sub.add_parser("agent", help="LLM Agent Framework for autonomous task execution")
+    agent_sub = agent.add_subparsers(dest="agent_command", required=True)
+
+    agent_interactive = agent_sub.add_parser("interactive", help="Run agent in interactive mode")
+    agent_interactive.add_argument(
+        "--agent-type",
+        choices=["fraud-detection", "model-training", "generic"],
+        default="generic",
+        help="Type of agent to use",
+    )
+
+    agent_run = agent_sub.add_parser("run", help="Run agent on a single task")
+    agent_run.add_argument(
+        "--agent-type",
+        choices=["fraud-detection", "model-training", "generic"],
+        default="generic",
+        help="Type of agent to use",
+    )
+    agent_run.add_argument("--task", required=True, help="Task description")
+    agent_run.add_argument("--context", help="Context as JSON string")
+    agent_run.add_argument("--verbose", action="store_true", help="Enable verbose output")
+
+    agent_sub.add_parser("list-tools", help="List available tools")
+
     args = parser.parse_args(argv)
 
     if args.command == "ingest":
@@ -82,6 +106,22 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
         print(json.dumps({"output": str(output_path)}, indent=2))
         return 0
+
+    if args.command == "agent":
+        from .agents.cli import main as agent_main
+
+        # Build argv for agent CLI
+        agent_argv = [args.agent_command]
+        if args.agent_command == "interactive":
+            agent_argv.extend(["--agent-type", args.agent_type])
+        elif args.agent_command == "run":
+            agent_argv.extend(["--agent-type", args.agent_type, "--task", args.task])
+            if args.context:
+                agent_argv.extend(["--context", args.context])
+            if args.verbose:
+                agent_argv.append("--verbose")
+
+        return agent_main(agent_argv)
 
     parser.print_help()
     return 1

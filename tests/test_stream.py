@@ -2,7 +2,7 @@
 
 All network and database interactions are mocked.
 """
-import asyncio
+
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -28,17 +28,19 @@ def config():
 def sample_tx_event():
     """A mock SSE event with valid transaction data."""
     event = MagicMock()
-    event.data = json.dumps({
-        "hash": "x" * 64,
-        "ledger": 100,
-        "source_account": "G" + "A" * 55,
-        "created_at": "2024-01-15T12:30:00Z",
-        "fee_charged": "100",
-        "operation_count": 1,
-        "successful": True,
-        "memo_type": "none",
-        "paging_token": "99999",
-    })
+    event.data = json.dumps(
+        {
+            "hash": "x" * 64,
+            "ledger": 100,
+            "source_account": "G" + "A" * 55,
+            "created_at": "2024-01-15T12:30:00Z",
+            "fee_charged": "100",
+            "operation_count": 1,
+            "successful": True,
+            "memo_type": "none",
+            "paging_token": "99999",
+        }
+    )
     return event
 
 

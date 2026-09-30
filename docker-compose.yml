@@ -1,8 +1,29 @@
 version: '3.8'
 
+# Shared restart, healthcheck, and graceful-shutdown defaults (issue #775).
+# Long-running services use unless-stopped; one-off jobs (training, soroban-build)
+# keep restart: "no". Healthchecks target each service's readiness probe — HTTP
+# /healthz/ready for the API, native probes for infra, import/ping checks for workers.
+x-graceful-shutdown: &graceful-shutdown
+  stop_grace_period: 30s
+  stop_signal: SIGTERM
+  init: true
+
+x-graceful-shutdown-long: &graceful-shutdown-long
+  stop_grace_period: 60s
+  stop_signal: SIGTERM
+  init: true
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 40s
+
 services:
   # PostgreSQL Database
   postgres:
+    <<: *graceful-shutdown
     image: postgres:15-alpine
     container_name: astroml-postgres
     environment:
@@ -24,8 +45,9 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # Redis for caching and job queues
+  # Redis for caching (including LLM caching service) and job queues
   redis:
+    <<: *graceful-shutdown
     image: redis:7-alpine
     container_name: astroml-redis
     ports:
@@ -42,8 +64,115 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes
 
+  # FastAPI REST API Service
+  api:
+    <<: *graceful-shutdown
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: astroml-api
+    environment:
+      - DATABASE_URL=postgresql://astroml:astroml_password@postgres:5432/astroml
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=INFO
+      - ASTROML_ENV=container
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret-key-change-in-production}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config:/app/config:ro
+      - api_logs:/app/logs
+    networks:
+      - astroml-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # Celery worker — issue #296
+  celery-worker:
+    <<: *graceful-shutdown-long
+    build: .
+    command: celery -A astroml.tasks.celery_app worker --loglevel=info
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    networks:
+      - astroml-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A astroml.tasks.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      <<: *healthcheck-defaults
+      start_period: 60s
+    restart: unless-stopped
+
+  # Flower — Celery monitoring UI — issue #296
+  flower:
+    <<: *graceful-shutdown
+    build: .
+    command: celery -A astroml.tasks.celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    networks:
+      - astroml-network
+    depends_on:
+      celery-worker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5555/"]
+      <<: *healthcheck-defaults
+      start_period: 60s
+    restart: unless-stopped
+
+  # Feature Store Service
+  feature-store:
+    <<: *graceful-shutdown
+    build:
+      context: .
+      target: feature-store
+    container_name: astroml-feature-store
+    environment:
+      - DATABASE_URL=postgresql://astroml:astroml_password@postgres:5432/astroml
+      - REDIS_URL=redis://redis:6379/0
+      - FEATURE_STORE_PATH=/app/feature_store
+      - LOG_LEVEL=INFO
+      - ASTROML_ENV=container
+    ports:
+      - "8000:8000"
+      - "8080:8080"
+    volumes:
+      - feature_store_data:/app/feature_store
+      - feature_store_logs:/app/logs
+      - ./config:/app/config:ro
+    networks:
+      - astroml-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "from astroml.features import create_feature_store; create_feature_store('/app/feature_store')"]
+      <<: *healthcheck-defaults
+    restart: unless-stopped
+    profiles:
+      - feature-store
+      - full
+
   # Ingestion Service
   ingestion:
+    <<: *graceful-shutdown-long
     build:
       context: .
       target: ingestion
@@ -51,15 +180,18 @@ services:
     environment:
       - DATABASE_URL=postgresql://astroml:astroml_password@postgres:5432/astroml
       - REDIS_URL=redis://redis:6379/0
+      - FEATURE_STORE_PATH=/app/feature_store
       - LOG_LEVEL=INFO
       - STELLAR_NETWORK_PASSPHRASE=Public Global Stellar Network ; September 2015
+      - ASTROML_ENV=container
     ports:
-      - "8000:8000"
-      - "8080:8080"
+      - "8001:8000"
+      - "8081:8080"
     volumes:
       - ./config:/app/config:ro
       - ingestion_logs:/app/logs
       - ingestion_data:/app/data
+      - feature_store_data:/app/feature_store
     networks:
       - astroml-network
     depends_on:
@@ -67,11 +199,17 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      feature-store:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import astroml.ingestion; import astroml.features"]
+      <<: *healthcheck-defaults
     restart: unless-stopped
     command: ["python", "-m", "astroml.ingestion"]
 
   # Enhanced Streaming Service
   streaming:
+    <<: *graceful-shutdown-long
     build:
       context: .
       target: ingestion
@@ -79,14 +217,17 @@ services:
     environment:
       - DATABASE_URL=postgresql://astroml:astroml_password@postgres:5432/astroml
       - REDIS_URL=redis://redis:6379/0
+      - FEATURE_STORE_PATH=/app/feature_store
       - LOG_LEVEL=INFO
       - STELLAR_HORIZON_URL=https://horizon.stellar.org
       - STELLAR_NETWORK_PASSPHRASE=Public Global Stellar Network ; September 2015
+      - ASTROML_ENV=container
     ports:
-      - "8001:8000"
+      - "8002:8000"
     volumes:
       - ./config:/app/config:ro
       - streaming_logs:/app/logs
+      - feature_store_data:/app/feature_store
     networks:
       - astroml-network
     depends_on:
@@ -94,19 +235,30 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      feature-store:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import astroml.ingestion.enhanced_stream"]
+      <<: *healthcheck-defaults
     restart: unless-stopped
     command: ["python", "-m", "astroml.ingestion.enhanced_stream"]
 
   # Training Service (GPU-enabled)
   training-gpu:
+    stop_grace_period: 120s
+    stop_signal: SIGTERM
+    init: true
     build:
       context: .
       target: training
     container_name: astroml-training-gpu
     environment:
       - DATABASE_URL=postgresql://astroml:astroml_password@postgres:5432/astroml
+      - REDIS_URL=redis://redis:6379/0
+      - FEATURE_STORE_PATH=/app/feature_store
       - CUDA_VISIBLE_DEVICES=0
       - PYTHONPATH=/app
+      - ASTROML_ENV=container
     ports:
       - "6006:6006"  # TensorBoard
     volumes:
@@ -114,14 +266,24 @@ services:
       - training_models:/app/models
       - training_data:/app/data
       - training_logs:/app/logs
+      - feature_store_data:/app/feature_store
     networks:
       - astroml-network
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      feature-store:
+        condition: service_started
     restart: "no"  # Training jobs are typically run once
+    healthcheck:
+      test: ["CMD", "python", "-c", "import torch; import astroml.features"]
+      <<: *healthcheck-defaults
+      start_period: 120s
     profiles:
       - gpu
+      - full
     deploy:
       resources:
         reservations:
@@ -132,13 +294,19 @@ services:
 
   # Training Service (CPU-only)
   training-cpu:
+    stop_grace_period: 120s
+    stop_signal: SIGTERM
+    init: true
     build:
       context: .
       target: training-cpu
     container_name: astroml-training-cpu
     environment:
       - DATABASE_URL=postgresql://astroml:astroml_password@postgres:5432/astroml
+      - REDIS_URL=redis://redis:6379/0
+      - FEATURE_STORE_PATH=/app/feature_store
       - PYTHONPATH=/app
+      - ASTROML_ENV=container
     ports:
       - "6007:6006"  # TensorBoard
     volumes:
@@ -146,17 +314,28 @@ services:
       - training_models:/app/models
       - training_data:/app/data
       - training_logs:/app/logs
+      - feature_store_data:/app/feature_store
     networks:
       - astroml-network
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      feature-store:
+        condition: service_started
     restart: "no"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import torch; import astroml.features"]
+      <<: *healthcheck-defaults
+      start_period: 120s
     profiles:
       - cpu
+      - full
 
   # Development Environment
   dev:
+    <<: *graceful-shutdown
     build:
       context: .
       target: development
@@ -164,15 +343,18 @@ services:
     environment:
       - DATABASE_URL=postgresql://astroml:astroml_password@postgres:5432/astroml
       - REDIS_URL=redis://redis:6379/0
+      - FEATURE_STORE_PATH=/app/feature_store
       - PYTHONPATH=/app
+      - ASTROML_ENV=container
     ports:
-      - "8002:8000"
+      - "8003:8000"
       - "8888:8888"  # Jupyter
       - "6008:6006"  # TensorBoard
     volumes:
       - .:/app
       - dev_logs:/app/logs
       - dev_data:/app/data
+      - feature_store_data:/app/feature_store
     networks:
       - astroml-network
     depends_on:
@@ -180,13 +362,21 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      feature-store:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/api"]
+      <<: *healthcheck-defaults
+      start_period: 60s
     restart: unless-stopped
     profiles:
       - dev
+      - full
     command: ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root"]
 
   # Production Service
   production:
+    <<: *graceful-shutdown-long
     build:
       context: .
       target: production
@@ -194,13 +384,16 @@ services:
     environment:
       - DATABASE_URL=postgresql://astroml:astroml_password@postgres:5432/astroml
       - REDIS_URL=redis://redis:6379/0
+      - FEATURE_STORE_PATH=/app/feature_store
       - LOG_LEVEL=WARNING
+      - ASTROML_ENV=container
     ports:
-      - "8000:8000"
+      - "8004:8000"
     volumes:
       - ./config:/app/config:ro
       - production_logs:/app/logs
       - production_data:/app/data
+      - feature_store_data:/app/feature_store
     networks:
       - astroml-network
     depends_on:
@@ -208,12 +401,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      feature-store:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import astroml; import astroml.features"]
+      <<: *healthcheck-defaults
     restart: unless-stopped
     profiles:
       - prod
+      - full
 
   # Monitoring with Prometheus (optional)
   prometheus:
+    <<: *graceful-shutdown
     image: prom/prometheus:latest
     container_name: astroml-prometheus
     ports:
@@ -224,12 +424,19 @@ services:
       - prometheus_data:/prometheus
     networks:
       - astroml-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     profiles:
       - monitoring
     restart: unless-stopped
 
   # Grafana for visualization (optional)
   grafana:
+    <<: *graceful-shutdown
     image: grafana/grafana:latest
     container_name: astroml-grafana
     environment:
@@ -243,13 +450,21 @@ services:
     networks:
       - astroml-network
     depends_on:
-      - prometheus
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     profiles:
       - monitoring
     restart: unless-stopped
 
   # Soroban Contract Development
   soroban-dev:
+    <<: *graceful-shutdown
     build:
       context: .
       dockerfile: Dockerfile.soroban
@@ -268,12 +483,19 @@ services:
       - soroban_logs:/app/logs
     networks:
       - astroml-network
+    healthcheck:
+      test: ["CMD", "soroban", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
     profiles:
       - soroban
 
   # Soroban Contract Build
   soroban-build:
+    restart: "no"
     build:
       context: .
       dockerfile: Dockerfile.soroban
@@ -291,6 +513,7 @@ services:
 
   # Soroban Contract Testing
   soroban-test:
+    restart: "no"
     build:
       context: .
       dockerfile: Dockerfile.soroban
@@ -316,6 +539,10 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  feature_store_data:
+    driver: local
+  feature_store_logs:
     driver: local
   ingestion_logs:
     driver: local
@@ -346,4 +573,6 @@ volumes:
   soroban_wasm:
     driver: local
   soroban_logs:
+    driver: local
+  api_logs:
     driver: local

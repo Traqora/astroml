@@ -7,8 +7,17 @@ resources:
   - namespace.yaml
   - postgres-deployment.yaml
   - redis-deployment.yaml
+  - feature-store-deployment.yaml
   - astroml-deployment.yaml
+  - astroml-api-deployment.yaml
+  - llm-canary-deployment.yaml
+  - services.yaml
+  - ingress.yaml
+  - monitoring.yaml
+  - logging.yaml
   - rbac.yaml
+  - horizontal-pod-autoscaler.yaml
+  - serving-worker-hpa.yaml
 
 commonLabels:
   managed-by: kustomize

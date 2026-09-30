@@ -1,0 +1,373 @@
+.discussions-container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.discussions-header {
+  margin-bottom: 32px;
+  text-align: center;
+}
+
+.discussions-header h1 {
+  font-size: 32px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.discussions-header p {
+  color: #666;
+  font-size: 16px;
+}
+
+.discussions-controls {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.search-form {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  min-width: 300px;
+}
+
+.search-input {
+  flex: 1;
+  padding: 10px 16px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.search-button,
+.new-discussion-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.search-button {
+  background-color: #0066cc;
+  color: white;
+}
+
+.search-button:hover {
+  background-color: #0052a3;
+}
+
+.new-discussion-btn {
+  background-color: #28a745;
+  color: white;
+}
+
+.new-discussion-btn:hover {
+  background-color: #218838;
+}
+
+.new-discussion-form {
+  background: #f0f8ff;
+  border: 1px solid #b3d9ff;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.new-discussion-form h3 {
+  margin: 0 0 8px 0;
+}
+
+.new-discussion-form p {
+  margin: 0 0 12px 0;
+  color: #666;
+}
+
+.github-link-btn {
+  display: inline-block;
+  padding: 10px 16px;
+  background-color: #24292e;
+  color: white;
+  text-decoration: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.github-link-btn:hover {
+  background-color: #1a1e22;
+}
+
+.discussions-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.filter-btn:hover {
+  border-color: #0066cc;
+  color: #0066cc;
+}
+
+.filter-btn.active {
+  background-color: #0066cc;
+  color: white;
+  border-color: #0066cc;
+}
+
+.error-message {
+  padding: 12px 16px;
+  background-color: #fee;
+  color: #c33;
+  border: 1px solid #fcc;
+  border-radius: 6px;
+  margin-bottom: 20px;
+}
+
+.loading-state,
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+  font-size: 16px;
+}
+
+.discussions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.discussion-card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 20px;
+  background: white;
+  transition: box-shadow 0.2s;
+}
+
+.discussion-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.discussion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 12px;
+  gap: 12px;
+}
+
+.discussion-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.discussion-header h3 a {
+  color: #0066cc;
+  text-decoration: none;
+}
+
+.discussion-header h3 a:hover {
+  text-decoration: underline;
+}
+
+.category-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  background-color: #f0f0f0;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #333;
+  white-space: nowrap;
+}
+
+.discussion-body {
+  margin: 0 0 12px 0;
+  color: #555;
+  line-height: 1.5;
+}
+
+.discussion-meta {
+  display: flex;
+  gap: 20px;
+  font-size: 13px;
+  color: #666;
+  flex-wrap: wrap;
+}
+
+.author {
+  cursor: pointer;
+  color: #0066cc;
+  transition: color 0.2s;
+}
+
+.author:hover {
+  color: #0052a3;
+}
+
+.author strong {
+  font-weight: 600;
+}
+
+.comments,
+.date {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.reputation-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.reputation-card {
+  background: white;
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 500px;
+  width: 100%;
+  position: relative;
+}
+
+.close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: #f0f0f0;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-btn:hover {
+  background: #e0e0e0;
+}
+
+.reputation-card h3 {
+  margin: 0 0 24px 0;
+  font-size: 24px;
+}
+
+.reputation-score {
+  text-align: center;
+  padding: 24px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+
+.score-value {
+  font-size: 48px;
+  font-weight: 700;
+  color: #0066cc;
+}
+
+.score-label {
+  font-size: 14px;
+  color: #666;
+  margin-top: 8px;
+}
+
+.reputation-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat {
+  text-align: center;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #333;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #666;
+  margin-top: 6px;
+}
+
+.github-profile-link {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  text-align: center;
+  background-color: #24292e;
+  color: white;
+  text-decoration: none;
+  border-radius: 6px;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.github-profile-link:hover {
+  background-color: #1a1e22;
+}
+
+@media (max-width: 768px) {
+  .discussions-container {
+    padding: 16px;
+  }
+
+  .discussions-header h1 {
+    font-size: 24px;
+  }
+
+  .discussions-controls {
+    flex-direction: column;
+  }
+
+  .search-form {
+    flex-direction: column;
+  }
+
+  .discussion-header {
+    flex-direction: column;
+  }
+
+  .discussion-meta {
+    flex-direction: column;
+    gap: 8px;
+  }
+}

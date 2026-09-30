@@ -1,0 +1,53 @@
+# Automated Feature Engineering Configuration for AstroML
+# Deep Feature Synthesis (DFS) on Relational Transaction Graphs
+
+target_entity: "accounts"
+max_depth: 2
+verbose: false
+
+# Aggregation primitives applied over related entities (e.g. transactions per account)
+agg_primitives:
+  - "mean"
+  - "sum"
+  - "count"
+  - "std"
+  - "max"
+  - "min"
+  - "skew"
+  - "num_unique"
+  - "mode"
+
+# Transform primitives applied to features
+trans_primitives:
+  - "day"
+  - "month"
+  - "hour"
+  - "percentile"
+  - "cum_sum"
+  - "diff"
+
+# Automated Feature Selection & Pruning Thresholds
+feature_selection:
+  enabled: true
+  variance_threshold: 0.01       # Drop near-constant features
+  correlation_threshold: 0.95    # Drop collinear features
+  max_missing_rate: 0.3          # Drop features with >30% missing values
+
+# Feature Importance Ranking Settings
+feature_importance:
+  enabled: true
+  method: "random_forest"         # random_forest, gradient_boosting, mutual_info, correlation
+  top_k: 50                       # Retain top K most predictive features
+  random_state: 42
+
+# Entity Set Schema Definition
+entities:
+  accounts:
+    index: "account_id"
+  transactions:
+    index: "transaction_id"
+    time_index: "timestamp"
+    foreign_keys:
+      - parent_entity: "accounts"
+        parent_key: "account_id"
+        foreign_key: "source_account"

@@ -1,29 +1,38 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """Validation modules for AstroML.
 
-Expose data integrity and leakage detection utilities here.
+Expose validation submodules without eagerly importing the entire validation
+stack at package import time. This keeps focused unit tests, such as the
+deduplication tests, isolated from unrelated optional dependencies and import-
+time failures in other validation modules.
 """
-# Import validation modules for hash-based deduplication and integrity
-from . import dedupe
-from . import hashing
-from . import integrity
-from . import validator
 
-# Try to import leakage and calibration (may fail if numpy is not installed)
-try:
-    from . import leakage
-    from . import calibration
-    __all__ = [
-        "leakage",
-        "calibration",
-        "dedupe",
-        "hashing",
-        "validator",
-        "integrity",
-    ]
-except ImportError:
-    __all__ = [
-        "dedupe",
-        "hashing",
-        "validator",
-        "integrity",
-    ]
+from __future__ import annotations
+
+from importlib import import_module
+
+__all__ = [
+    "api_validation",
+    "calibration",
+    "compliance",
+    "data_quality",
+    "dedupe",
+    "fairness",
+    "great_expectations",
+    "hashing",
+    "ingestion_schema",
+    "integrity",
+    "leakage",
+    "model_validator",
+    "pipeline",
+    "robustness",
+    "validator",
+]
+
+
+def __getattr__(name -> Any: str):
+    if name in __all__:
+        module = import_module(f"{__name__}.{name}")
+        globals()[name] = module
+        return module
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

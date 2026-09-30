@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: astroml-api-canary
+  namespace: astroml
+  labels:
+    app: astroml-api
+    version: canary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: astroml-api
+      version: canary
+  template:
+    metadata:
+      labels:
+        app: astroml-api
+        version: canary
+    spec:
+      serviceAccountName: astroml
+      containers:
+      - name: api
+        image: ghcr.io/${{ github.repository }}:production-${{ github.sha }}
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: astroml-config
+              key: DATABASE_URL
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: astroml-config
+              key: REDIS_URL
+        - name: LLM_PROVIDER
+          value: "openai"
+        - name: ASTROML_ENV
+          value: "production"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/v1/llm/health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: astroml-api-canary
+  namespace: astroml
+  labels:
+    app: astroml-api
+    version: canary
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: http
+  selector:
+    app: astroml-api
+    version: canary

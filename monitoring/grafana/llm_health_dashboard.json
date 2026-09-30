@@ -1,0 +1,114 @@
+{
+  "dashboard": {
+    "title": "LLM Health Monitoring",
+    "uid": "llm-health",
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 0,
+    "refresh": "1m",
+    "time": {"from": "now-6h", "to": "now"},
+    "panels": [
+      {
+        "id": 1,
+        "title": "Provider Health Status",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "astroml_llm_provider_health",
+            "legendFormat": "{{provider}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {"type": "value", "value": "0", "text": "Unhealthy"},
+              {"type": "value", "value": "1", "text": "Healthy"}
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "green", "value": 1}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "P95 Request Latency (seconds)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(astroml_llm_request_latency_seconds_bucket[5m]))",
+            "legendFormat": "{{provider}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Latency"},
+          {"format": "short", "show": false}
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Request Error Rate (per sec)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "rate(astroml_llm_requests_total{status=\"error\"}[5m])",
+            "legendFormat": "{{provider}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Total Cost (USD)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "sum by (provider) (increase(astroml_llm_cost_usd_total[1h]))",
+            "legendFormat": "{{provider}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "currencyUSD", "label": "Cost"},
+          {"format": "short", "show": false}
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Total Tokens (last 1h)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {
+            "expr": "sum by (provider, token_type) (increase(astroml_llm_tokens_total[1h]))",
+            "legendFormat": "{{provider}} - {{token_type}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Total Requests",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "sum by (provider, status) (astroml_llm_requests_total)",
+            "legendFormat": "{{provider}} ({{status}})",
+            "refId": "A"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,156 @@
+# Horizontal Pod Autoscaler for AstroML Model Serving
+# Issue #639: Automated model serving with auto-scaling
+#
+# This HPA configuration enables automatic scaling of model inference pods
+# based on CPU utilization and custom metrics (request latency, queue depth).
+#
+# Version: v2 (supports custom metrics)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: astroml-model-serving-hpa
+  namespace: astroml
+  labels:
+    app.kubernetes.io/name: astroml-model-serving
+    app.kubernetes.io/component: autoscaler
+    app.kubernetes.io/part-of: astroml
+  annotations:
+    astroml.io/scaling-policy-version: "v1"
+    astroml.io/issue: "#639"
+
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: astroml-model-serving
+    # Target the model serving deployment
+
+  # Scale behavior: control how fast scaling happens
+  behavior:
+    scaleUp:
+      # Stabilization window: wait before scaling up
+      stabilizationWindowSeconds: 60
+      policies:
+        # Allow rapid scale-up: up to 50% more pods or 4 pods per 60s
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+        - type: Pods
+          value: 4
+          periodSeconds: 60
+      # Select the more aggressive policy
+      selectPolicy: Max
+
+    scaleDown:
+      # Stabilization window: wait 300s before scaling down (prevent flapping)
+      stabilizationWindowSeconds: 300
+      policies:
+        # Slow scale-down: max 20% or 2 pods per 120s
+        - type: Percent
+          value: 20
+          periodSeconds: 120
+        - type: Pods
+          value: 2
+          periodSeconds: 120
+      # Select the more conservative policy (smallest change)
+      selectPolicy: Min
+
+  # Resource limits
+  minReplicas: 2
+  maxReplicas: 20
+
+  # Metrics to scale on
+  metrics:
+    # ── Primary: CPU utilization ────────────────────────────────────────
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70   # Scale up at 70% CPU
+
+    # ── Memory utilization ──────────────────────────────────────────────
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80   # Scale up at 80% memory
+
+    # ── Custom: Request latency P99 ─────────────────────────────────────
+    # Requires Prometheus Adapter to be installed and configured
+    # See: monitoring/prometheus/serving-metrics.yml
+    - type: Pods
+      pods:
+        metric:
+          name: astroml_inference_latency_p99_ms
+        target:
+          type: AverageValue
+          averageValue: "100"     # Scale up when P99 > 100ms
+
+    # ── Custom: Request rate ────────────────────────────────────────────
+    - type: Pods
+      pods:
+        metric:
+          name: astroml_inference_requests_per_second
+        target:
+          type: AverageValue
+          averageValue: "50"      # Scale up when > 50 req/s per pod
+
+    # ── Custom: GPU utilization ─────────────────────────────────────────
+    # For GPU-enabled serving: scale based on GPU usage
+    # - type: Pods
+    #   pods:
+    #     metric:
+    #       name: astroml_gpu_utilization_pct
+    #     target:
+    #       type: AverageValue
+    #       averageValue: "75"    # Scale up at 75% GPU utilization
+
+---
+# Additional HPA for GPU-enabled inference pods
+# Uncomment and adjust for GPU workloads
+# apiVersion: autoscaling/v2
+# kind: HorizontalPodAutoscaler
+# metadata:
+#   name: astroml-gpu-serving-hpa
+#   namespace: astroml
+#   labels:
+#     app.kubernetes.io/name: astroml-gpu-serving
+#     app.kubernetes.io/component: autoscaler
+# spec:
+#   scaleTargetRef:
+#     apiVersion: apps/v1
+#     kind: Deployment
+#     name: astroml-gpu-serving
+#   minReplicas: 1
+#   maxReplicas: 8
+#   behavior:
+#     scaleUp:
+#       stabilizationWindowSeconds: 120
+#       policies:
+#         - type: Pods
+#           value: 2
+#           periodSeconds: 60
+#       selectPolicy: Max
+#     scaleDown:
+#       stabilizationWindowSeconds: 600
+#       policies:
+#         - type: Pods
+#           value: 1
+#           periodSeconds: 300
+#       selectPolicy: Min
+#   metrics:
+#     - type: Resource
+#       resource:
+#         name: cpu
+#         target:
+#           type: Utilization
+#           averageUtilization: 60
+#     - type: Pods
+#       pods:
+#         metric:
+#           name: astroml_gpu_utilization_pct
+#         target:
+#           type: AverageValue
+#           averageValue: "75"

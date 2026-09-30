@@ -1,0 +1,17 @@
+[core]
+    remote = astroml-remote
+    autostage = true
+
+['remote "astroml-remote"']
+    url = s3://astroml-datasets/dvc-store
+    endpointurl = https://s3.amazonaws.com
+
+[hydra]
+    enabled = false
+
+[cache]
+    dir = .dvc/cache
+    type = symlink
+
+[plots]
+    html_template = .dvc/plots/default.html

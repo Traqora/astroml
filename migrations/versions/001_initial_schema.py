@@ -7,6 +7,7 @@ Create Date: 2026-02-25
 Creates the five core tables for raw Stellar blockchain data:
 ledgers, transactions, operations, accounts, assets.
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -40,9 +41,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="0",
         ),
-        sa.Column(
-            "operation_count", sa.Integer(), nullable=False, server_default="0"
-        ),
+        sa.Column("operation_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("total_coins", sa.Numeric(), nullable=True),
         sa.Column("fee_pool", sa.Numeric(), nullable=True),
         sa.Column("base_fee_in_stroops", sa.Integer(), nullable=True),
@@ -72,16 +71,12 @@ def upgrade() -> None:
         "transactions",
         ["source_account", "created_at"],
     )
-    op.create_index(
-        "ix_transactions_ledger_sequence", "transactions", ["ledger_sequence"]
-    )
+    op.create_index("ix_transactions_ledger_sequence", "transactions", ["ledger_sequence"])
 
     # -- operations ------------------------------------------------------------
     op.create_table(
         "operations",
-        sa.Column(
-            "id", sa.BigInteger(), nullable=False, autoincrement=True
-        ),
+        sa.Column("id", sa.BigInteger(), nullable=False, autoincrement=True),
         sa.Column("transaction_hash", sa.String(64), nullable=False),
         sa.Column("application_order", sa.SmallInteger(), nullable=False),
         sa.Column("type", sa.String(32), nullable=False),
@@ -106,9 +101,7 @@ def upgrade() -> None:
         ["destination_account", "created_at"],
         postgresql_where=sa.text("destination_account IS NOT NULL"),
     )
-    op.create_index(
-        "ix_operations_transaction_hash", "operations", ["transaction_hash"]
-    )
+    op.create_index("ix_operations_transaction_hash", "operations", ["transaction_hash"])
     op.create_index("ix_operations_type", "operations", ["type"])
 
     # -- accounts --------------------------------------------------------------
@@ -129,9 +122,7 @@ def upgrade() -> None:
     # -- assets ----------------------------------------------------------------
     op.create_table(
         "assets",
-        sa.Column(
-            "id", sa.Integer(), nullable=False, autoincrement=True
-        ),
+        sa.Column("id", sa.Integer(), nullable=False, autoincrement=True),
         sa.Column("asset_type", sa.String(16), nullable=False),
         sa.Column("asset_code", sa.String(12), nullable=False),
         sa.Column("asset_issuer", sa.String(56), nullable=True),

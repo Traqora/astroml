@@ -1,20 +1,48 @@
 """Parse Horizon API JSON responses into SQLAlchemy ORM models.
 
+See ADR-003 (docs/adr/003-polars-ingestion.md) for Polars ingestion framework choices.
+
 Each ``parse_*`` function accepts a dict (decoded JSON from a Horizon SSE
 event) and returns the corresponding ORM model instance.  These functions
 perform no I/O and are safe to call from any context.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from astroml.db.schema import Effect, Ledger, Operation, Transaction
+
+# Path payment operation types from Horizon
+_PATH_PAYMENT_TYPES = {
+    "path_payment_strict_send",
+    "path_payment_strict_receive",
+}
 
 
 def _parse_datetime(iso_string: str) -> datetime:
     """Parse an ISO 8601 timestamp from Horizon into a timezone-aware datetime."""
     return datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
+
+
+#: Bit widths of the fields packed into a Stellar toid.  The id of every
+#: ledger, transaction, operation and effect is ``ledger << 32 | tx << 12 | op``
+#: (see https://developers.stellar.org/docs/learn/glossary#total-order-id),
+#: which is what makes an operation id usable as an ingest-time natural key.
+_TOD_LEDGER_SHIFT = 32
+
+
+def ledger_sequence_from_operation_id(operation_id: int) -> int:
+    """Recover the ledger sequence an operation was applied in from its toid.
+
+    ``operation_id`` is Horizon's operation id, which packs the ledger, the
+    transaction's application order within it, and the operation's index within
+    the transaction.  Only the ledger is needed to key an ingestion write.
+
+    >>> ledger_sequence_from_operation_id(53919970611201)
+    12554
+    """
+    return int(operation_id) >> _TOD_LEDGER_SHIFT
 
 
 def parse_ledger(data: dict) -> Ledger:
@@ -29,7 +57,9 @@ def parse_ledger(data: dict) -> Ledger:
         operation_count=int(data.get("operation_count", 0)),
         total_coins=float(data["total_coins"]) if data.get("total_coins") else None,
         fee_pool=float(data["fee_pool"]) if data.get("fee_pool") else None,
-        base_fee_in_stroops=int(data["base_fee_in_stroops"]) if data.get("base_fee_in_stroops") else None,
+        base_fee_in_stroops=(
+            int(data["base_fee_in_stroops"]) if data.get("base_fee_in_stroops") else None
+        ),
         protocol_version=int(data["protocol_version"]) if data.get("protocol_version") else None,
     )
 
@@ -62,8 +92,15 @@ def parse_operation(data: dict, application_order: int = 1) -> Operation:
     asset_code, asset_issuer = _extract_asset(data)
 
     common_keys = {
-        "id", "paging_token", "transaction_successful", "source_account",
-        "type", "type_i", "created_at", "transaction_hash", "_links",
+        "id",
+        "paging_token",
+        "transaction_successful",
+        "source_account",
+        "type",
+        "type_i",
+        "created_at",
+        "transaction_hash",
+        "_links",
     }
     details = {k: v for k, v in data.items() if k not in common_keys}
 
@@ -85,16 +122,16 @@ def parse_operation(data: dict, application_order: int = 1) -> Operation:
 def parse_effect(data: dict) -> Effect:
     """Parse a Horizon effect JSON dict into an Effect ORM instance."""
     effect_type = data.get("type", "")
-    
+
     # Extract common fields
     account = data.get("account")
-    
+
     # Extract type-specific fields
     amount = None
     asset_code = None
     asset_issuer = None
     destination = None
-    
+
     if effect_type in ["account_created", "account_credited", "account_debited"]:
         amount = data.get("amount")
         if amount:
@@ -105,16 +142,14 @@ def parse_effect(data: dict) -> Effect:
             else:
                 asset_code = data.get("asset_code")
                 asset_issuer = data.get("asset_issuer")
-    
+
     if effect_type == "account_credited":
         destination = account
-    
+
     # Store all non-common fields in details
-    common_keys = {
-        "id", "paging_token", "account", "type", "created_at", "_links"
-    }
+    common_keys = {"id", "paging_token", "account", "type", "created_at", "_links"}
     details = {k: v for k, v in data.items() if k not in common_keys}
-    
+
     return Effect(
         id=int(data["id"]),
         account=account,
@@ -128,7 +163,7 @@ def parse_effect(data: dict) -> Effect:
     )
 
 
-def _extract_destination(data: dict, op_type: str) -> Optional[str]:
+def _extract_destination(data: dict, op_type: str) -> str | None:
     """Extract destination account from various operation types."""
     if "to" in data:
         return data["to"]
@@ -139,7 +174,7 @@ def _extract_destination(data: dict, op_type: str) -> Optional[str]:
     return data.get("destination_account")
 
 
-def _extract_amount(data: dict) -> Optional[str]:
+def _extract_amount(data: dict) -> str | None:
     """Extract amount from various operation types."""
     if "amount" in data:
         return data["amount"]
@@ -153,12 +188,31 @@ def _extract_amount(data: dict) -> Optional[str]:
     return None
 
 
-def _extract_asset(data: dict) -> tuple[Optional[str], Optional[str]]:
+def _extract_asset(data: dict) -> tuple[str | None, str | None]:
     """Extract asset code and issuer from various operation types."""
     asset_type = data.get("asset_type")
     if asset_type == "native":
         return ("XLM", None)
     return (data.get("asset_code"), data.get("asset_issuer"))
+
+
+def extract_asset_string(data: dict, prefix: str = "") -> str:
+    """Extract and format an asset string consistently as code:issuer or XLM."""
+    asset_type = data.get(f"{prefix}asset_type", data.get("asset_type", ""))
+    if asset_type == "native":
+        return "XLM"
+    
+    code = data.get(f"{prefix}asset_code", data.get("asset_code"))
+    issuer = data.get(f"{prefix}asset_issuer", data.get("asset_issuer"))
+    
+    if code == "XLM" and not issuer:
+        return "XLM"
+    elif code and issuer:
+        return f"{code}:{issuer}"
+    elif code:
+        return str(code)
+    else:
+        return "UNKNOWN"
 
 
 def extract_path_payment_hops(data: dict) -> list[dict]:
@@ -176,31 +230,9 @@ def extract_path_payment_hops(data: dict) -> list[dict]:
     receiver = _extract_destination(data, data["type"])
     path = data.get("path", [])  # intermediate assets
 
-    # Build asset chain: [source_asset, ...path_assets..., dest_asset]
-    def _asset_str(asset_dict: dict) -> str:
-        if asset_dict.get("asset_type") == "native":
-            return "XLM"
-        code = asset_dict.get("asset_code", "UNKNOWN")
-        issuer = asset_dict.get("asset_issuer", "")
-        return f"{code}:{issuer}" if issuer else code
-
-    src_asset_type = data.get("source_asset_type", data.get("asset_type", ""))
-    if src_asset_type == "native":
-        src_asset = "XLM"
-    else:
-        src_code = data.get("source_asset_code", data.get("asset_code", "UNKNOWN"))
-        src_issuer = data.get("source_asset_issuer", data.get("asset_issuer", ""))
-        src_asset = f"{src_code}:{src_issuer}" if src_issuer else src_code
-
-    dst_asset_type = data.get("asset_type", "")
-    if dst_asset_type == "native":
-        dst_asset = "XLM"
-    else:
-        dst_code = data.get("asset_code", "UNKNOWN")
-        dst_issuer = data.get("asset_issuer", "")
-        dst_asset = f"{dst_code}:{dst_issuer}" if dst_issuer else dst_code
-
-    path_assets = [_asset_str(p) for p in path]
+    src_asset = extract_asset_string(data, prefix="source_")
+    dst_asset = extract_asset_string(data)
+    path_assets = [extract_asset_string(p) for p in path]
     asset_chain = [src_asset] + path_assets + [dst_asset]
 
     # Amounts: source_amount on first hop, destination_amount on last hop,
@@ -216,13 +248,15 @@ def extract_path_payment_hops(data: dict) -> list[dict]:
         from_acc = sender if i == 0 else f"__path__{data['transaction_hash']}_{i}"
         to_acc = receiver if i == n_hops - 1 else f"__path__{data['transaction_hash']}_{i + 1}"
         amount = src_amount if i == 0 else (dst_amount if i == n_hops - 1 else None)
-        hops.append({
-            "from_account": from_acc,
-            "to_account": to_acc,
-            "asset": asset_chain[i],
-            "amount": float(amount) if amount is not None else None,
-            "hop_index": i,
-            "is_first_hop": i == 0,
-            "is_last_hop": i == n_hops - 1,
-        })
+        hops.append(
+            {
+                "from_account": from_acc,
+                "to_account": to_acc,
+                "asset": asset_chain[i],
+                "amount": float(amount) if amount is not None else None,
+                "hop_index": i,
+                "is_first_hop": i == 0,
+                "is_last_hop": i == n_hops - 1,
+            }
+        )
     return hops

@@ -25,11 +25,10 @@ mod security_tests {
     // SC-1 – Re-initialisation attack
     // -----------------------------------------------------------------------
 
-    /// Verify that calling initialize() a second time overwrites the admin.
-    /// This test DOCUMENTS the vulnerability; once SC-1 is remediated the
-    /// expectation should be flipped to assert an error is returned.
+    /// Verify that calling initialize() a second time is prevented.
+    /// SC-1 is now remediated with a storage-existence guard.
     #[test]
-    fn test_reinitialization_overwrites_admin() {
+    fn test_reinitialization_prevented() {
         let env = Env::default();
         let contract_id = env.register_contract(None, FraudRegistry);
         let client = FraudRegistryClient::new(&env, &contract_id);
@@ -39,17 +38,18 @@ mod security_tests {
 
         client.initialize(&original_admin);
 
-        // Attacker calls initialize() again — currently succeeds and replaces admin.
-        // TODO (SC-1): add a storage-existence guard so the second call fails.
-        client.initialize(&attacker);
+        // Attacker tries to call initialize() again — should now fail with panic.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            client.initialize(&attacker);
+        }));
+        assert!(result.is_err(), "SC-1: re-initialization should be prevented");
 
-        // Confirm: original admin can no longer register validators (access denied).
+        // Confirm: original admin can still register validators (access preserved).
         let validator = Address::generate(&env);
         let result = client.try_register_validator(&original_admin, &validator, &75_u32);
-        assert_eq!(
-            result,
-            Err(Ok(Error::Unauthorized)),
-            "SC-1: original admin was displaced by re-initialisation"
+        assert!(
+            result.is_ok(),
+            "SC-1: original admin should retain access after re-initialization attempt"
         );
     }
 
@@ -58,7 +58,7 @@ mod security_tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn test_zero_consensus_threshold_marks_unreported_accounts_fraudulent() {
+    fn test_zero_consensus_threshold_rejected() {
         let env = Env::default();
         let contract_id = env.register_contract(None, FraudRegistry);
         let client = FraudRegistryClient::new(&env, &contract_id);
@@ -66,19 +66,13 @@ mod security_tests {
         client.initialize(&admin);
 
         // Set consensus_threshold to 0 — should be rejected.
-        // TODO (SC-2): add a lower-bound check (>= 1) in update_config.
+        // SC-2 is now remediated with a lower-bound check (>= 1) in update_config.
         let result = client.try_update_config(&admin, &None::<u32>, &None::<u32>, &Some(0_u32));
-
-        // Currently this may succeed; document the vulnerability.
-        if result.is_ok() {
-            let unreported = Address::generate(&env);
-            let is_fraud = client.is_fraudulent(&unreported);
-            assert!(
-                is_fraud,
-                "SC-2: threshold=0 incorrectly marks unreported account as fraudulent"
-            );
-        }
-        // If the contract already guards against 0 this path is the desired state.
+        assert_eq!(
+            result,
+            Err(Ok(Error::InvalidInput)),
+            "SC-2: consensus_threshold = 0 should be rejected"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -306,6 +300,29 @@ mod security_tests {
             result,
             Err(Ok(Error::InvalidInput)),
             "min_reputation > 100 must be rejected in update_config"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // SC-3 – Empty reason string validation
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_empty_reason_string_rejected() {
+        let env = Env::default();
+        let (client, admin) = setup_contract(&env);
+        let validator = Address::generate(&env);
+        let target = Address::generate(&env);
+
+        client.register_validator(&admin, &validator, &75_u32);
+
+        // Try to report with empty reason — should be rejected.
+        let empty_reason = String::from_str(&env, "");
+        let result = client.try_report_fraud(&validator, &target, &empty_reason, &80_u32, &None::<Bytes>);
+        assert_eq!(
+            result,
+            Err(Ok(Error::InvalidInput)),
+            "SC-3: empty reason string should be rejected"
         );
     }
 

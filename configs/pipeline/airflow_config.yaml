@@ -1,0 +1,57 @@
+# AstroML Airflow Orchestration Configuration
+orchestrator:
+  engine: "airflow"
+  version: "2.8.1"
+  executor: "CeleryExecutor"
+  parallelism: 32
+  max_active_tasks_per_dag: 16
+  max_active_runs_per_dag: 1
+
+dag_schedules:
+  training_pipeline:
+    schedule_interval: "0 2 * * *"  # Daily at 02:00 UTC
+    sla_seconds: 3600
+    catchup: false
+    retries: 3
+    retry_delay_seconds: 60
+    tags: ["training", "gnn", "stellar"]
+
+  evaluation_pipeline:
+    schedule_interval: "0 4 * * *"  # Daily at 04:00 UTC
+    sla_seconds: 1800
+    catchup: false
+    retries: 2
+    retry_delay_seconds: 30
+    tags: ["evaluation", "benchmarking"]
+
+  deployment_pipeline:
+    schedule_interval: null  # Event-triggered
+    sla_seconds: 900
+    catchup: false
+    retries: 1
+    retry_delay_seconds: 15
+    tags: ["deployment", "canary"]
+
+sensors:
+  data_arrival:
+    poke_interval_seconds: 30
+    timeout_seconds: 1800
+    min_records: 1000
+
+  model_performance:
+    poke_interval_seconds: 60
+    timeout_seconds: 3600
+    min_f1_threshold: 0.85
+
+  data_drift:
+    poke_interval_seconds: 300
+    timeout_seconds: 7200
+    p_value_threshold: 0.05
+
+alerting:
+  on_failure: true
+  on_sla_miss: true
+  slack_webhook_env_var: "SLACK_ALERTS_WEBHOOK"
+  channels:
+    - "#mlops-alerts"
+    - "#fraud-monitoring"

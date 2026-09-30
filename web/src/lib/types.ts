@@ -57,6 +57,14 @@ export type TierComparisonDatum = {
   retention: number
 }
 
+export type StellarTransaction = {
+  id: string
+  timestamp: string // ISO
+  amount: number
+  sourceAccount: string
+  destinationAccount: string
+}
+
 export type FraudAlert = {
   id: string
   accountId: string
@@ -73,4 +81,26 @@ export type FraudStats = {
   lowRisk: number
   recentAlerts: FraudAlert[]
   riskOverTime: { date: string; score: number }[]
+}
+
+export type BlockchainTransaction = {
+  hash: string
+  ledgerSequence: number
+  sourceAccount: string
+  destinationAccount?: string
+  amount?: number
+  assetCode?: string
+  assetIssuer?: string
+  operationType: string
+  createdAt: string // ISO
+  fee: number
+  successful: boolean
+  memoType?: string
+}
+
+export type TransactionHistoryResponse = {
+  data: BlockchainTransaction[]
+  page: number
+  pageSize: number
+  total: number
 }

@@ -1,0 +1,5 @@
+default_provider: "openai"
+fallback_chain:
+  - "openai"
+  - "anthropic"
+  - "local"

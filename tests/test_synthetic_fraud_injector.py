@@ -44,20 +44,25 @@ def test_run_injection_keeps_jsonl_format_and_writes_summary(tmp_path):
     input_path.write_text(
         "\n".join(
             [
-                json.dumps({
-                    "source_account": "S1",
-                    "destination_account": "D1",
-                    "amount": 1.2,
-                    "created_at": "2025-01-02T03:04:05Z",
-                }),
-                json.dumps({
-                    "source_account": "S2",
-                    "destination_account": "D2",
-                    "amount": 2.3,
-                    "created_at": "2025-01-02T03:04:06Z",
-                }),
+                json.dumps(
+                    {
+                        "source_account": "S1",
+                        "destination_account": "D1",
+                        "amount": 1.2,
+                        "created_at": "2025-01-02T03:04:05Z",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "source_account": "S2",
+                        "destination_account": "D2",
+                        "amount": 2.3,
+                        "created_at": "2025-01-02T03:04:06Z",
+                    }
+                ),
             ]
-        ) + "\n",
+        )
+        + "\n",
         encoding="utf-8",
     )
 

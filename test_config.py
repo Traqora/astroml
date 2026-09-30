@@ -26,7 +26,7 @@ def test_config(cfg: DictConfig) -> Dict[str, Any]:
     logger.info("Configuration test successful!")
     logger.info("Configuration:")
     logger.info(OmegaConf.to_yaml(cfg))
-    
+
     # Test accessing configuration values
     results = {
         "experiment_name": cfg.experiments.experiment.name,
@@ -35,7 +35,7 @@ def test_config(cfg: DictConfig) -> Dict[str, Any]:
         "training_epochs": cfg.experiments.training.epochs,
         "data_name": cfg.experiments.data.name,
     }
-    
+
     logger.info(f"Test results: {results}")
     return results
 
@@ -46,22 +46,22 @@ def main(cfg: DictConfig) -> None:
     # Create save directory
     save_dir = Path(cfg.experiments.experiment.save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Log configuration
     logger.info("Configuration:")
     logger.info(OmegaConf.to_yaml(cfg))
-    
+
     # Run test
     results = test_config(cfg)
-    
+
     # Log results
     logger.info("Configuration test completed!")
     logger.info(f"Results: {results}")
-    
+
     # Save configuration
     OmegaConf.save(cfg, save_dir / "config.yaml")
     OmegaConf.save(OmegaConf.create(results), save_dir / "results.yaml")
-    
+
     logger.info(f"Configuration saved to {save_dir}")
 
 

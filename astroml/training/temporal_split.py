@@ -13,22 +13,21 @@ Three public entry-points:
 * :class:`TemporalSplitter` — thin config-driven wrapper that dispatches
   to the correct function and validates the result.
 """
+
 from __future__ import annotations
 
 import warnings
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, List, Optional, Sequence, Tuple
-
-import numpy as np
-
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Re-export DataFrame splitter so callers can import from one place
 # ---------------------------------------------------------------------------
 from astroml.validation.leakage import (  # noqa: F401
+    LeakageError,
     temporal_train_test_split,
     validate_temporal_split,
-    LeakageError,
 )
 
 try:
@@ -41,6 +40,7 @@ except ImportError:  # allow import without torch-geometric
 # Graph temporal split
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class GraphSplitResult:
     """Holds the output of :func:`temporal_graph_split`.
@@ -51,15 +51,16 @@ class GraphSplitResult:
             ``test_ratio`` fraction when no explicit cutoff is given).
         cutoff: The timestamp value used as the boundary.
     """
-    train_edges: List[Any]
-    test_edges: List[Any]
+
+    train_edges: list[Any]
+    test_edges: list[Any]
     cutoff: Any
 
 
 def temporal_graph_split(
     edges: Sequence[Any],
     *,
-    cutoff: Optional[Any] = None,
+    cutoff: Any | None = None,
     train_ratio: float = 0.8,
     time_attr: str = "timestamp",
 ) -> GraphSplitResult:
@@ -104,9 +105,7 @@ def temporal_graph_split(
     # Validate that every edge has the expected attribute.
     for e in edges:
         if not hasattr(e, time_attr):
-            raise ValueError(
-                f"Edge object {e!r} has no attribute '{time_attr}'"
-            )
+            raise ValueError(f"Edge object {e!r} has no attribute '{time_attr}'")
 
     if cutoff is not None:
         train_edges = [e for e in edges if getattr(e, time_attr) < cutoff]
@@ -114,17 +113,13 @@ def temporal_graph_split(
         resolved_cutoff = cutoff
     else:
         if not (0 < train_ratio < 1):
-            raise ValueError(
-                f"train_ratio must be in (0, 1), got {train_ratio}"
-            )
+            raise ValueError(f"train_ratio must be in (0, 1), got {train_ratio}")
         sorted_edges = sorted(edges, key=lambda e: getattr(e, time_attr))
         split_idx = int(len(sorted_edges) * train_ratio)
         train_edges = sorted_edges[:split_idx]
         test_edges = sorted_edges[split_idx:]
         # Resolved cutoff = first timestamp in the test set (or None if empty).
-        resolved_cutoff = (
-            getattr(test_edges[0], time_attr) if test_edges else None
-        )
+        resolved_cutoff = getattr(test_edges[0], time_attr) if test_edges else None
 
     # Warn on empty partitions.
     if not train_edges:
@@ -178,8 +173,7 @@ def validate_graph_split(result: GraphSplitResult, time_attr: str = "timestamp")
 
     if train_max >= test_min:
         raise LeakageError(
-            f"Temporal overlap in graph split: train max ({train_max}) "
-            f">= test min ({test_min})"
+            f"Temporal overlap in graph split: train max ({train_max}) " f">= test min ({test_min})"
         )
     return True
 
@@ -187,6 +181,7 @@ def validate_graph_split(result: GraphSplitResult, time_attr: str = "timestamp")
 # ---------------------------------------------------------------------------
 # High-level config-driven splitter
 # ---------------------------------------------------------------------------
+
 
 class TemporalSplitter:
     """Config-driven temporal train/test splitter.
@@ -215,13 +210,11 @@ class TemporalSplitter:
     def __init__(
         self,
         train_ratio: float = 0.8,
-        cutoff: Optional[Any] = None,
+        cutoff: Any | None = None,
         time_col: str = "timestamp",
     ):
         if not (0 < train_ratio < 1):
-            raise ValueError(
-                f"train_ratio must be in (0, 1), got {train_ratio}"
-            )
+            raise ValueError(f"train_ratio must be in (0, 1), got {train_ratio}")
         self.train_ratio = train_ratio
         self.cutoff = cutoff
         self.time_col = time_col
@@ -233,8 +226,8 @@ class TemporalSplitter:
     def split_dataframe(
         self,
         df: Any,  # pd.DataFrame
-        time_col: Optional[str] = None,
-    ) -> Tuple[Any, Any]:
+        time_col: str | None = None,
+    ) -> tuple[Any, Any]:
         """Split a DataFrame temporally and validate the result.
 
         Args:
@@ -264,7 +257,7 @@ class TemporalSplitter:
     def split_edges(
         self,
         edges: Sequence[Any],
-        time_attr: Optional[str] = None,
+        time_attr: str | None = None,
     ) -> GraphSplitResult:
         """Split graph edges temporally and validate the result.
 

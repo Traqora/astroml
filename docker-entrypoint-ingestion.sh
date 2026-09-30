@@ -70,4 +70,8 @@ fi
 
 # Start the ingestion service
 echo -e "${GREEN}[INFO]${NC} Starting ingestion service..."
+
+# Graceful shutdown — allow in-flight ingestion to finish (issue #775)
+trap 'echo -e "${YELLOW}[INFO]${NC} Received shutdown signal, stopping..."; exit 0' SIGTERM SIGINT
+
 exec python -m astroml.ingestion

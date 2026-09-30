@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import List, Tuple
-
 import torch
 
 from astroml.features.gnn.sage import sample_neighbors
@@ -25,7 +23,7 @@ class MultiHopSampler:
         self,
         edge_index: torch.Tensor,
         num_nodes: int,
-        fanout: List[int],
+        fanout: list[int],
     ) -> None:
         self.edge_index = edge_index
         self.num_nodes = num_nodes
@@ -33,7 +31,7 @@ class MultiHopSampler:
 
     def sample(
         self, target_nodes: torch.Tensor
-    ) -> Tuple[List[Tuple[torch.Tensor, Tuple[int, int]]], torch.Tensor]:
+    ) -> tuple[list[tuple[torch.Tensor, tuple[int, int]]], torch.Tensor]:
         """Sample multi-hop neighborhood around target_nodes.
 
         Returns
@@ -45,7 +43,7 @@ class MultiHopSampler:
             Union of all node IDs touched, ordered so that target_nodes
             appear at indices [0..len(target_nodes)-1].
         """
-        adjs: List[Tuple[torch.Tensor, Tuple[int, int]]] = []
+        adjs: list[tuple[torch.Tensor, tuple[int, int]]] = []
         current_nodes = target_nodes.clone()
 
         # Discovery pass: walk outward to find all reachable nodes
@@ -81,8 +79,12 @@ class MultiHopSampler:
                         global_to_local[s] = len(all_nodes_list)
                         all_nodes_list.append(s)
 
-                local_src = torch.tensor([global_to_local[int(s)] for s in src.tolist()], dtype=torch.long)
-                local_dst = torch.tensor([global_to_local[int(d)] for d in dst.tolist()], dtype=torch.long)
+                local_src = torch.tensor(
+                    [global_to_local[int(s)] for s in src.tolist()], dtype=torch.long
+                )
+                local_dst = torch.tensor(
+                    [global_to_local[int(d)] for d in dst.tolist()], dtype=torch.long
+                )
                 local_edge = torch.stack([local_src, local_dst])
 
                 new_neighbors = src[~torch.isin(src, layer_dst_nodes)]

@@ -1,0 +1,7 @@
+# Readiness and liveness probes for training and serving pods
+readinessProbe:
+  httpGet:
+    path: /ready
+livenessProbe:
+  httpGet:
+    path: /live

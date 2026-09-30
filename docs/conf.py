@@ -1,4 +1,5 @@
 """Sphinx configuration for AstroML documentation."""
+
 import os
 import sys
 
@@ -9,15 +10,15 @@ sys.path.insert(0, os.path.abspath(".."))
 project = "AstroML"
 author = "AstroML Contributors"
 copyright = "2026, AstroML Contributors"
-release = "0.1.0"
+release = "1.0.0"
 
 # -- General configuration ----------------------------------------------------
 extensions = [
-    "sphinx.ext.autodoc",       # Pull docstrings from source
-    "sphinx.ext.napoleon",      # Google / NumPy style docstrings
-    "sphinx.ext.viewcode",      # Add [source] links
-    "sphinx.ext.autosummary",   # Auto-generate summary tables
-    "sphinx.ext.intersphinx",   # Cross-link to Python / NumPy / PyTorch docs
+    "sphinx.ext.autodoc",  # Pull docstrings from source
+    "sphinx.ext.napoleon",  # Google / NumPy style docstrings
+    "sphinx.ext.viewcode",  # Add [source] links
+    "sphinx.ext.autosummary",  # Auto-generate summary tables
+    "sphinx.ext.intersphinx",  # Cross-link to Python / NumPy / PyTorch docs
 ]
 
 autosummary_generate = True

@@ -1,5 +1,4 @@
 """Unit tests for transaction validation utilities."""
-import pytest
 
 from astroml.validation import validator
 
@@ -43,7 +42,9 @@ class TestTransactionValidator:
         v = validator.TransactionValidator()
         result = v.validate("not a dict")
         assert result.is_valid is False
-        assert any(e.error_type == validator.CorruptionType.MALFORMED_STRUCTURE for e in result.errors)
+        assert any(
+            e.error_type == validator.CorruptionType.MALFORMED_STRUCTURE for e in result.errors
+        )
 
     def test_hash_mismatch(self):
         """Should detect hash mismatch."""

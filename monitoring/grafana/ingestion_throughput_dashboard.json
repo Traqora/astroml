@@ -1,0 +1,323 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Ingestion Throughput (records/sec)",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "rate(astroml_ingestion_records_total[1m])",
+          "legendFormat": "{{stream_type}} - {{horizon_url}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "rps",
+          "label": "Records/sec"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "Cumulative Records Ingested",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "astroml_ingestion_records_total",
+          "legendFormat": "{{stream_type}}",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "short",
+          "label": "Total Records"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "Error Rate",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "rate(astroml_ingestion_errors_total[1m])",
+          "legendFormat": "{{stream_type}} - {{error_type}}",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "eps",
+          "label": "Errors/sec"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "Connection Health",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "expr": "astroml_ingestion_connection_health",
+          "legendFormat": "{{stream_type}}",
+          "refId": "D"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Active Streams",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 16
+      },
+      "targets": [
+        {
+          "expr": "count(astroml_ingestion_connection_health)",
+          "refId": "E"
+        }
+      ]
+    },
+    {
+      "title": "Rate Limit Backoff Time",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "astroml_ingestion_rate_limit_backoff_seconds",
+          "legendFormat": "{{stream_type}}",
+          "refId": "F"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Backoff (seconds)"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "Processing Latency",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(astroml_ingestion_processing_duration_seconds_bucket[5m]))",
+          "legendFormat": "{{stream_type}} - p50",
+          "refId": "G"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(astroml_ingestion_processing_duration_seconds_bucket[5m]))",
+          "legendFormat": "{{stream_type}} - p95",
+          "refId": "H"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(astroml_ingestion_processing_duration_seconds_bucket[5m]))",
+          "legendFormat": "{{stream_type}} - p99",
+          "refId": "I"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Latency"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "Buffer Size",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "targets": [
+        {
+          "expr": "astroml_ingestion_buffer_size",
+          "legendFormat": "{{stream_type}}",
+          "refId": "J"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "short",
+          "label": "Buffer Size"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "Ledger Lag",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "targets": [
+        {
+          "expr": "astroml_ingestion_ledger_lag_seconds",
+          "legendFormat": "{{horizon_url}}",
+          "refId": "K"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "Lag (seconds)"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    },
+    {
+      "title": "Retry Rate",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "targets": [
+        {
+          "expr": "rate(astroml_ingestion_retries_total[1m])",
+          "legendFormat": "{{stream_type}}",
+          "refId": "L"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "rps",
+          "label": "Retries/sec"
+        },
+        {
+          "format": "short"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 26,
+  "style": "dark",
+  "tags": ["astroml", "ingestion", "throughput"],
+  "templating": {
+    "list": [
+      {
+        "name": "stream_type",
+        "type": "query",
+        "datasource": "Prometheus",
+        "refresh": 1,
+        "query": "label_values(astroml_ingestion_records_total, stream_type)",
+        "includeAll": true,
+        "allValue": ".*"
+      },
+      {
+        "name": "horizon_url",
+        "type": "query",
+        "datasource": "Prometheus",
+        "refresh": 1,
+        "query": "label_values(astroml_ingestion_records_total, horizon_url)",
+        "includeAll": true,
+        "allValue": ".*"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "AstroML Ingestion Throughput Dashboard",
+  "uid": "astroml_ingestion_throughput",
+  "version": 1
+}

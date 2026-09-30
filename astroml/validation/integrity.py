@@ -3,19 +3,19 @@
 This module provides a comprehensive integrity checking system that wraps
 the deduplication and validation components into a single pipeline.
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
-from .dedupe import ConflictRecord, ConflictType, DeduplicationResult, Deduplicator
+from .dedupe import ConflictRecord, ConflictType, Deduplicator
 from .hashing import compute_transaction_hash
 from .validator import (
-    CorruptionType,
+    TransactionValidator,
     ValidationError,
     ValidationResult,
-    TransactionValidator,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,12 +34,12 @@ class IntegrityResult:
         conflicts: List of all conflict records.
     """
 
-    valid: List[Dict[str, Any]] = field(default_factory=list)
-    duplicates: List[Dict[str, Any]] = field(default_factory=list)
-    corrupted: List[Dict[str, Any]] = field(default_factory=list)
-    all_hashes: Set[str] = field(default_factory=set)
-    validation_errors: List[ValidationError] = field(default_factory=list)
-    conflicts: List[ConflictRecord] = field(default_factory=list)
+    valid: list[dict[str, Any]] = field(default_factory=list)
+    duplicates: list[dict[str, Any]] = field(default_factory=list)
+    corrupted: list[dict[str, Any]] = field(default_factory=list)
+    all_hashes: set[str] = field(default_factory=set)
+    validation_errors: list[ValidationError] = field(default_factory=list)
+    conflicts: list[ConflictRecord] = field(default_factory=list)
 
     @property
     def is_valid(self) -> bool:
@@ -61,9 +61,9 @@ class IntegrityValidator:
 
     def __init__(
         self,
-        required_fields: Optional[Set[str]] = None,
-        field_types: Optional[Dict[str, type]] = None,
-        hash_fields: Optional[Set[str]] = None,
+        required_fields: set[str] | None = None,
+        field_types: dict[str, type] | None = None,
+        hash_fields: set[str] | None = None,
         strict: bool = False,
     ) -> None:
         """Initialize the integrity validator.
@@ -88,18 +88,18 @@ class IntegrityValidator:
         self._deduplicator.reset()
 
     @property
-    def seen_hashes(self) -> Set[str]:
+    def seen_hashes(self) -> set[str]:
         """Return a copy of the seen hashes set."""
         return self._deduplicator.seen_hashes
 
     @property
-    def conflicts(self) -> List[ConflictRecord]:
+    def conflicts(self) -> list[ConflictRecord]:
         """Return a copy of the conflict records."""
         return self._deduplicator.conflicts
 
     def validate_transaction(
         self,
-        transaction: Dict[str, Any],
+        transaction: dict[str, Any],
     ) -> ValidationResult:
         """Validate a single transaction for corruption.
 
@@ -113,7 +113,7 @@ class IntegrityValidator:
 
     def check_duplicate(
         self,
-        transaction: Dict[str, Any],
+        transaction: dict[str, Any],
     ) -> bool:
         """Check if a transaction is a duplicate.
 
@@ -127,8 +127,8 @@ class IntegrityValidator:
 
     def add_transaction(
         self,
-        transaction: Dict[str, Any],
-        source: Optional[str] = None,
+        transaction: dict[str, Any],
+        source: str | None = None,
     ) -> bool:
         """Add a transaction to the seen set.
 
@@ -143,8 +143,8 @@ class IntegrityValidator:
 
     def process(
         self,
-        transactions: List[Dict[str, Any]],
-        source: Optional[str] = None,
+        transactions: list[dict[str, Any]],
+        source: str | None = None,
     ) -> IntegrityResult:
         """Process a batch of transactions through integrity checks.
 
@@ -177,9 +177,7 @@ class IntegrityValidator:
                     )
 
                 # Log corruption conflict
-                hash_value = compute_transaction_hash(
-                    transaction, fields=self._hash_fields
-                )
+                hash_value = compute_transaction_hash(transaction, fields=self._hash_fields)
                 conflict = ConflictRecord(
                     transaction_id=validation.transaction_id,
                     hash=hash_value,
@@ -192,9 +190,7 @@ class IntegrityValidator:
                 continue
 
             # Check for duplicates
-            hash_value = compute_transaction_hash(
-                transaction, fields=self._hash_fields
-            )
+            hash_value = compute_transaction_hash(transaction, fields=self._hash_fields)
 
             if hash_value in self._deduplicator.seen_hashes:
                 result.duplicates.append(transaction)
@@ -211,7 +207,7 @@ class IntegrityValidator:
 
     def verify_integrity(
         self,
-        transactions: List[Dict[str, Any]],
+        transactions: list[dict[str, Any]],
     ) -> bool:
         """Verify that a batch of transactions passes integrity checks.
 
@@ -235,9 +231,9 @@ class IntegrityError(Exception):
 
 
 def check_integrity(
-    transactions: List[Dict[str, Any]],
-    required_fields: Optional[Set[str]] = None,
-    hash_fields: Optional[Set[str]] = None,
+    transactions: list[dict[str, Any]],
+    required_fields: set[str] | None = None,
+    hash_fields: set[str] | None = None,
 ) -> IntegrityResult:
     """Convenience function to check integrity of transactions.
 
@@ -257,10 +253,10 @@ def check_integrity(
 
 
 def filter_valid_transactions(
-    transactions: List[Dict[str, Any]],
-    required_fields: Optional[Set[str]] = None,
-    hash_fields: Optional[Set[str]] = None,
-) -> List[Dict[str, Any]]:
+    transactions: list[dict[str, Any]],
+    required_fields: set[str] | None = None,
+    hash_fields: set[str] | None = None,
+) -> list[dict[str, Any]]:
     """Filter a list to return only valid, unique transactions.
 
     Args:

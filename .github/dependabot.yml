@@ -1,0 +1,106 @@
+version: 2
+enable-beta-ecosystems: true
+open-pull-requests-limit: 10
+updates:
+  # Python dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "deps(python)"
+      include: "scope"
+    groups:
+      # Group production dependencies together
+      production-dependencies:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "pytest*"
+          - "mypy*"
+          - "ruff*"
+          - "black*"
+          - "coverage*"
+      # Group development/test dependencies together
+      development-dependencies:
+        patterns:
+          - "pytest*"
+          - "mypy*"
+          - "ruff*"
+          - "black*"
+          - "coverage*"
+
+  # Rust dependencies
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "rust"
+    commit-message:
+      prefix: "deps(rust)"
+      include: "scope"
+
+  # GitHub Actions dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "deps(actions)"
+      include: "scope"
+
+  # Docker base images
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"
+      - "infrastructure"
+    commit-message:
+      prefix: "deps(docker)"
+      include: "scope"
+    ignore:
+      # Ignore major version changes for Python (pinned to 3.11.x)
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major"]
+      # Ignore major version changes for CUDA base images
+      - dependency-name: "nvidia/cuda"
+        update-types: ["version-update:semver-major"]
+
+  # Docker API Dockerfile
+  - package-ecosystem: "docker"
+    directory: "/api"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "docker"
+      - "infrastructure"
+    commit-message:
+      prefix: "deps(docker-api)"
+      include: "scope"

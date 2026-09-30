@@ -1,0 +1,56 @@
+# Change Data Capture configuration (issue #626)
+# Debezium + Kafka streaming pipeline for real-time database ingestion
+
+connector:
+  connector_name: "astroml-cdc"
+  database_hostname: "localhost"
+  database_port: 5432
+  database_user: "astroml"
+  database_password: ""
+  database_name: "astroml"
+  table_include_list: "public.accounts,public.transactions"
+  kafka_bootstrap_servers: "localhost:9092"
+  snapshot_mode: "initial"
+  slot_name: "astroml_replication_slot"
+  publication_name: "astroml_publication"
+
+# Stream processing
+stream:
+  batch_commit_size: 500
+  checkpoint_interval: 100
+
+  transform_rules:
+    - normalize_timestamps: true
+    - drop_internal_columns:
+        - "__debezium_source_ts"
+        - "__deleted"
+
+  enrichments:
+    - add_processing_timestamp: true
+    - compute_row_hash: true
+
+# Exactly-once semantics
+exactly_once:
+  enabled: true
+  idempotency_key: "event_id"
+  dedup_window_minutes: 60
+
+# Schema registry
+schema_registry:
+  compatibility_mode: "backward"
+  max_versions_per_table: 100
+
+# Monitoring
+monitoring:
+  metrics_port: 9090
+  health_check_endpoint: "/health"
+  throughput_window_seconds: 60
+  alert_on_error_rate: 0.05
+  alert_on_latency_p99_ms: 5000
+
+# Failure recovery
+recovery:
+  max_retries: 3
+  retry_backoff_seconds: 10
+  dead_letter_topic: "astroml.cdc.dlq"
+  replay_enabled: true

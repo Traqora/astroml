@@ -1,0 +1,55 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 24.4.2
+    hooks:
+      - id: black
+        language_version: python3.10
+        args: ["--line-length=100", "--target-version=py310"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.7
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: package.lock.json|go.sum|pnpm-lock.yaml|yarn.lock|poetry.lock
+
+  - repo: local
+    hooks:
+      - id: secrets-gate
+        name: Secrets gate — fail on leaks and unaudited baseline entries (#720)
+        entry: python -m astroml.ci.secrets_gate --baseline .secrets.baseline
+        language: system
+        always_run: true
+        pass_filenames: false
+
+  - repo: local
+    hooks:
+      - id: radon
+        name: Check code complexity with Radon
+        entry: radon
+        language: python
+        additional_dependencies: ["radon==6.0.1"]
+        args: ["cc", "-nc", "-s", "-i"]
+
+      - id: docstring-coverage
+        name: Check public API docstring coverage
+        entry: interrogate
+        language: python
+        additional_dependencies: ["interrogate>=1.7.0,<2.0"]
+        args: ["astroml", "api", "tests"]
+        pass_filenames: false
+
+      # Stdlib-only, so it runs against the checkout's own interpreter rather
+      # than a pre-commit-managed venv.
+      - id: doc-links
+        name: Check internal documentation links
+        entry: python scripts/check_doc_links.py
+        language: system
+        pass_filenames: false
+        files: ^(docs/|README\.md|CONTRIBUTING\.md)

@@ -1,4 +1,5 @@
 """Tests for astroml.ingestion.normalizer."""
+
 from datetime import datetime, timezone
 
 import pytest
@@ -33,7 +34,8 @@ def sample_create_account_json():
         "created_at": "2024-01-15T12:35:00Z",
         "transaction_hash": "b_hash",
     }
-    
+
+
 @pytest.fixture()
 def sample_trustline_json():
     return {
@@ -50,7 +52,7 @@ def sample_trustline_json():
 
 def test_normalize_payment(sample_payment_json):
     norm = normalize_operation(sample_payment_json)
-    
+
     assert isinstance(norm, NormalizedTransaction)
     assert norm.sender == "G_SENDER"
     assert norm.receiver == "G_RECEIVER"
@@ -62,7 +64,7 @@ def test_normalize_payment(sample_payment_json):
 
 def test_normalize_create_account(sample_create_account_json):
     norm = normalize_operation(sample_create_account_json)
-    
+
     assert norm.sender == "G_FUNDER"
     assert norm.receiver == "G_NEW_ACCOUNT"
     assert norm.amount == 1000.0
@@ -72,7 +74,7 @@ def test_normalize_create_account(sample_create_account_json):
 
 def test_normalize_other_operation(sample_trustline_json):
     norm = normalize_operation(sample_trustline_json)
-    
+
     assert norm.sender == "G_TRUSTOR"
     assert norm.receiver is None
     assert norm.amount is None

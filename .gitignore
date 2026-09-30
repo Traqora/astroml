@@ -5,7 +5,9 @@ __pycache__/
 dist/
 build/
 .pytest_cache/
+.hypothesis/
 venv/
+.venv/
 .env
 # Rust build outputs
 target/
@@ -14,3 +16,15 @@ target_local/
 .claude/
 skills-lock.json
 issue.md
+# Node modules
+node_modules/
+# Database
+*.db
+*.sqlite
+*.sqlite3
+# Coverage
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+fix.md

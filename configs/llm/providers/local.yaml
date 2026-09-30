@@ -1,0 +1,14 @@
+provider_name: "local"
+model_name: "meta-llama/Llama-2-7b-chat-hf"
+temperature: 0.5
+max_tokens: 1024
+top_p: 0.9
+rate_limits:
+  requests_per_minute: 1000
+  tokens_per_minute: 100000
+cost_budget:
+  daily_limit: 0.0
+  monthly_limit: 0.0
+provider_params:
+  presence_penalty: 0.0
+  frequency_penalty: 0.0

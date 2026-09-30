@@ -22,6 +22,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 
+from ..cache import cached_prediction
+
 
 class GCNEncoder(nn.Module):
     """GCN encoder that produces node embeddings.
@@ -48,6 +50,7 @@ class GCNEncoder(nn.Module):
             [GCNConv(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]
         )
 
+    @cached_prediction(ttl_seconds=300)
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
         """Return node embeddings of shape ``[N, embedding_dim]``."""
         for conv in self.convs[:-1]:

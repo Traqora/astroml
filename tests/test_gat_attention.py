@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import os
-import sys
-import types
-
 import pytest
 
 try:
     import torch  # type: ignore
+
     TORCH_AVAILABLE = True
 except Exception:
     TORCH_AVAILABLE = False
@@ -16,7 +13,6 @@ pytestmark = pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not install
 
 
 def test_gat_multihead_shapes_and_attention_sum():
-    import torch
     from astroml.features.gnn.attention import GATConv
 
     # Simple 3-node graph with edges: 0->1, 2->1, 1->2
@@ -35,15 +31,14 @@ def test_gat_multihead_shapes_and_attention_sum():
     # Verify attention sums to 1 over incoming edges for each head at each dst node present in edges
     dst = edge_index[1]
     for v in dst.unique():
-        mask = (dst == v)
+        mask = dst == v
         a = attn[mask]  # [E_v, H]
         colsum = a.sum(dim=0)
         assert torch.allclose(colsum, torch.ones_like(colsum), atol=1e-5)
 
 
 def test_gat_export_attention():
-    import torch
-    from astroml.features.gnn.attention import GATConv
+    from astroml.features.gnn.attention import GATConv  # noqa: E402
 
     edge_index = torch.tensor([[0, 2, 1], [1, 1, 2]], dtype=torch.long)
     x = torch.randn(3, 4)

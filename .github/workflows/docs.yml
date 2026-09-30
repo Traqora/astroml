@@ -37,28 +37,32 @@ jobs:
       - name: Install doc dependencies
         run: |
           pip install -r docs/requirements.txt
-        working-directory: astroml
 
-      - name: Install package dependencies (mock heavy ones)
+      - name: Install package dependencies
         run: |
-          pip install numpy pandas
-          pip install --no-deps torch-geometric || true
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
-        working-directory: astroml
+          # Sphinx autosummary imports the real package, so this job needs the
+          # same closure the code does: astroml.features -> astroml.cache ->
+          # redis/cachetools, and torch_geometric -> xxhash/tqdm/aiohttp.
+          # Installing torch-geometric with --no-deps (what this step used to
+          # do) deliberately left those out, so every docs build died on
+          # `ModuleNotFoundError: No module named 'redis'`.
+          pip install -r requirements-cpu.txt
 
       - name: Install package (editable)
         run: pip install -e . --no-deps
-        working-directory: astroml
+
+      - name: Check documentation links
+        run: python scripts/check_doc_links.py
 
       - name: Build HTML docs
         run: make html
-        working-directory: astroml/docs
+        working-directory: docs
 
       - name: Upload Pages artifact
         if: github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:
-          path: astroml/docs/_build/html
+          path: docs/_build/html
 
   deploy:
     needs: build

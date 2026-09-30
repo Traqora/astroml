@@ -1,0 +1,43 @@
+name: LLM Safety Scan
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "astroml/llm/safety/**"
+      - "scripts/ci/safety-scan.sh"
+  pull_request:
+    paths:
+      - "astroml/llm/safety/**"
+  schedule:
+    - cron: "0 8 * * 0"  # Every Sunday at 8 AM UTC
+
+jobs:
+  safety:
+    name: Safety Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e . --no-deps
+
+      - name: Run safety scan
+        run: bash scripts/ci/safety-scan.sh
+
+      - name: Upload safety report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: llm-safety-report
+          path: |
+            .safety_scan_results.txt

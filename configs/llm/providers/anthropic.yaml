@@ -1,0 +1,14 @@
+provider_name: "anthropic"
+model_name: "claude-3-opus-20240229"
+temperature: 0.7
+max_tokens: 1024
+top_p: 1.0
+rate_limits:
+  requests_per_minute: 100
+  tokens_per_minute: 20000
+cost_budget:
+  daily_limit: 15.0
+  monthly_limit: 150.0
+provider_params:
+  presence_penalty: 0.0
+  frequency_penalty: 0.0

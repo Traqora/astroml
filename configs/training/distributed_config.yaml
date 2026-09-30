@@ -1,0 +1,47 @@
+# Distributed training configuration (issue #625)
+# Supports Ray-based hyperparameter tuning and Horovod multi-GPU training
+
+ray:
+  # Ray cluster settings
+  head_address: "auto"
+  dashboard_port: 8265
+  num_workers: 1
+  num_cpus_per_worker: 4
+  num_gpus_per_worker: 0
+  memory_per_worker_gb: 8.0
+  health_check_interval_seconds: 30
+  node_failure_timeout_seconds: 300
+
+  # Hyperparameter tuning
+  tune:
+    num_samples: 10
+    metric: "val_loss"
+    mode: "min"
+    search_algorithm: "random"
+    grace_period: 5
+    max_concurrent_trials: 4
+    param_space:
+      lr: [0.00001, 0.1]
+      batch_size: [16, 32, 64, 128]
+      dropout: [0.0, 0.5]
+
+horovod:
+  # Multi-GPU settings
+  num_processes: 1
+  backend: "nccl"
+  gradient_reduction: "ring_allreduce"
+  fp16_allreduce: true
+  compression_ratio: 1.0
+  scaling: 1.0
+
+# Distribution strategy
+strategy:
+  parallelism_type: "data"  # data, model, hybrid, pipeline
+  shuffle: true
+  seed: 42
+
+# Fault tolerance
+fault_tolerance:
+  checkpoint_every_n_steps: 1000
+  max_restarts: 3
+  recovery_timeout_seconds: 600

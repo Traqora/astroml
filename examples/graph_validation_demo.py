@@ -2,31 +2,41 @@
 
 This script demonstrates how to use the graph validation utilities
 to check graph integrity before training ML models.
+
+This demo can be run from any working directory.
 """
-import pandas as pd
+
 from astroml.features import graph_validation
+import sys
+from pathlib import Path
+
+import pandas as pd
+
+# Add the parent directory to the path to import astroml
+# This allows the example to run from any working directory
+script_dir = Path(__file__).parent.resolve()
+repo_root = script_dir.parent
+sys.path.insert(0, str(repo_root))
 
 
 def demo_basic_validation():
     """Demonstrate basic graph validation."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("DEMO 1: Basic Graph Validation")
-    print("="*60)
+    print("=" * 60)
 
     # Create a simple transaction graph
-    edges = pd.DataFrame({
-        "source": ["Alice", "Bob", "Charlie", "Alice"],
-        "target": ["Bob", "Charlie", "Alice", "David"],
-        "amount": [100.0, 50.0, 75.0, 200.0]
-    })
+    edges = pd.DataFrame(
+        {
+            "source": ["Alice", "Bob", "Charlie", "Alice"],
+            "target": ["Bob", "Charlie", "Alice", "David"],
+            "amount": [100.0, 50.0, 75.0, 200.0],
+        }
+    )
 
     # Run comprehensive validation
     report = graph_validation.validate_graph(
-        edges,
-        source_col="source",
-        target_col="target",
-        weight_col="amount",
-        verbose=True
+        edges, source_col="source", target_col="target", weight_col="amount", verbose=True
     )
 
     print(f"\nValidation passed: {report['validation_passed']}")
@@ -34,14 +44,11 @@ def demo_basic_validation():
 
 def demo_isolated_nodes():
     """Demonstrate isolated node detection."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("DEMO 2: Isolated Node Detection")
-    print("="*60)
+    print("=" * 60)
 
-    edges = pd.DataFrame({
-        "source": ["A", "B"],
-        "target": ["B", "C"]
-    })
+    edges = pd.DataFrame({"source": ["A", "B"], "target": ["B", "C"]})
 
     # Define all nodes that should exist
     all_nodes = {"A", "B", "C", "D", "E"}
@@ -50,9 +57,7 @@ def demo_isolated_nodes():
     print(f"Edges: {len(edges)}")
 
     connected, isolated = graph_validation.check_isolated_nodes(
-        edges,
-        all_nodes=all_nodes,
-        allow_isolated=True
+        edges, all_nodes=all_nodes, allow_isolated=True
     )
 
     print(f"\nConnected nodes: {connected}")
@@ -61,49 +66,47 @@ def demo_isolated_nodes():
 
 def demo_edge_consistency():
     """Demonstrate edge consistency checks."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("DEMO 3: Edge Consistency Checks")
-    print("="*60)
+    print("=" * 60)
 
     # Graph with various edge issues
-    edges = pd.DataFrame({
-        "source": ["A", "B", "C", "A", "D"],
-        "target": ["A", "C", "D", "B", "D"],
-        "weight": [10.0, 20.0, 30.0, 15.0, -5.0]
-    })
+    edges = pd.DataFrame(
+        {
+            "source": ["A", "B", "C", "A", "D"],
+            "target": ["A", "C", "D", "B", "D"],
+            "weight": [10.0, 20.0, 30.0, 15.0, -5.0],
+        }
+    )
 
     print("\nChecking edge consistency...")
     result = graph_validation.check_edge_consistency(
-        edges,
-        weight_col="weight",
-        allow_self_loops=True,
-        allow_duplicates=True
+        edges, weight_col="weight", allow_self_loops=True, allow_duplicates=True
     )
 
     print(f"\nSelf-loops found: {result['self_loops']}")
     print(f"Duplicate edges: {result['duplicate_edges']}")
     print(f"Null values: {result['null_values']}")
-    if 'negative_weights' in result:
+    if "negative_weights" in result:
         print(f"Negative weights: {result['negative_weights']}")
 
 
 def demo_summary_statistics():
     """Demonstrate summary statistics generation."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("DEMO 4: Summary Statistics")
-    print("="*60)
+    print("=" * 60)
 
     # Create a more complex graph
-    edges = pd.DataFrame({
-        "source": ["A", "A", "B", "B", "C", "D", "E"],
-        "target": ["B", "C", "C", "D", "D", "E", "A"],
-        "amount": [100, 150, 200, 50, 75, 300, 125]
-    })
-
-    stats = graph_validation.graph_summary_statistics(
-        edges,
-        weight_col="amount"
+    edges = pd.DataFrame(
+        {
+            "source": ["A", "A", "B", "B", "C", "D", "E"],
+            "target": ["B", "C", "C", "D", "D", "E", "A"],
+            "amount": [100, 150, 200, 50, 75, 300, 125],
+        }
     )
+
+    stats = graph_validation.graph_summary_statistics(edges, weight_col="amount")
 
     print(f"\nGraph Statistics:")
     print(f"  Nodes: {stats['num_nodes']}")
@@ -122,15 +125,15 @@ def demo_summary_statistics():
 
 
 if __name__ == "__main__":
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("ASTROML GRAPH VALIDATION DEMO")
-    print("="*60)
+    print("=" * 60)
 
     demo_basic_validation()
     demo_isolated_nodes()
     demo_edge_consistency()
     demo_summary_statistics()
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Demo completed!")
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")

@@ -1,0 +1,117 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "LLM Calls (rate)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(astroml_llm_calls_total[5m])",
+          "legendFormat": "{{provider}}/{{model}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        { "format": "short", "label": "calls/s" },
+        { "format": "short" }
+      ]
+    },
+    {
+      "title": "LLM Cost USD (rate)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(astroml_llm_cost_usd_total[5m])",
+          "legendFormat": "{{provider}}/{{model}}",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [
+        { "format": "currencyUSD", "label": "USD/s" },
+        { "format": "short" }
+      ]
+    },
+    {
+      "title": "LLM Tokens Prompt (rate)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(astroml_llm_tokens_total{token_type=\"prompt\"}[5m])",
+          "legendFormat": "{{provider}}/{{model}}",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [
+        { "format": "short", "label": "tokens/s" },
+        { "format": "short" }
+      ]
+    },
+    {
+      "title": "LLM Tokens Completion (rate)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(astroml_llm_tokens_total{token_type=\"completion\"}[5m])",
+          "legendFormat": "{{provider}}/{{model}}",
+          "refId": "D"
+        }
+      ],
+      "yaxes": [
+        { "format": "short", "label": "tokens/s" },
+        { "format": "short" }
+      ]
+    },
+    {
+      "title": "LLM Latency p95",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(astroml_llm_latency_seconds_bucket[5m]))",
+          "legendFormat": "{{provider}}/{{model}}",
+          "refId": "E"
+        }
+      ],
+      "yaxes": [{ "format": "s", "label": "seconds" }, { "format": "short" }]
+    },
+    {
+      "title": "LLM Cost USD (cumulative)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 16 },
+      "targets": [
+        { "expr": "sum(rate(astroml_llm_cost_usd_total[5m]))", "refId": "F" }
+      ]
+    }
+  ],
+  "schemaVersion": 26,
+  "style": "dark",
+  "tags": ["astroml", "llm", "cost"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "AstroML LLM Cost Dashboard",
+  "uid": "astroml_llm_cost",
+  "version": 1
+}

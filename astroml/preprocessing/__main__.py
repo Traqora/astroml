@@ -1,4 +1,5 @@
 """CLI for Polars-based ledger backfill preprocessing."""
+
 from __future__ import annotations
 
 import argparse

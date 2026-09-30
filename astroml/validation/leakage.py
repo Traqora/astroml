@@ -12,18 +12,17 @@ Two main capabilities:
    indicators such as unsorted timestamps, constant features, or features
    with near-perfect correlation to the target variable.
 """
+
 import warnings
-from typing import Any, Optional, Union
+from typing import Any, NamedTuple
 
 import numpy as np
 import pandas as pd
 
-from typing import NamedTuple
-
-
 # ---------------------------------------------------------------------------
 # Types
 # ---------------------------------------------------------------------------
+
 
 class LeakageError(Exception):
     """Raised when a hard temporal leakage violation is detected."""
@@ -48,11 +47,12 @@ class LeakageWarning(NamedTuple):
 # Temporal split enforcement
 # ---------------------------------------------------------------------------
 
+
 def temporal_train_test_split(
     df: pd.DataFrame,
     time_col: str,
     *,
-    cutoff: Optional[Any] = None,
+    cutoff: Any | None = None,
     train_ratio: float = 0.8,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Split a DataFrame into train/test sets respecting temporal order.
@@ -85,8 +85,7 @@ def temporal_train_test_split(
 
     if df[time_col].isna().any():
         raise ValueError(
-            f"Column '{time_col}' contains null values; "
-            "remove or fill them before splitting"
+            f"Column '{time_col}' contains null values; " "remove or fill them before splitting"
         )
 
     if df.empty:
@@ -98,9 +97,7 @@ def temporal_train_test_split(
         test_df = df.loc[~train_mask].copy()
     else:
         if not (0 < train_ratio < 1):
-            raise ValueError(
-                f"train_ratio must be in (0, 1), got {train_ratio}"
-            )
+            raise ValueError(f"train_ratio must be in (0, 1), got {train_ratio}")
         sorted_df = df.sort_values(time_col).reset_index(drop=True)
         split_idx = int(len(sorted_df) * train_ratio)
         train_df = sorted_df.iloc[:split_idx].copy()
@@ -144,9 +141,7 @@ def validate_temporal_split(
     """
     for label, partition in [("train", train_df), ("test", test_df)]:
         if time_col not in partition.columns:
-            raise ValueError(
-                f"Column '{time_col}' not found in {label} DataFrame"
-            )
+            raise ValueError(f"Column '{time_col}' not found in {label} DataFrame")
 
     # Empty partitions are trivially valid.
     if train_df.empty or test_df.empty:
@@ -157,8 +152,7 @@ def validate_temporal_split(
 
     if train_max >= test_min:
         raise LeakageError(
-            f"Temporal overlap detected: train max ({train_max}) "
-            f">= test min ({test_min})"
+            f"Temporal overlap detected: train max ({train_max}) " f">= test min ({test_min})"
         )
 
     return True
@@ -168,10 +162,11 @@ def validate_temporal_split(
 # Automated warning system
 # ---------------------------------------------------------------------------
 
+
 def check_feature_leakage(
     df: pd.DataFrame,
     time_col: str,
-    feature_cols: Optional[list[str]] = None,
+    feature_cols: list[str] | None = None,
 ) -> list[LeakageWarning]:
     """Scan a DataFrame for common feature-leakage indicators.
 
@@ -237,7 +232,7 @@ def check_feature_leakage(
 def check_target_leakage(
     df: pd.DataFrame,
     target_col: str,
-    feature_cols: Optional[list[str]] = None,
+    feature_cols: list[str] | None = None,
     threshold: float = 0.95,
 ) -> list[LeakageWarning]:
     """Check whether any feature has near-perfect correlation with the target.

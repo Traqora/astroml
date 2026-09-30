@@ -4,12 +4,13 @@ This module provides hash-based deduplication to detect and handle
 duplicate transactions. It maintains an in-memory set of seen hashes
 and provides structured logging for conflicts.
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from .hashing import compute_transaction_hash
 
@@ -36,11 +37,11 @@ class ConflictRecord:
         message: Additional context about the conflict.
     """
 
-    transaction_id: Optional[str]
+    transaction_id: str | None
     hash: str
     conflict_type: str
     timestamp: str
-    source: Optional[str] = None
+    source: str | None = None
     message: str = ""
 
     def __post_init__(self) -> None:
@@ -59,10 +60,10 @@ class DeduplicationResult:
         conflicts: List of conflict records.
     """
 
-    unique: List[Dict[str, Any]] = field(default_factory=list)
-    duplicates: List[Dict[str, Any]] = field(default_factory=list)
-    hashes: Set[str] = field(default_factory=set)
-    conflicts: List[ConflictRecord] = field(default_factory=list)
+    unique: list[dict[str, Any]] = field(default_factory=list)
+    duplicates: list[dict[str, Any]] = field(default_factory=list)
+    hashes: set[str] = field(default_factory=set)
+    conflicts: list[ConflictRecord] = field(default_factory=list)
 
 
 class Deduplicator:
@@ -74,7 +75,7 @@ class Deduplicator:
 
     def __init__(
         self,
-        hash_fields: Optional[Set[str]] = None,
+        hash_fields: set[str] | None = None,
         track_conflicts: bool = True,
     ) -> None:
         """Initialize the deduplicator.
@@ -84,17 +85,17 @@ class Deduplicator:
             track_conflicts: Whether to track conflict records.
         """
         self.hash_fields = hash_fields
-        self._seen_hashes: Set[str] = set()
+        self._seen_hashes: set[str] = set()
         self._track_conflicts = track_conflicts
-        self._conflicts: List[ConflictRecord] = []
+        self._conflicts: list[ConflictRecord] = []
 
     @property
-    def seen_hashes(self) -> Set[str]:
+    def seen_hashes(self) -> set[str]:
         """Return a copy of the seen hashes set."""
         return self._seen_hashes.copy()
 
     @property
-    def conflicts(self) -> List[ConflictRecord]:
+    def conflicts(self) -> list[ConflictRecord]:
         """Return a copy of the conflict records."""
         return self._conflicts.copy()
 
@@ -105,10 +106,10 @@ class Deduplicator:
 
     def _log_conflict(
         self,
-        transaction: Dict[str, Any],
+        transaction: dict[str, Any],
         hash_value: str,
         conflict_type: str,
-        source: Optional[str] = None,
+        source: str | None = None,
     ) -> None:
         """Log a conflict with structured information.
 
@@ -143,8 +144,8 @@ class Deduplicator:
 
     def add(
         self,
-        transaction: Dict[str, Any],
-        source: Optional[str] = None,
+        transaction: dict[str, Any],
+        source: str | None = None,
     ) -> bool:
         """Add a transaction hash to the seen set.
 
@@ -165,7 +166,7 @@ class Deduplicator:
         self._seen_hashes.add(hash_value)
         return True
 
-    def check(self, transaction: Dict[str, Any]) -> bool:
+    def check(self, transaction: dict[str, Any]) -> bool:
         """Check if a transaction is a duplicate without adding it.
 
         Args:
@@ -179,8 +180,8 @@ class Deduplicator:
 
     def process(
         self,
-        transactions: List[Dict[str, Any]],
-        source: Optional[str] = None,
+        transactions: list[dict[str, Any]],
+        source: str | None = None,
     ) -> DeduplicationResult:
         """Process a batch of transactions, filtering duplicates.
 
@@ -194,16 +195,12 @@ class Deduplicator:
         result = DeduplicationResult()
 
         for transaction in transactions:
-            hash_value = compute_transaction_hash(
-                transaction, fields=self.hash_fields
-            )
+            hash_value = compute_transaction_hash(transaction, fields=self.hash_fields)
 
             if hash_value in self._seen_hashes:
                 result.duplicates.append(transaction)
                 if self._track_conflicts:
-                    self._log_conflict(
-                        transaction, hash_value, ConflictType.DUPLICATE, source
-                    )
+                    self._log_conflict(transaction, hash_value, ConflictType.DUPLICATE, source)
             else:
                 self._seen_hashes.add(hash_value)
                 result.unique.append(transaction)
@@ -214,9 +211,9 @@ class Deduplicator:
 
     def filter_duplicates(
         self,
-        transactions: List[Dict[str, Any]],
+        transactions: list[dict[str, Any]],
         return_unique: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Filter duplicate transactions from a list.
 
         Args:
@@ -232,8 +229,8 @@ class Deduplicator:
 
 
 def deduplicate(
-    transactions: List[Dict[str, Any]],
-    hash_fields: Optional[Set[str]] = None,
+    transactions: list[dict[str, Any]],
+    hash_fields: set[str] | None = None,
 ) -> DeduplicationResult:
     """Convenience function to deduplicate a list of transactions.
 

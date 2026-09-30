@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Horizon Streaming Client for real-time Stellar data ingestion.
 
 Connects to a Stellar Horizon server via Server-Sent Events (SSE) and
@@ -7,6 +8,7 @@ Usage::
 
     python -m astroml.ingestion.stream [--cursor CURSOR] [--endpoint /transactions]
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -14,15 +16,15 @@ import json
 import logging
 import pathlib
 import signal
-import sys
 from datetime import timedelta
-from typing import Optional
 
 import aiohttp
 from aiohttp_sse_client import client as sse_client
 
-from astroml.db.schema import Ledger, NormalizedTransaction, Transaction
+from astroml.db.repositories import NormalizedTransactionRepository
+from astroml.db.schema import Ledger, Transaction
 from astroml.db.session import get_session
+from astroml.ingestion.batch import BatchBuffer
 from astroml.ingestion.config import StreamConfig
 from astroml.ingestion.normalizer import normalize_operation
 from astroml.ingestion.parsers import parse_ledger, parse_operation, parse_transaction
@@ -43,12 +45,13 @@ class HorizonStreamClient:
         config: Streaming configuration. Uses defaults if not provided.
     """
 
-    def __init__(self, config: Optional[StreamConfig] = None) -> None:
+    def __init__(self, config: StreamConfig | None = None) -> None:
         self._config = config or StreamConfig()
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
         self._running = False
-        self._last_cursor: Optional[str] = self._config.cursor or self._load_cursor()
+        self._last_cursor: str | None = self._config.cursor or self._load_cursor()
         self._retry_count = 0
+        self._batch_buffer: BatchBuffer | None = None
 
     # -- Async context manager ------------------------------------------------
 
@@ -56,21 +59,36 @@ class HorizonStreamClient:
         self._session = aiohttp.ClientSession()
         self._running = True
         self._install_signal_handlers()
+        session = get_session()
+        self._batch_buffer = BatchBuffer(
+            session,
+            chunk_size=self._config.persist_chunk_size,
+            flush_on_exit=True,
+        )
         logger.info(
-            "HorizonStreamClient initialized | horizon=%s endpoint=%s cursor=%s",
+            "HorizonStreamClient initialized | horizon=%s endpoint=%s cursor=%s chunk_size=%d",
             self._config.horizon_url,
             self._config.stream_endpoint,
             self._last_cursor or "now",
+            self._config.persist_chunk_size,
         )
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(self, exc_type, _exc_val, _exc_tb) -> None:
         self._running = False
+        if self._batch_buffer is not None:
+            try:
+                flushed = self._batch_buffer.total_flushed
+                self._batch_buffer.close()
+                logger.info("Batch buffer closed | total_flushed=%d flush_count=%d",
+                    flushed, self._batch_buffer.flush_count)
+            except AstroMLError:
+                logger.exception("Error closing batch buffer")
+            finally:
+                self._batch_buffer = None
         if self._session:
             await self._session.close()
-        logger.info(
-            "HorizonStreamClient shut down | last_cursor=%s", self._last_cursor
-        )
+        logger.info("HorizonStreamClient shut down | last_cursor=%s", self._last_cursor)
 
     # -- Signal handling ------------------------------------------------------
 
@@ -87,7 +105,7 @@ class HorizonStreamClient:
     # -- Cursor persistence ---------------------------------------------------
 
     @staticmethod
-    def _load_cursor() -> Optional[str]:
+    def _load_cursor() -> str | None:
         """Load cursor from file if it exists."""
         if CURSOR_FILE.exists():
             text = CURSOR_FILE.read_text().strip()
@@ -128,7 +146,7 @@ class HorizonStreamClient:
                 if not self._running:
                     break
                 await self._handle_reconnect(exc)
-            except Exception:
+            except AstroMLError:
                 logger.exception("Unexpected error in stream loop")
                 if not self._running:
                     break
@@ -144,9 +162,7 @@ class HorizonStreamClient:
         async with sse_client.EventSource(
             url,
             session=self._session,
-            reconnection_time=timedelta(
-                seconds=self._config.reconnect_base_seconds
-            ),
+            reconnection_time=timedelta(seconds=self._config.reconnect_base_seconds),
         ) as event_source:
             self._retry_count = 0
             logger.info("Connected to Horizon stream")
@@ -157,7 +173,7 @@ class HorizonStreamClient:
                 if event.data:
                     await self._process_event(event)
 
-    async def _handle_reconnect(self, exc: Optional[Exception]) -> None:
+    async def _handle_reconnect(self, exc: Exception | None) -> None:
         """Wait with exponential backoff before reconnecting."""
         self._retry_count += 1
         max_retries = self._config.max_retries
@@ -201,10 +217,8 @@ class HorizonStreamClient:
             else:
                 logger.warning("Unsupported endpoint: %s", endpoint)
                 return
-        except Exception:
-            logger.exception(
-                "Failed to persist event (paging_token=%s)", paging_token
-            )
+        except AstroMLError:
+            logger.exception("Failed to persist event (paging_token=%s)", paging_token)
             return
 
         # Update cursor only after successful persistence
@@ -223,52 +237,58 @@ class HorizonStreamClient:
             tx.hash[:12],
             tx.ledger_sequence,
         )
-        await asyncio.to_thread(self._db_write_transaction, tx)
-
-    @staticmethod
-    def _db_write_transaction(tx: Transaction) -> None:
-        """Synchronous DB write for a transaction (runs in thread executor)."""
-        session = get_session()
-        try:
-            existing_ledger = session.get(Ledger, tx.ledger_sequence)
+        if self._batch_buffer is not None:
+            existing_ledger = None
+            try:
+                session = self._batch_buffer._session
+                existing_ledger = session.get(Ledger, tx.ledger_sequence)
+            except AstroMLError:
+                pass
             if existing_ledger is None:
                 ledger = Ledger(
                     sequence=tx.ledger_sequence,
                     hash="",
                     closed_at=tx.created_at,
                 )
-                session.merge(ledger)
-            session.merge(tx)
-            session.commit()
-        except Exception:
-            session.rollback()
-            raise
-        finally:
-            session.close()
+                self._batch_buffer.add(ledger)
+            self._batch_buffer.add(tx)
+        else:
+            await asyncio.to_thread(self._db_write_transaction, tx)
 
     async def _persist_ledger(self, data: dict) -> None:
         """Persist a ledger."""
         ledger = parse_ledger(data)
         logger.info("Processing ledger %d", ledger.sequence)
-        await asyncio.to_thread(self._db_write_model, ledger)
+        if self._batch_buffer is not None:
+            self._batch_buffer.add(ledger)
+        else:
+            await asyncio.to_thread(self._db_write_model, ledger)
 
     async def _persist_operation(self, data: dict) -> None:
         """Persist an operation and its normalized form."""
         op = parse_operation(data)
         normalized = normalize_operation(data)
         logger.info("Processing operation %d (type=%s)", op.id, op.type)
-        
-        await asyncio.to_thread(self._db_write_operation_and_normalized, op, normalized)
+
+        if self._batch_buffer is not None:
+            self._batch_buffer.add(op)
+            self._batch_buffer.add(normalized)
+        else:
+            await asyncio.to_thread(self._db_write_operation_and_normalized, op, normalized)
 
     @staticmethod
     def _db_write_operation_and_normalized(op, normalized) -> None:
         """Synchronous DB write for both raw and normalized operation."""
         session = get_session()
         try:
+            # ``Operation`` is keyed by Horizon's operation id, so merge already
+            # resolves it.  The normalized row has only a surrogate primary key,
+            # and merging it inserted a duplicate on every replay (#728), so it
+            # goes through the natural-key upsert instead.
             session.merge(op)
-            session.merge(normalized)
+            NormalizedTransactionRepository(session).upsert(normalized)
             session.commit()
-        except Exception:
+        except AstroMLError:
             session.rollback()
             raise
         finally:
@@ -281,7 +301,7 @@ class HorizonStreamClient:
         try:
             session.merge(model)
             session.commit()
-        except Exception:
+        except AstroMLError:
             session.rollback()
             raise
         finally:
@@ -290,7 +310,7 @@ class HorizonStreamClient:
     # -- Cursor access --------------------------------------------------------
 
     @property
-    def last_cursor(self) -> Optional[str]:
+    def last_cursor(self) -> str | None:
         """The paging_token of the last successfully processed event."""
         return self._last_cursor
 
@@ -301,18 +321,21 @@ class HorizonStreamClient:
 
 
 def _configure_logging() -> None:
-    """Configure structured logging for the streaming process."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)-8s [%(name)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        stream=sys.stderr,
-    )
+    """Configure structured logging for the streaming process.
+
+    Delegates to :func:`astroml.utils.logging.configure_logging` so log
+    level (``ASTROML_LOG_LEVEL``) and format (``ASTROML_LOG_FORMAT=
+    text|json``) are consistent across every astroml entry point. See
+    issue #195.
+    """
+    from astroml.utils.logging import configure_logging
+
+    configure_logging()
 
 
 def _parse_cli_args() -> StreamConfig:
     """Parse command-line arguments into a StreamConfig."""
-    import argparse
+    import argparse  # noqa: E402
 
     parser = argparse.ArgumentParser(
         description="Stream Stellar blockchain data from Horizon into PostgreSQL.",

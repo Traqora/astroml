@@ -1,0 +1,39 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\MENDOS\AppData\Local\Programs\Python312\Lib\site-packages\interrogate\__main__.py", line 8, in <module>
+    cli.main()
+  File "C:\Users\MENDOS\AppData\Local\Programs\Python312\Lib\site-packages\click\core.py", line 1631, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\MENDOS\AppData\Local\Programs\Python312\Lib\site-packages\click\core.py", line 1552, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "C:\Users\MENDOS\AppData\Local\Programs\Python312\Lib\site-packages\click\core.py", line 1415, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\MENDOS\AppData\Local\Programs\Python312\Lib\site-packages\click\core.py", line 910, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\MENDOS\AppData\Local\Programs\Python312\Lib\site-packages\click\decorators.py", line 34, in new_func
+    return f(get_current_context(), *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\MENDOS\AppData\Local\Programs\Python312\Lib\site-packages\interrogate\cli.py", line 400, in main
+    results = interrogate_coverage.get_coverage()
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\MENDOS\AppData\Local\Programs\Python312\Lib\site-packages\interrogate\coverage.py", line 286, in get_coverage
+    return self._get_coverage(filenames)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\MENDOS\AppData\Local\Programs\Python312\Lib\site-packages\interrogate\coverage.py", line 268, in _get_coverage
+    result = self._get_file_coverage(f)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\MENDOS\AppData\Local\Programs\Python312\Lib\site-packages\interrogate\coverage.py", line 237, in _get_file_coverage
+    parsed_tree = ast.parse(source_tree)
+                  ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\MENDOS\AppData\Local\Programs\Python312\Lib\ast.py", line 52, in parse
+    return compile(source, filename, mode, flags,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<unknown>", line 12
+    """Graph computation cache for repeated graph outputs — issue #767.
+                                                          ^
+SyntaxError: invalid character '—' (U+2014)

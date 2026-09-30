@@ -5,6 +5,7 @@ Resolves the database URL from (in priority order):
 2. ``config/database.yaml``
 3. ``sqlalchemy.url`` in ``alembic.ini``
 """
+
 import os
 import pathlib
 from logging.config import fileConfig

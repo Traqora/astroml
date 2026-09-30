@@ -1,7 +1,9 @@
 import math
-import pytest
-from astroml.features.temporal_decay import TemporalDecayWeighter, compute_decay_weights
+
 import numpy as np
+import pytest
+
+from astroml.features.temporal_decay import TemporalDecayWeighter, compute_decay_weights
 
 
 class TestTemporalDecayWeighter:
@@ -69,11 +71,7 @@ class TestTemporalDecayWeighter:
     def test_weight_transactions_multiple(self):
         """Test weighting multiple transactions."""
         weighter = TemporalDecayWeighter(lambda_param=0.01)
-        transactions = [
-            {"timestamp": 100.0},
-            {"timestamp": 50.0},
-            {"timestamp": 0.0}
-        ]
+        transactions = [{"timestamp": 100.0}, {"timestamp": 50.0}, {"timestamp": 0.0}]
         result = weighter.weight_transactions(transactions, current_time=100.0)
         assert len(result) == 3
         assert result[0] == 1.0  # time_delta = 0
@@ -83,10 +81,7 @@ class TestTemporalDecayWeighter:
     def test_weight_transactions_custom_timestamp_key(self):
         """Test weighting with custom timestamp key."""
         weighter = TemporalDecayWeighter(lambda_param=0.01)
-        transactions = [
-            {"txn_time": 100.0},
-            {"txn_time": 50.0}
-        ]
+        transactions = [{"txn_time": 100.0}, {"txn_time": 50.0}]
         result = weighter.weight_transactions(
             transactions, current_time=100.0, timestamp_key="txn_time"
         )
@@ -130,34 +125,21 @@ class TestTemporalDecayWeighter:
     def test_aggregate_with_decay_sum(self):
         """Test sum aggregation with decay."""
         weighter = TemporalDecayWeighter(lambda_param=0.0)
-        transactions = [
-            {"timestamp": 100.0, "amount": 100.0},
-            {"timestamp": 100.0, "amount": 50.0}
-        ]
-        result = weighter.aggregate_with_decay(
-            transactions, current_time=100.0, aggregation="sum"
-        )
+        transactions = [{"timestamp": 100.0, "amount": 100.0}, {"timestamp": 100.0, "amount": 50.0}]
+        result = weighter.aggregate_with_decay(transactions, current_time=100.0, aggregation="sum")
         assert abs(result - 150.0) < 1e-10
 
     def test_aggregate_with_decay_mean(self):
         """Test mean aggregation with decay."""
         weighter = TemporalDecayWeighter(lambda_param=0.0)
-        transactions = [
-            {"timestamp": 100.0, "amount": 100.0},
-            {"timestamp": 100.0, "amount": 50.0}
-        ]
-        result = weighter.aggregate_with_decay(
-            transactions, current_time=100.0, aggregation="mean"
-        )
+        transactions = [{"timestamp": 100.0, "amount": 100.0}, {"timestamp": 100.0, "amount": 50.0}]
+        result = weighter.aggregate_with_decay(transactions, current_time=100.0, aggregation="mean")
         assert abs(result - 75.0) < 1e-10
 
     def test_aggregate_with_decay_weighted_mean(self):
         """Test weighted mean aggregation."""
         weighter = TemporalDecayWeighter(lambda_param=0.0)
-        transactions = [
-            {"timestamp": 100.0, "amount": 100.0},
-            {"timestamp": 100.0, "amount": 50.0}
-        ]
+        transactions = [{"timestamp": 100.0, "amount": 100.0}, {"timestamp": 100.0, "amount": 50.0}]
         result = weighter.aggregate_with_decay(
             transactions, current_time=100.0, aggregation="weighted_mean"
         )
@@ -168,45 +150,31 @@ class TestTemporalDecayWeighter:
         weighter = TemporalDecayWeighter(lambda_param=0.01)
         transactions = [{"timestamp": 100.0, "amount": 100.0}]
         with pytest.raises(ValueError):
-            weighter.aggregate_with_decay(
-                transactions, current_time=100.0, aggregation="invalid"
-            )
+            weighter.aggregate_with_decay(transactions, current_time=100.0, aggregation="invalid")
 
     def test_aggregate_with_decay_custom_keys(self):
         """Test aggregation with custom timestamp and amount keys."""
         weighter = TemporalDecayWeighter(lambda_param=0.01)
-        transactions = [
-            {"txn_time": 100.0, "value": 100.0},
-            {"txn_time": 100.0, "value": 50.0}
-        ]
+        transactions = [{"txn_time": 100.0, "value": 100.0}, {"txn_time": 100.0, "value": 50.0}]
         result = weighter.aggregate_with_decay(
             transactions,
             current_time=100.0,
             timestamp_key="txn_time",
             amount_key="value",
-            aggregation="sum"
+            aggregation="sum",
         )
         assert abs(result - 150.0) < 1e-10
 
     def test_aggregate_with_decay_missing_values(self):
         """Test aggregation handles missing amount values."""
         weighter = TemporalDecayWeighter(lambda_param=0.01)
-        transactions = [
-            {"timestamp": 100.0, "amount": 100.0},
-            {"timestamp": 100.0}
-        ]
-        result = weighter.aggregate_with_decay(
-            transactions, current_time=100.0, aggregation="sum"
-        )
+        transactions = [{"timestamp": 100.0, "amount": 100.0}, {"timestamp": 100.0}]
+        result = weighter.aggregate_with_decay(transactions, current_time=100.0, aggregation="sum")
         assert abs(result - 100.0) < 1e-10
 
     def test_compute_decay_weights_utility(self):
         """Test compute_decay_weights utility function."""
-        transactions = [
-            {"timestamp": 100.0},
-            {"timestamp": 50.0},
-            {"timestamp": 0.0}
-        ]
+        transactions = [{"timestamp": 100.0}, {"timestamp": 50.0}, {"timestamp": 0.0}]
         result = compute_decay_weights(transactions, current_time=100.0, lambda_param=0.01)
         assert isinstance(result, np.ndarray)
         assert len(result) == 3
@@ -227,12 +195,10 @@ class TestTemporalDecayWeighter:
         transactions = [
             {"timestamp": 1000000, "amount": 100.0},
             {"timestamp": 999900, "amount": 150.0},
-            {"timestamp": 999500, "amount": 75.0}
+            {"timestamp": 999500, "amount": 75.0},
         ]
         result = weighter.aggregate_with_decay(
-            transactions,
-            current_time=1000000,
-            aggregation="sum"
+            transactions, current_time=1000000, aggregation="sum"
         )
         assert result > 0
         assert result < sum(t["amount"] for t in transactions)

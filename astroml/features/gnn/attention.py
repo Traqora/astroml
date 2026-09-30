@@ -30,7 +30,6 @@ Notes
   segment operations with scatter-based reductions for large graphs when needed.
 """
 
-from typing import Optional, Tuple
 
 import torch
 from torch import nn
@@ -59,7 +58,9 @@ def _segment_softmax(scores: torch.Tensor, dst: torch.Tensor, num_nodes: int) ->
     return attn
 
 
-def _aggregate_sum_by_dst(messages: torch.Tensor, dst: torch.Tensor, num_nodes: int) -> torch.Tensor:
+def _aggregate_sum_by_dst(
+    messages: torch.Tensor, dst: torch.Tensor, num_nodes: int
+) -> torch.Tensor:
     """Sum messages per destination node using simple masking aggregation.
 
     messages: [E, H, F]
@@ -103,12 +104,12 @@ class GATConv(nn.Module):
         if bias:
             self.bias = nn.Parameter(torch.zeros(out_dim * heads if concat else out_dim))
         else:
-            self.register_parameter('bias', None)
+            self.register_parameter("bias", None)
 
         self.reset_parameters()
 
         # Store last attention for export: tuple(edge_index, attn [E, H])
-        self.last_attention_: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
+        self.last_attention_: tuple[torch.Tensor, torch.Tensor] | None = None
 
     def reset_parameters(self) -> None:
         nn.init.xavier_uniform_(self.lin.weight)
@@ -121,7 +122,7 @@ class GATConv(nn.Module):
         x: torch.Tensor,
         edge_index: torch.Tensor,
         return_attention: bool = False,
-    ) -> torch.Tensor | Tuple[torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """Compute GAT output and optionally return attention weights.
 
         x: [N, in_dim]
@@ -131,7 +132,6 @@ class GATConv(nn.Module):
         N = x.size(0)
         assert edge_index.dim() == 2 and edge_index.size(0) == 2, "edge_index must be [2, E]"
         src, dst = edge_index[0], edge_index[1]
-        E = edge_index.size(1)
 
         Wh = self.lin(x)  # [N, H*F]
         Wh = Wh.view(N, self.heads, self.out_dim)  # [N, H, F]
@@ -143,7 +143,9 @@ class GATConv(nn.Module):
         # Compute attention logits per edge per head
         # [E, H, 2F] * [H, 2F] -> [E, H]
         cat_ij = torch.cat([Wh_i, Wh_j], dim=-1)  # [E, H, 2F]
-        att_logits = F.leaky_relu((cat_ij * self.att).sum(dim=-1), negative_slope=self.negative_slope)  # [E, H]
+        att_logits = F.leaky_relu(
+            (cat_ij * self.att).sum(dim=-1), negative_slope=self.negative_slope
+        )  # [E, H]
 
         # Normalize over incoming edges per node for each head
         alpha = _segment_softmax(att_logits, dst, N)  # [E, H]
@@ -168,7 +170,7 @@ class GATConv(nn.Module):
             return out, alpha
         return out
 
-    def export_attention(self) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
+    def export_attention(self) -> tuple[torch.Tensor, torch.Tensor] | None:
         """Return the last computed (edge_index, attention) or None if not computed yet.
 
         - edge_index: [2, E] LongTensor

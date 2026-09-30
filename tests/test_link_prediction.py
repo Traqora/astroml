@@ -1,9 +1,8 @@
 """Tests for self-supervised link prediction task and model."""
+
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
-from typing import List
 
 import pytest
 import torch
@@ -15,12 +14,12 @@ from astroml.tasks.link_prediction_task import (
     sample_negative_edges,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_edges(n: int = 20, max_ledger: int = 10) -> List[Edge]:
+
+def _make_edges(n: int = 20, max_ledger: int = 10) -> list[Edge]:
     """Return n edges with ledger timestamps spread across max_ledger values."""
     rng = random.Random(42)
     accounts = [f"account_{i}" for i in range(6)]
@@ -36,6 +35,7 @@ def _make_edges(n: int = 20, max_ledger: int = 10) -> List[Edge]:
 # ---------------------------------------------------------------------------
 # LedgerSplit
 # ---------------------------------------------------------------------------
+
 
 class TestLedgerSplit:
     def test_num_nodes(self):
@@ -71,31 +71,41 @@ class TestLedgerSplit:
 # sample_negative_edges
 # ---------------------------------------------------------------------------
 
+
 class TestSampleNegativeEdges:
     def test_no_positives_in_negatives(self):
         pos_set = {(0, 1), (1, 2)}
-        negs = sample_negative_edges(num_nodes=5, positive_set=pos_set, num_samples=10, rng=random.Random(0))
+        negs = sample_negative_edges(
+            num_nodes=5, positive_set=pos_set, num_samples=10, rng=random.Random(0)
+        )
         for u, v in negs:
             assert (u, v) not in pos_set
 
     def test_no_self_loops(self):
-        negs = sample_negative_edges(num_nodes=10, positive_set=set(), num_samples=20, rng=random.Random(0))
+        negs = sample_negative_edges(
+            num_nodes=10, positive_set=set(), num_samples=20, rng=random.Random(0)
+        )
         for u, v in negs:
             assert u != v
 
     def test_returns_at_most_num_samples(self):
-        negs = sample_negative_edges(num_nodes=4, positive_set=set(), num_samples=100, rng=random.Random(0))
+        negs = sample_negative_edges(
+            num_nodes=4, positive_set=set(), num_samples=100, rng=random.Random(0)
+        )
         # 4 nodes → at most 4*3=12 directed non-self-loop pairs
         assert len(negs) <= 12
 
     def test_uniqueness(self):
-        negs = sample_negative_edges(num_nodes=20, positive_set=set(), num_samples=30, rng=random.Random(1))
+        negs = sample_negative_edges(
+            num_nodes=20, positive_set=set(), num_samples=30, rng=random.Random(1)
+        )
         assert len(negs) == len(set(negs))
 
 
 # ---------------------------------------------------------------------------
 # LinkPredictionTask.build_splits
 # ---------------------------------------------------------------------------
+
 
 class TestBuildSplits:
     def test_splits_are_produced(self):
@@ -110,9 +120,7 @@ class TestBuildSplits:
         for split in task.build_splits():
             ctx_max = max(e.timestamp for e in split.context_edges)
             fut_min = min(e.timestamp for e in split.future_edges)
-            assert ctx_max < fut_min, (
-                f"Context max={ctx_max} is not < future min={fut_min}"
-            )
+            assert ctx_max < fut_min, f"Context max={ctx_max} is not < future min={fut_min}"
 
     def test_future_window_bounded_by_n_future(self):
         edges = _make_edges(40, max_ledger=20)
@@ -139,10 +147,10 @@ class TestBuildSplits:
         task = LinkPredictionTask(edges, n_future=3, seed=0)
         for split in task.build_splits():
             all_accounts = (
-                {e.src for e in split.context_edges} |
-                {e.dst for e in split.context_edges} |
-                {e.src for e in split.future_edges} |
-                {e.dst for e in split.future_edges}
+                {e.src for e in split.context_edges}
+                | {e.dst for e in split.context_edges}
+                | {e.src for e in split.future_edges}
+                | {e.dst for e in split.future_edges}
             )
             assert all_accounts <= set(split.node_index.keys())
 
@@ -158,6 +166,7 @@ class TestBuildSplits:
 # ---------------------------------------------------------------------------
 # LinkPredictionTask.sample_negatives
 # ---------------------------------------------------------------------------
+
 
 class TestSampleNegatives:
     def _make_split(self) -> LedgerSplit:
@@ -185,6 +194,7 @@ class TestSampleNegatives:
 # ---------------------------------------------------------------------------
 # LinkPredictor model (unit tests — no GCN forward, just decoder logic)
 # ---------------------------------------------------------------------------
+
 
 class TestLinkPredictorDecoder:
     """Test the decoder and loss without running a full GCN forward."""

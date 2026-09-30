@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.backends.legacy:build"
+requires = ["setuptools>=42"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "astroml"
@@ -8,6 +8,97 @@ version = "0.1.0"
 description = "Dynamic graph ML framework for the Stellar network"
 requires-python = ">=3.10"
 
+[project.entry-points."astroml.feature_computers"]
+frequency = "astroml.features.frequency"
+structural = "astroml.features.structural_importance"
+
+[project.optional-dependencies]
+gpu = ["torch>=2.0.0", "torch-geometric>=2.3.0"]
+viz = ["matplotlib>=3.7.0", "seaborn>=0.12.0"]
+dev = ["pytest>=7.4.0", "black>=23.11.0", "mypy>=1.7.0", "ruff>=0.4.0", "pytest-asyncio>=0.23", "pytest-cov>=4.1.0", "pytest-mock>=3.12.0", "hypothesis>=6.100.0", "flake8>=6.1.0", "pre-commit>=3.7.0", "isort>=5.13.0", "radon>=6.0.1", "xenon>=0.9.1", "interrogate>=1.7.0,<2.0"]
+notebook = ["jupyter>=1.0.0", "notebook>=7.0.0", "ipykernel>=6.26.0"]
+dask = ["dask[complete]>=2024.1.0"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["astroml*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "gpu: requires a CUDA-capable runner; auto-skipped on CPU-only environments",
+    "e2e: end-to-end pipeline test (#193)",
+]
+
+[tool.coverage.run]
+source = ["astroml"]
+branch = true
+omit = [
+    "*/tests/*",
+    "*/__init__.py",
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["I", "N"]
+ignore = [
+    "N803",   # argument-name: X, y are standard in sklearn/ML
+    "N805",   # first-arg-name: cls is correct for Pydantic @validator classmethods
+    "N806",   # variable-in-function: N, H, F, G, LoyaltyAccount are standard in graph/ML/API code
+    "N812",   # imported-as: F for torch.nn.functional is a PyTorch convention
+    "N815",   # mixedCase-in-class: API contract fields matching Stellar SDK naming
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["astroml", "api"]
+force-single-line = false
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+# Issue #716 — hard coverage floor for the astroml package. `pytest
+# --cov=astroml` (see .github/workflows/pytest.yml) fails the run when total
+# coverage drops below this, so a PR that adds untested code cannot go green.
+# Kept in sync with the codecov patch target (70%) in codecov.yml.
+fail_under = 70
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "except ImportError:",
+    "raise AssertionError",
+]
+
+[tool.mypy]
+strict = true
+python_version = "3.10"
+
+[tool.interrogate]
+fail-under = 68.0
+ignore-init-method = true
+ignore-magic = true
+ignore-module = true
+ignore-nested-classes = true
+ignore-nested-functions = true
+ignore-overloaded-functions = true
+ignore-private = true
+ignore-property-decorators = true
+ignore-semiprivate = true
+verbose = 1
+exclude = [
+    # Existing syntax errors prevent AST parsing; remove these exclusions when
+    # their owning issues repair the files.
+    "astroml/llm/labeling/consensus.py",
+    "astroml/models/deep_svdd_trainer.py",
+    "api/routers/query.py",
+]

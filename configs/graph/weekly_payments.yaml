@@ -1,0 +1,50 @@
+# Graph builder spec — issue #739.
+#
+# A snapshot series described entirely by config: load it with
+# GraphSpec.from_yaml() and record spec.fingerprint() with the run, and the
+# experiment can be rebuilt from this file alone.
+#
+# Validated by astroml.features.graph.dsl. Unknown keys are rejected rather
+# than ignored, so a typo here fails at load instead of silently changing
+# what gets built.
+version: 1
+name: weekly-payments
+
+window:
+  # Window size and slide step. step < size gives rolling windows;
+  # step == size (the default) gives non-overlapping ones.
+  size: 7d
+  step: 1d
+
+edges:
+  # Empty or absent means "every edge type".
+  types:
+    - payment
+    - path_payment
+  # Drop dust: below this the edge is noise, not signal.
+  min_amount: 10.0
+  max_amount: null
+  exclude_self_loops: true
+  directed: true
+
+features:
+  # Hop-2 is the usual sweet spot; each extra hop widens the neighbourhood
+  # a single node pulls in.
+  max_hops: 2
+  neighbour_aggregates: true
+  # Caps frontier expansion on hub accounts so one exchange wallet cannot
+  # dominate the precomputation cost.
+  hop_node_budget: 10000
+
+nodes:
+  # Pin the feature matrix: naming the columns means a feature added later
+  # cannot silently change the model's input width. Omit to take all of them.
+  attributes:
+    - degree
+    - in_degree
+    - out_degree
+    - total_sent
+    - total_received
+    - mean_sent_amount
+    - hop2_size
+    - neighbour_mean_degree

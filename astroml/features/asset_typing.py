@@ -7,20 +7,32 @@ canonical edge types used during graph construction:
 - STABLECOIN — known fiat-pegged assets (USDC, USDT, EURC, …)
 - CUSTOM     — any other issued asset
 """
+
 from __future__ import annotations
 
 from enum import IntEnum
 
 # Known stablecoin asset codes on Stellar (code only, issuer-agnostic).
 # Extend this set as new stablecoins are listed.
-_STABLECOIN_CODES: frozenset[str] = frozenset({
-    "USDC", "USDT", "EURC", "EURT", "BRLT", "NGNT", "IDRT",
-    "ARST", "MXNT", "NGNC",
-})
+_STABLECOIN_CODES: frozenset[str] = frozenset(
+    {
+        "USDC",
+        "USDT",
+        "EURC",
+        "EURT",
+        "BRLT",
+        "NGNT",
+        "IDRT",
+        "ARST",
+        "MXNT",
+        "NGNC",
+    }
+)
 
 
 class AssetType(IntEnum):
     """Canonical edge type for a Stellar asset."""
+
     XLM = 0
     STABLECOIN = 1
     CUSTOM = 2

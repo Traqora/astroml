@@ -12,6 +12,7 @@ Adds a normalized graph mirror alongside the existing raw Stellar tables:
 - graph_claim_details: claim-only attributes
 - graph_payment_details: payment-only attributes
 """
+
 from typing import Sequence, Union
 
 from alembic import op

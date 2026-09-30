@@ -1,4 +1,14 @@
 # AstroML
+//WIP
+
+[![CI](https://github.com/Traqora/astroml/actions/workflows/ci.yml/badge.svg)](https://github.com/Traqora/astroml/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Traqora/astroml/branch/main/graph/badge.svg)](https://codecov.io/gh/Traqora/astroml)
+[![Code Complexity](https://img.shields.io/badge/complexity-A-brightgreen)](https://github.com/mombu/xenon)
+
+> 🌐 **Languages:** This README is being translated under
+> [`docs/i18n/`](./docs/i18n/). Available so far:
+> [Español (partial)](./docs/i18n/es/README.es.md).
+> See [`docs/i18n/README.md`](./docs/i18n/README.md) to add a locale.
 
 ## Dynamic Graph Machine Learning Framework for the Stellar Network
 
@@ -73,10 +83,10 @@ Most analytics tools rely on static heuristics or SQL queries.
 
 **AstroML instead enables:**
 
-* Dynamic graph learning
-* Temporal GNNs
-* Representation learning
-* Research-grade experimentation
+- Dynamic graph learning
+- Temporal GNNs
+- Representation learning
+- Research-grade experimentation
 
 ---
 
@@ -84,21 +94,371 @@ Most analytics tools rely on static heuristics or SQL queries.
 
 AstroML is designed for:
 
-* ML researchers
-* Graph ML engineers
-* Fraud detection teams
-* Blockchain data scientists
+- ML researchers
+- Graph ML engineers
+- Fraud detection teams
+- Blockchain data scientists
 
 ---
 
 ## 🏗 Architecture Overview
 
+### High-Level Pipeline
+
 ```
-Ledger → Ingestion → Normalization → Graph Builder → Features → GNN/ML Models → Experiments
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    AstroML: Ingestion → Graph → Train                   │
+└─────────────────────────────────────────────────────────────────────────┘
+
+                              ┌──────────────┐
+                              │ Stellar      │
+                              │ Ledgers      │
+                              └──────┬───────┘
+                                     │
+                    ┌────────────────▼────────────────┐
+                    │  1. INGESTION LAYER             │
+                    │  ├─ Ledger backfill (Polars)   │
+                    │  ├─ Incremental ingestion      │
+                    │  ├─ State tracking (idempotent)│
+                    │  └─ PostgreSQL storage         │
+                    └────────────────┬────────────────┘
+                                     │
+                    ┌────────────────▼────────────────┐
+                    │  2. NORMALIZATION LAYER         │
+                    │  ├─ Raw Stellar schema          │
+                    │  │  (Ledger, Transaction, Op)   │
+                    │  ├─ Graph mirror layer          │
+                    │  │  (GraphAccount, GraphEdge)   │
+                    │  └─ Composite indexes           │
+                    │     (account_id, timestamp)     │
+                    └────────────────┬────────────────┘
+                                     │
+                    ┌────────────────▼────────────────┐
+                    │  3. GRAPH BUILDING LAYER        │
+                    │  ├─ Time-windowed snapshots     │
+                    │  ├─ Edge construction           │
+                    │  ├─ Node indexing               │
+                    │  └─ Graph validation            │
+                    └────────────────┬────────────────┘
+                                     │
+                    ┌────────────────▼────────────────┐
+                    │  4. FEATURE ENGINEERING         │
+                    │  ├─ Transaction frequency       │
+                    │  ├─ Asset diversity             │
+                    │  ├─ Structural importance       │
+                    │  │  (degree, betweenness, PR)   │
+                    │  ├─ Feature store & versioning  │
+                    │  └─ Point-in-time queries       │
+                    └────────────────┬────────────────┘
+                                     │
+                    ┌────────────────▼────────────────┐
+                    │  5. TRAINING LAYER              │
+                    │  ├─ Temporal train/test split   │
+                    │  ├─ Link prediction task        │
+                    │  ├─ Negative sampling           │
+                    │  ├─ PyTorch Geometric models    │
+                    │  │  (GCN, GraphSAGE, GAT)       │
+                    │  └─ Early stopping              │
+                    └────────────────┬────────────────┘
+                                     │
+                    ┌────────────────▼────────────────┐
+                    │  6. BENCHMARKING & EVALUATION   │
+                    │  ├─ Reproducible configs        │
+                    │  ├─ Random seed tracking        │
+                    │  ├─ Metric computation          │
+                    │  │  (AUC, Precision, Recall)    │
+                    │  ├─ Memory profiling            │
+                    │  └─ Result persistence          │
+                    └────────────────┬────────────────┘
+                                     │
+                              ┌──────▼──────┐
+                              │ Baseline    │
+                              │ Results     │
+                              └─────────────┘
 ```
 
+### Data Flow Details
 
-## 🚀 Getting Started
+```
+Stellar Ledger Data
+    ↓
+[Ingestion Service]
+    ├─ Fetch ledgers (1000000-1100000)
+    ├─ Track state (.astroml_state/ingestion_state.json)
+    └─ Store in PostgreSQL
+    ↓
+[Database Schema]
+    ├─ Raw Layer: Ledger, Transaction, Operation, Account, Asset
+    ├─ Graph Layer: GraphAccount, GraphEdge, GraphTransactionDetail
+    └─ Indexes: (account_id, timestamp) composite
+    ↓
+[Graph Snapshot]
+    ├─ Query operations by time window
+    ├─ Create Edge objects (src, dst, timestamp, asset, amount)
+    ├─ Build node_index mapping
+    └─ Validate graph (isolated nodes, self-loops, density)
+    ↓
+[Feature Store]
+    ├─ Compute node features (frequency, diversity, centrality)
+    ├─ Compute edge features (asset type, amount, direction)
+    ├─ Version features with metadata
+    └─ Store in SQLite + Parquet
+    ↓
+[Temporal Split]
+    ├─ Sort edges by timestamp
+    ├─ Split at cutoff (80% train, 20% test)
+    └─ Ensure no future data leaks into training
+    ↓
+[Link Prediction Task]
+    ├─ Context window: edges before cutoff
+    ├─ Future window: edges after cutoff
+    ├─ Positive labels: future edges
+    ├─ Negative sampling: random non-edges
+    └─ Binary classification objective
+    ↓
+[Model Training]
+    ├─ LinkPredictor(encoder + decoder)
+    ├─ Adam optimizer with early stopping
+    ├─ Compute AUC, Precision, Recall, F1
+    └─ Track training/validation losses
+    ↓
+[Benchmark Results]
+    ├─ config.json (full configuration + seed)
+    ├─ result.json (metrics + performance)
+    └─ metadata.json (run_id, timestamp, linking files)
+```
+
+### Module Organization
+
+```
+astroml/
+├── ingestion/           # Ledger ingestion & state tracking
+│   ├── service.py       # IngestionService (incremental, idempotent)
+│   ├── state.py         # StateStore (tracks processed ledgers)
+│   └── backfill.py      # Bulk ledger loading
+├── db/                  # Database layer
+│   ├── schema.py        # SQLAlchemy ORM models
+│   └── session.py       # Database connection management
+├── features/            # Feature engineering
+│   ├── feature_store.py # Enterprise feature management
+│   ├── graph/
+│   │   └── snapshot.py  # Time-windowed graph construction
+│   ├── frequency.py     # Transaction frequency features
+│   ├── asset_diversity.py
+│   └── gnn/             # Graph neural network layers
+├── models/              # ML models
+│   ├── link_predictor.py
+│   ├── gcn.py
+│   ├── sage.py
+│   └── deep_svdd.py
+├── tasks/               # Training tasks
+│   └── link_prediction_task.py
+├── training/            # Training utilities
+│   ├── temporal_split.py # Prevent data leakage
+│   └── train_link_prediction.py
+├── benchmarking/        # Benchmarking framework
+│   ├── core.py          # ModelBenchmark orchestrator
+│   ├── config.py        # Configuration management
+│   └── metrics.py       # Metric computation
+├── quick_start.py       # Quick start pipeline
+└── cli.py               # Command-line interface
+```
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+Before running AstroML ensure you have the following installed:
+
+| Requirement | Minimum version | Notes |
+|---|---|---|
+| Python | 3.10+ | 3.11 recommended; 3.12 supported |
+| Docker & Docker Compose | 24+ | Required for the database and cache containers |
+| Git | any | For cloning the repository |
+| Make | any | Optional but recommended; used for convenience targets |
+| CUDA toolkit | 11.8+ | Optional; only needed for GPU-accelerated training |
+
+Verify your Python version before proceeding:
+
+```bash
+python --version   # must print 3.10 or higher
+docker --version   # must be available
+```
+
+### Requirements files
+
+Three `requirements` files are provided — pick the one that matches your workflow:
+
+| File | When to use |
+|---|---|
+| `requirements.txt` | Default — full stack including training, without GPU |
+| `requirements-cpu.txt` | CPU-only training on machines without a CUDA-capable GPU |
+| `requirements-train.txt` | GPU training; includes PyTorch with CUDA support |
+| `requirements-api.txt` | API server only; excludes heavy ML dependencies |
+| `requirements-dev.txt` | Development + testing; adds linting/typing tools on top of `requirements.txt` |
+| `requirements-minimal.txt` | Config parsing only — useful in CI stages that don't run training |
+
+> **Tip:** If you only want to explore the quick start without training, `requirements-minimal.txt` + `requirements-api.txt` is the lightest combination.
+
+See [REQUIREMENTS.md](REQUIREMENTS.md) for a detailed breakdown of every package.
+
+### Option 1: Using Make (Recommended)
+
+```bash
+# Run quick start with default settings (100 ledgers, 50 accounts, 10 epochs)
+make quickstart
+
+# Run with more data for thorough testing
+make quickstart-verbose
+```
+
+### Option 2: Using Python Module
+
+```bash
+# Run quick start with default settings
+python -m astroml.quick_start
+
+# Run with custom parameters
+python -m astroml.quick_start --num-ledgers 200 --num-accounts 100 --epochs 20 --seed 42
+```
+
+### Option 3: Using CLI
+
+```bash
+# Run quick start command
+python -m astroml quickstart --num-ledgers 100 --num-accounts 50 --epochs 10 --seed 42
+```
+
+### What Quick Start Does
+
+The quick start pipeline:
+
+1. **Generates sample data**: Creates 100 synthetic ledgers with 50 accounts and realistic transactions
+2. **Builds transaction graph**: Constructs a time-windowed graph with ~2000 edges
+3. **Validates graph**: Checks for isolated nodes, self-loops, and computes statistics
+4. **Trains baseline model**: Trains a LinkPredictor model for 10 epochs
+5. **Saves reproducible results**: Stores config, results, and metadata for reproducibility
+
+**Output**:
+
+```
+benchmark_results/quickstart/
+├── config.json          # Full configuration with random seed
+├── result.json          # Training metrics and performance
+└── metadata.json        # Run metadata linking config and result
+```
+
+**Expected output** (typical values — exact numbers vary by seed):
+
+```
+================================================================================
+AstroML Quick Start: Ingestion → Graph → Train Pipeline
+================================================================================
+
+[Step 1/5] Generating sample ledger data...
+Generated 100 ledgers with 50 accounts
+
+[Step 2/5] Building transaction graph...
+Built graph with 2000 edges and 50 nodes
+
+[Step 3/5] Creating benchmark configuration...
+
+[Step 4/5] Training baseline model...
+Epoch 0: Train Loss = 0.6931, Val Loss = 0.6892
+Epoch 5: Train Loss = 0.4521, Val Loss = 0.4612
+Training complete. Best metrics: {'auc': 0.92, 'precision': 0.88, 'recall': 0.85}
+
+[Step 5/5] Saving benchmark results...
+Saved config to benchmark_results/quickstart/config.json
+Saved result to benchmark_results/quickstart/result.json
+Saved metadata to benchmark_results/quickstart/metadata.json
+
+✓ Quick start completed successfully!
+Results saved to: benchmark_results/quickstart
+================================================================================
+```
+
+Expected metric ranges on 10 epochs with the default seed:
+- AUC: 0.85 – 0.96
+- Precision: 0.80 – 0.93
+- Recall: 0.78 – 0.91
+- Training time: 5 – 30 s (CPU) / 2 – 8 s (GPU)
+
+### Troubleshooting
+
+#### "Port 8000 already in use"
+
+Another process is bound to port 8000. Find and stop it:
+
+```bash
+# Find the process
+lsof -i :8000          # macOS / Linux
+netstat -ano | findstr :8000   # Windows
+
+# Stop it, or change the API port in docker-compose.yml:
+#   ports: ["8001:8000"]
+```
+
+#### "Database connection refused"
+
+The PostgreSQL container is not running. Start it:
+
+```bash
+docker compose up -d db
+# Wait ~10 seconds for Postgres to initialise, then retry
+docker compose logs db
+```
+
+Also verify your `DATABASE_URL` in `.env` matches the container settings (default: `postgresql://astroml:astroml@localhost:5432/astroml`).
+
+#### "Model training CUDA out of memory"
+
+Reduce batch size or switch to CPU:
+
+```yaml
+# configs/training/default.yaml
+training:
+  device: cpu          # force CPU
+  batch_size: 256      # reduce from default 1024
+```
+
+Alternatively, use `requirements-cpu.txt` which installs a CPU-only PyTorch build.
+
+#### "Module import errors" / `ModuleNotFoundError`
+
+Ensure you are in the right virtual environment and have installed dependencies:
+
+```bash
+source venv/bin/activate          # or: conda activate astroml
+pip install -r requirements.txt
+```
+
+If the error mentions `astroml` itself, install the package in editable mode:
+
+```bash
+pip install -e .
+```
+
+For GPU-related import errors (`No module named 'torch_geometric'`), install the full training requirements:
+
+```bash
+pip install -r requirements-train.txt
+```
+
+#### Quick-start produces no output / hangs
+
+Check that the SQLite temp path is writable and that no previous benchmark result is locked:
+
+```bash
+rm -rf benchmark_results/quickstart/
+make quickstart
+```
+
+---
+
+## 🔄 Full Setup
 
 ### Using Docker (Recommended)
 
@@ -141,13 +501,56 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+> **Note:** Three requirements files are available. See [REQUIREMENTS.md](REQUIREMENTS.md) for guidance on which to use based on your environment (GPU training, CPU-only, or minimal config-only).
+
 ### 3. Configure database
 
-Create a PostgreSQL database and update:
+A lightweight Docker Compose setup is provided to spin up PostgreSQL and Redis with persistent volumes. Simply run:
 
+```bash
+docker compose up -d
 ```
-config/database.yaml
+
+This starts only the database and cache, letting you run Python scripts and training natively on your machine. Alternatively, you can configure your own database and update `config/database.yaml`.
+
+---
+
+## 🤖 LLM Agent Framework
+
+AstroML includes an LLM agent framework for **multi-step reasoning and autonomous task execution** over the graph pipeline. It is provider agnostic, dependency light (the core loop is standard library only) and traces every step so runs stay auditable.
+
+```bash
+# Offline smoke test with the deterministic echo provider
+python -m astroml.agent "Summarise this transaction graph"
+
+# Against a local Ollama server, with task decomposition
+python -m astroml.agent --provider ollama --model llama3.1 --plan \
+  "Rank the busiest accounts and flag anything unusual"
+
+# Analyse a graph file and print the full trace as JSON
+python -m astroml.agent --edges data/edges.json --json "How many accounts?"
 ```
+
+```python
+from astroml.agent import (
+    AgentConfig,
+    AgentExecutor,
+    build_default_registry,
+    provider_from_env,
+)
+
+agent = AgentExecutor(
+    llm=provider_from_env(),           # echo | scripted | openai | ollama | ...
+    tools=build_default_registry(),    # graph_overview, window_stats, ...
+    config=AgentConfig(mode="auto", max_steps=8),
+)
+result = agent.run("Which accounts look unusual?")
+
+print(result.answer)
+print(result.trace.summary())
+```
+
+📚 **Full guide**: [docs/agent-framework.md](./docs/agent-framework.md) — providers, tools, memory, planning, CLI flags and design notes.
 
 ---
 
@@ -173,7 +576,6 @@ python -m astroml.graph.build_snapshot --window 30d
 
 ---
 
-
 ## 🧪 Synthetic Fraud Pattern Injection
 
 Create benchmark datasets by injecting controlled fraud structures into a clean ledger copy:
@@ -192,6 +594,7 @@ python -m astroml.ingestion.synthetic_fraud_injector \
 The injector appends transactions tagged with `synthetic_fraud=true` and `fraud_pattern` (`sybil_cluster` or `wash_trading_loop`) for downstream benchmarking.
 
 ---
+
 ## 🤖 Train Baseline GCN
 
 ```bash
@@ -202,13 +605,13 @@ python -m astroml.training.train_gcn
 
 ## 📊 Example Use Cases
 
-* [Liquidity Monitoring for the Stellar Community Fund](docs/scf-liquidity-monitoring.md)
-* Fraud / scam detection
-* Account clustering
-* Transaction risk scoring
-* Temporal behavior modeling
-* Self-supervised embeddings
-* Network anomaly detection
+- [Liquidity Monitoring for the Stellar Community Fund](docs/scf-liquidity-monitoring.md)
+- Fraud / scam detection
+- Account clustering
+- Transaction risk scoring
+- Temporal behavior modeling
+- Self-supervised embeddings
+- Network anomaly detection
 
 ---
 
@@ -216,31 +619,31 @@ python -m astroml.training.train_gcn
 
 AstroML emphasizes:
 
-* Reproducibility
-* Modular experimentation
-* Scalable ingestion
-* Temporal graph learning
-* Production-ready ML pipelines
+- Reproducibility
+- Modular experimentation
+- Scalable ingestion
+- Temporal graph learning
+- Production-ready ML pipelines
 
 ---
 
 ## 🛠 Tech Stack
 
-* Python
-* PyTorch / PyTorch Geometric
-* PostgreSQL
-* NetworkX / graph tooling
+- Python
+- PyTorch / PyTorch Geometric
+- PostgreSQL
+- NetworkX / graph tooling
 
 ---
 
 ## 📌 Roadmap
 
-* [ ] Real-time streaming ingestion
-* [ ] Temporal GNN models
-* [ ] Contrastive learning pipelines
-* [ ] Feature store
-* [ ] Model benchmarking suite
-* [ ] Docker deployment
+- [ ] Real-time streaming ingestion
+- [ ] Temporal GNN models
+- [ ] Contrastive learning pipelines
+- [ ] Feature store
+- [ ] Model benchmarking suite
+- [ ] Docker deployment
 
 ---
 
@@ -259,5 +662,3 @@ Please open issues for bugs or feature requests.
 ## 📜 License
 
 MIT License
-
-

@@ -22,17 +22,18 @@ Key classes
 * :class:`LinkPredictionTask` — orchestrates splitting, negative sampling,
   and per-step training.
 """
+
 from __future__ import annotations
 
 import logging
 import random
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from collections.abc import Sequence
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
 
-from astroml.features.graph.snapshot import Edge, window_snapshot
+from astroml.features.graph.snapshot import Edge
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Data structures
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class LedgerSplit:
@@ -50,15 +52,18 @@ class LedgerSplit:
         future_edges: Edges observed in the next N ledgers (positive labels).
         node_index: Mapping from account-id string → contiguous integer index.
     """
-    context_edges: List[Edge]
-    future_edges: List[Edge]
-    node_index: Dict[str, int]
+
+    context_edges: list[Edge]
+    future_edges: list[Edge]
+    node_index: dict[str, int]
 
     @property
     def num_nodes(self) -> int:
         return len(self.node_index)
 
-    def to_edge_index(self, edges: List[Edge], device: torch.device = torch.device("cpu")) -> torch.Tensor:
+    def to_edge_index(
+        self, edges: list[Edge], device: torch.device = torch.device("cpu")
+    ) -> torch.Tensor:
         """Convert an edge list to a PyG-style ``[2, E]`` LongTensor.
 
         Unknown accounts (not in ``node_index``) are silently skipped.
@@ -78,13 +83,14 @@ class LedgerSplit:
 # Negative edge sampling
 # ---------------------------------------------------------------------------
 
+
 def sample_negative_edges(
     num_nodes: int,
-    positive_set: Set[Tuple[int, int]],
+    positive_set: set[tuple[int, int]],
     num_samples: int,
     max_attempts: int = 10,
-    rng: Optional[random.Random] = None,
-) -> List[Tuple[int, int]]:
+    rng: random.Random | None = None,
+) -> list[tuple[int, int]]:
     """Sample (u, v) pairs that are not in *positive_set*.
 
     Samples without replacement up to *num_samples* unique non-edges.
@@ -105,8 +111,8 @@ def sample_negative_edges(
     if rng is None:
         rng = random.Random()
 
-    negatives: List[Tuple[int, int]] = []
-    seen: Set[Tuple[int, int]] = set(positive_set)
+    negatives: list[tuple[int, int]] = []
+    seen: set[tuple[int, int]] = set(positive_set)
     budget = num_samples * max_attempts
 
     while len(negatives) < num_samples and budget > 0:
@@ -124,6 +130,7 @@ def sample_negative_edges(
 # ---------------------------------------------------------------------------
 # Main task
 # ---------------------------------------------------------------------------
+
 
 class LinkPredictionTask:
     """Self-supervised link prediction over a Stellar ledger stream.
@@ -155,10 +162,10 @@ class LinkPredictionTask:
         self,
         edges: Sequence[Edge],
         n_future: int = 10,
-        context_ledgers: Optional[int] = None,
+        context_ledgers: int | None = None,
         neg_sampling_ratio: float = 1.0,
         device: torch.device = torch.device("cpu"),
-        seed: Optional[int] = None,
+        seed: int | None = None,
     ) -> None:
         if n_future < 1:
             raise ValueError(f"n_future must be >= 1, got {n_future}")
@@ -176,7 +183,7 @@ class LinkPredictionTask:
     # Build splits
     # ------------------------------------------------------------------
 
-    def build_splits(self) -> List[LedgerSplit]:
+    def build_splits(self) -> list[LedgerSplit]:
         """Enumerate non-overlapping (context, future) window pairs.
 
         Iterates over unique ledger timestamps, using each as the boundary
@@ -195,7 +202,7 @@ class LinkPredictionTask:
             return []
 
         ledger_seqs = sorted({e.timestamp for e in self.edges})
-        splits: List[LedgerSplit] = []
+        splits: list[LedgerSplit] = []
 
         for i, boundary in enumerate(ledger_seqs):
             future_end = boundary + self.n_future
@@ -214,17 +221,19 @@ class LinkPredictionTask:
                     context_edges = [e for e in context_edges if e.timestamp >= cutoff_seq]
 
             # Build a shared node index across both windows.
-            accounts: Set[str] = set()
+            accounts: set[str] = set()
             for e in context_edges + future_edges:
                 accounts.add(e.src)
                 accounts.add(e.dst)
             node_index = {acc: idx for idx, acc in enumerate(sorted(accounts))}
 
-            splits.append(LedgerSplit(
-                context_edges=context_edges,
-                future_edges=future_edges,
-                node_index=node_index,
-            ))
+            splits.append(
+                LedgerSplit(
+                    context_edges=context_edges,
+                    future_edges=future_edges,
+                    node_index=node_index,
+                )
+            )
 
         logger.info("Built %d link-prediction splits (n_future=%d)", len(splits), self.n_future)
         return splits
@@ -242,7 +251,7 @@ class LinkPredictionTask:
         n_pos = max(1, len(split.future_edges))
         n_neg = max(1, int(n_pos * self.neg_sampling_ratio))
 
-        pos_set: Set[Tuple[int, int]] = set()
+        pos_set: set[tuple[int, int]] = set()
         for e in split.future_edges:
             if e.src in split.node_index and e.dst in split.node_index:
                 pos_set.add((split.node_index[e.src], split.node_index[e.dst]))
@@ -310,7 +319,7 @@ class LinkPredictionTask:
         model: nn.Module,
         split: LedgerSplit,
         node_features: torch.Tensor,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Evaluate link prediction on *split*.
 
         Computes:
@@ -325,7 +334,7 @@ class LinkPredictionTask:
         Returns:
             Dict with ``"auc"`` and ``"avg_precision"`` keys.
         """
-        from sklearn.metrics import roc_auc_score, average_precision_score
+        from sklearn.metrics import average_precision_score, roc_auc_score
 
         model.eval()
         with torch.no_grad():
@@ -339,13 +348,16 @@ class LinkPredictionTask:
             neg_scores = torch.sigmoid(model.decode(z, neg_edge_index)).cpu().numpy()
 
         import numpy as np
-        scores = np.concatenate([pos_scores, neg_scores])
-        labels = np.concatenate([
-            np.ones(len(pos_scores)),
-            np.zeros(len(neg_scores)),
-        ])
 
-        metrics: Dict[str, float] = {}
+        scores = np.concatenate([pos_scores, neg_scores])
+        labels = np.concatenate(
+            [
+                np.ones(len(pos_scores)),
+                np.zeros(len(neg_scores)),
+            ]
+        )
+
+        metrics: dict[str, float] = {}
         try:
             metrics["auc"] = float(roc_auc_score(labels, scores))
         except ValueError:

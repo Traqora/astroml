@@ -1,0 +1,241 @@
+# Horizontal Pod Autoscalers for AstroML serving workers — issue #778
+#
+# Covers three worker pools that benefit from autoscaling:
+#   1. astroml-ingestion  — ledger ingestion workers
+#   2. astroml-training   — model training workers
+#   3. astroml-api        — REST API / inference gateway
+#
+# All three use the autoscaling/v2 API (Kubernetes >= 1.23).
+# Custom metrics require the Prometheus Adapter to be installed:
+#   https://github.com/kubernetes-sigs/prometheus-adapter
+#
+# Graceful fallback: if the Prometheus Adapter is absent the custom metric
+# entries below are silently ignored by the HPA controller and only the
+# built-in CPU/memory metrics drive scaling — the pod never fails to start.
+# Remove or comment out the `Pods` metric blocks once the adapter is confirmed
+# absent in a given environment.
+---
+# ── 1. Ingestion workers ────────────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: astroml-ingestion-hpa
+  namespace: astroml
+  labels:
+    app.kubernetes.io/name: astroml-ingestion
+    app.kubernetes.io/component: autoscaler
+    app.kubernetes.io/part-of: astroml
+  annotations:
+    astroml.io/issue: "#778"
+    astroml.io/scaling-policy-version: "v1"
+
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: astroml-ingestion
+
+  minReplicas: 1
+  maxReplicas: 10
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        # Allow up to 100% more pods or +3 pods per 60 s, whichever is larger.
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+        - type: Pods
+          value: 3
+          periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      # Ingestion workers hold open DB cursors; wait before removing them.
+      stabilizationWindowSeconds: 180
+      policies:
+        - type: Percent
+          value: 25
+          periodSeconds: 120
+        - type: Pods
+          value: 2
+          periodSeconds: 120
+      selectPolicy: Min
+
+  metrics:
+    # CPU — scale when average utilisation exceeds 65 %.
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 65
+
+    # Memory — protect against OOM during large backfills.
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 75
+
+    # Custom: ingestion backlog depth (requires Prometheus Adapter).
+    # Falls back to CPU/memory-only if adapter is absent.
+    - type: Pods
+      pods:
+        metric:
+          name: astroml_ingestion_backlog_ledgers
+        target:
+          type: AverageValue
+          # Scale up when each pod has more than 50 000 unprocessed ledgers.
+          averageValue: "50000"
+
+---
+# ── 2. Training workers ─────────────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: astroml-training-hpa
+  namespace: astroml
+  labels:
+    app.kubernetes.io/name: astroml-training
+    app.kubernetes.io/component: autoscaler
+    app.kubernetes.io/part-of: astroml
+  annotations:
+    astroml.io/issue: "#778"
+    astroml.io/scaling-policy-version: "v1"
+
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: astroml-training
+
+  # Training jobs are long-lived; keep min=1 so at least one worker is
+  # always available to drain the queue without cold-start delay.
+  minReplicas: 1
+  maxReplicas: 6
+
+  behavior:
+    scaleUp:
+      # Training pods can take several minutes to initialise; stabilise longer
+      # before adding more to avoid over-provisioning.
+      stabilizationWindowSeconds: 120
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 120
+      selectPolicy: Max
+    scaleDown:
+      # Do not remove training pods while a job might still be mid-epoch.
+      stabilizationWindowSeconds: 600
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 300
+      selectPolicy: Min
+
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          # Training is CPU/GPU-heavy; scale earlier than serving.
+          averageUtilization: 60
+
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+    # Custom: pending training jobs in the queue (requires Prometheus Adapter).
+    - type: Pods
+      pods:
+        metric:
+          name: astroml_training_queue_depth
+        target:
+          type: AverageValue
+          # Scale up when each worker has more than 3 pending jobs.
+          averageValue: "3"
+
+---
+# ── 3. API / inference gateway ──────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: astroml-api-hpa
+  namespace: astroml
+  labels:
+    app.kubernetes.io/name: astroml-api
+    app.kubernetes.io/component: autoscaler
+    app.kubernetes.io/part-of: astroml
+  annotations:
+    astroml.io/issue: "#778"
+    astroml.io/scaling-policy-version: "v1"
+
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: astroml-api
+
+  minReplicas: 2
+  maxReplicas: 20
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 30
+        - type: Pods
+          value: 4
+          periodSeconds: 30
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 20
+          periodSeconds: 120
+        - type: Pods
+          value: 2
+          periodSeconds: 120
+      selectPolicy: Min
+
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+    # Custom: request latency P99 in milliseconds (requires Prometheus Adapter).
+    - type: Pods
+      pods:
+        metric:
+          name: astroml_api_request_latency_p99_ms
+        target:
+          type: AverageValue
+          averageValue: "150"
+
+    # Custom: requests per second per pod.
+    - type: Pods
+      pods:
+        metric:
+          name: astroml_api_requests_per_second
+        target:
+          type: AverageValue
+          averageValue: "40"

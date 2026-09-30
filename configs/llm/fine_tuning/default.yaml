@@ -1,0 +1,38 @@
+defaults:
+  - base_model: gpt-3.5-turbo
+  - trainer_type: openai
+  - num_epochs: 3
+  - batch_size: 16
+  - learning_rate: 1e-5
+  - min_examples: 500
+  - train_ratio: 0.8
+  - val_ratio: 0.1
+  - test_ratio: 0.1
+
+fraud_explanation:
+  target: fraud_explanation
+  base_model: gpt-3.5-turbo
+  description: Fine-tuned for explaining Stellar fraud patterns
+  tags: [fraud, explanation, stellar]
+  min_examples: 1000
+
+sql_generation:
+  target: sql_generation
+  base_model: gpt-3.5-turbo
+  description: Fine-tuned for NL-to-SQL on AstroML schema
+  tags: [sql, nlp, schema]
+  min_examples: 750
+
+transaction_classification:
+  target: transaction_classification
+  base_model: gpt-3.5-turbo
+  description: Fine-tuned for transaction type categorization
+  tags: [classification, transaction]
+  min_examples: 500
+
+support_chatbot:
+  target: support_chatbot
+  base_model: gpt-3.5-turbo
+  description: Fine-tuned for domain-specific customer support
+  tags: [support, chatbot, customer]
+  min_examples: 1000

@@ -1,19 +1,24 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Sequence
+from collections.abc import Sequence
 
 import torch
 
-from astroml.features.node_features import compute_node_features
-from astroml.features.graph.snapshot import window_snapshot
 from astroml.features.gnn.sampler import MultiHopSampler
+from astroml.features.graph.snapshot import window_snapshot
+from astroml.features.node_features import compute_node_features
 from astroml.models.sage_encoder import InductiveSAGEEncoder
-
 
 # Column order from compute_node_features output
 _FEATURE_COLS = [
-    'in_degree', 'out_degree', 'total_received', 'total_sent',
-    'account_age', 'first_seen', 'unique_asset_count', 'asset_entropy',
+    "in_degree",
+    "out_degree",
+    "total_received",
+    "total_sent",
+    "account_age",
+    "first_seen",
+    "unique_asset_count",
+    "asset_entropy",
 ]
 
 
@@ -36,8 +41,8 @@ class InductiveGraphSAGE:
     def __init__(
         self,
         encoder: InductiveSAGEEncoder,
-        fanout: List[int],
-        device: str = 'cpu',
+        fanout: list[int],
+        device: str = "cpu",
     ) -> None:
         self.encoder = encoder.to(device)
         self.fanout = fanout
@@ -45,10 +50,10 @@ class InductiveGraphSAGE:
 
     def embed_nodes(
         self,
-        edges: List[Dict],
-        target_nodes: List[str],
+        edges: list[dict],
+        target_nodes: list[str],
         ref_time: float,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         """Compute embeddings for target_nodes given a set of edges.
 
         Parameters
@@ -73,7 +78,7 @@ class InductiveGraphSAGE:
         src_indices = []
         dst_indices = []
         for e in edges:
-            s, d = e.get('src'), e.get('dst')
+            s, d = e.get("src"), e.get("dst")
             if s in node_to_idx and d in node_to_idx:
                 src_indices.append(node_to_idx[s])
                 dst_indices.append(node_to_idx[d])
@@ -100,9 +105,9 @@ class InductiveGraphSAGE:
         adjs, sampled_nodes = sampler.sample(target_idx)
 
         # 5. Slice feature matrix to sampled nodes
-        feat_matrix = feat_df.loc[
-            [all_node_ids[i] for i in sampled_nodes.tolist()]
-        ][_FEATURE_COLS].values
+        feat_matrix = feat_df.loc[[all_node_ids[i] for i in sampled_nodes.tolist()]][
+            _FEATURE_COLS
+        ].values
         x = torch.tensor(feat_matrix, dtype=torch.float32).to(self.device)
 
         # 6. Forward through encoder
@@ -122,9 +127,9 @@ class InductiveGraphSAGE:
         edges: Sequence,
         start_ts: int,
         end_ts: int,
-        target_nodes: List[str],
-        ref_time: Optional[float] = None,
-    ) -> Dict[str, torch.Tensor]:
+        target_nodes: list[str],
+        ref_time: float | None = None,
+    ) -> dict[str, torch.Tensor]:
         """Compute embeddings using a time-windowed snapshot.
 
         Parameters
@@ -147,7 +152,7 @@ class InductiveGraphSAGE:
         _, window_edges = window_snapshot(edges, start_ts, end_ts)
 
         edge_dicts = [
-            {'src': e.src, 'dst': e.dst, 'amount': 0.0, 'timestamp': float(e.timestamp)}
+            {"src": e.src, "dst": e.dst, "amount": 0.0, "timestamp": float(e.timestamp)}
             for e in window_edges
         ]
 

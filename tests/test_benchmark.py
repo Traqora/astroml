@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-import os
 import json
 
-from astroml.ingestion.service import IngestionService
 from astroml.ingestion.benchmark import run_benchmark
+from astroml.ingestion.service import IngestionService
 
 
 def test_benchmark_reports_and_saves(tmp_path):
     svc = IngestionService()
-    outpath = tmp_path / 'bench.jsonl'
+    outpath = tmp_path / "bench.jsonl"
 
     bench = run_benchmark(
         svc,
@@ -23,13 +22,13 @@ def test_benchmark_reports_and_saves(tmp_path):
     assert bench.attempted == 50
     assert bench.tx_per_sec > 0
     # Memory fields should exist (may be NaN if platform unsupported)
-    assert hasattr(bench, 'rss_mb_start') and hasattr(bench, 'rss_mb_end')
+    assert hasattr(bench, "rss_mb_start") and hasattr(bench, "rss_mb_end")
 
     # File exists and contains a valid JSON line
     assert outpath.exists()
-    with open(outpath, 'r', encoding='utf-8') as f:
+    with open(outpath, encoding="utf-8") as f:
         line = f.readline()
     rec = json.loads(line)
-    assert rec['attempted'] == 50
-    assert 'tx_per_sec' in rec
-    assert 'rss_mb_start' in rec and 'rss_mb_end' in rec
+    assert rec["attempted"] == 50
+    assert "tx_per_sec" in rec
+    assert "rss_mb_start" in rec and "rss_mb_end" in rec

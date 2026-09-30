@@ -1,0 +1,32 @@
+# Continuous learning and online retraining configuration
+algorithm: "online_sgd"  # Options: online_sgd, passive_aggressive, adaptive_ensemble
+model_type: "classifier"
+
+online_learner:
+  learning_rate: 0.01
+  lr_schedule: "optimal"  # constant, optimal, invscaling, adaptive
+  loss: "log_loss"
+  penalty: "l2"
+  alpha: 0.0001
+  fit_intercept: true
+  c_param: 1.0
+  epsilon: 0.1
+
+catastrophic_forgetting:
+  enable_replay: true
+  replay_buffer_size: 2000
+  replay_ratio: 0.25
+  enable_ewc: true
+  ewc_lambda: 50.0
+
+drift_adaptation:
+  drift_threshold: 0.15
+  drift_window_size: 50
+  adaptive_lr_boost: 2.0
+
+streaming:
+  batch_size: 32
+  eval_metric: "accuracy"
+  snapshot_interval_samples: 200
+  auto_rollback: true
+  degradation_threshold: 0.25

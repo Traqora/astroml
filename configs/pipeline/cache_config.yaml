@@ -1,0 +1,110 @@
+# Pipeline Cache Configuration
+# Issue #636: Automated pipeline caching and memoization
+#
+# This configuration controls the caching behaviour for ML pipeline steps,
+# including backend selection, TTLs, invalidation strategies, and memoization.
+
+cache:
+  # Backend selection: "local", "redis", or "s3"
+  backend: local
+
+  # Global switch: set to false to disable all caching
+  enabled: true
+
+  # Default namespace for content-addressable keys
+  namespace: astroml_pipeline
+
+  # Pipeline version for version-based invalidation
+  version: "v1"
+
+  # Time-to-live defaults (seconds) — overridable per namespace
+  default_ttl_seconds: 3600  # 1 hour
+
+  ttl_overrides:
+    features: 900       # 15 minutes
+    predictions: 300    # 5 minutes
+    embeddings: 1800    # 30 minutes
+    graph_snapshots: 3600  # 1 hour
+    artifacts: 7200     # 2 hours
+
+  # Backend-specific configuration
+  local:
+    cache_dir: "/tmp/astroml_pipeline_cache"
+    max_size_gb: 10.0
+    default_ttl_seconds: 3600
+
+  redis:
+    url: "redis://localhost:6379"
+    prefix: "pipeline"
+    default_ttl_seconds: 3600
+
+  s3:
+    bucket: "astroml-pipeline-cache"
+    prefix: "pipeline/"
+    region: "us-east-1"
+    endpoint_url: null
+    default_ttl_seconds: 3600
+    # AWS credentials are read from environment variables:
+    #   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN
+    # or from ~/.aws/credentials.
+
+# Invalidation strategies (ordered by priority)
+invalidation:
+  # Enable time-based TTL invalidation
+  time_based: true
+
+  # Enable version-based invalidation (invalidates when version changes)
+  version_based: true
+
+  # Enable dependency tracking for cascade invalidation
+  dependency_based: true
+
+  # Enable event-driven invalidation
+  event_driven: true
+
+  # Events that trigger invalidation
+  events:
+    - model_retrained
+    - data_updated
+    - config_changed
+    - pipeline_version_bump
+
+# Memoization settings
+memoization:
+  # Enable pipeline step memoization
+  enabled: true
+
+  # Functions to exclude from memoization
+  exclude_functions: []
+
+  # Maximum number of memoized results per function
+  max_results_per_function: 1000
+
+  # Report cache statistics every N calls
+  stats_report_interval: 100
+
+# Cache warming (Issue #636 step 7)
+warming:
+  # Enable cache warm-up on startup for common paths
+  enabled: false
+
+  # Common paths to pre-load (function calls with arguments)
+  common_paths:
+    - function: "compute_node_features"
+      args: [["popular_account_1", "popular_account_2"]]
+    - function: "embed_nodes"
+      args: [[], ["popular_account_1"], 0.0]
+
+# Monitoring
+monitoring:
+  # Enable cache hit/miss metrics
+  metrics_enabled: true
+
+  # Log cache statistics periodically
+  log_interval_seconds: 300  # 5 minutes
+
+  # Export metrics to Prometheus (if available)
+  prometheus_enabled: true
+
+  # Alert when hit rate falls below this threshold
+  hit_rate_alert_threshold: 0.5

@@ -6,33 +6,233 @@ groups:
         for: 5m
         labels:
           severity: critical
+          runbook: "docs/runbooks/ingestion_connection_down.md"
         annotations:
           summary: "Ingestion connection down for {{ $labels.stream_type }} on {{ $labels.horizon_url }}"
           description: "The ingestion stream for {{ $labels.stream_type }} has been unhealthy for more than 5 minutes."
 
       - alert: HighIngestionErrorRate
-        expr: rate(astroml_ingestion_errors_total[5m]) > 0.1
-        for: 2m
+        expr: rate(astroml_ingestion_errors_total[5m]) > 0.01
+        for: 5m
         labels:
-          severity: warning
+          severity: critical
+          runbook: "docs/runbooks/high_ingestion_error_rate.md"
         annotations:
           summary: "High error rate for {{ $labels.stream_type }} on {{ $labels.horizon_url }}"
-          description: "The error rate for {{ $labels.stream_type }} ingestion is currently {{ $value }} errors/sec."
+          description: "The error rate for {{ $labels.stream_type }} ingestion is {{ $value | humanizePercentage }} (threshold: <1%)."
+
+      - alert: IngestionLagHigh
+        expr: astroml_ingestion_lag_ledgers > 1000
+        for: 5m
+        labels:
+          severity: critical
+          runbook: "docs/runbooks/ingestion_lag.md"
+        annotations:
+          summary: "Ingestion lag > 1000 ledgers (issue #570)"
+          description: "Ingestion is lagging by {{ $value }} ledgers, exceeding the 1000 ledger threshold."
 
       - alert: IngestionStalled
         expr: rate(astroml_ingestion_records_total[10m]) == 0
         for: 15m
         labels:
           severity: critical
+          runbook: "docs/runbooks/ingestion_stalled.md"
         annotations:
           summary: "Ingestion stalled for {{ $labels.stream_type }} on {{ $labels.horizon_url }}"
           description: "No records have been processed for {{ $labels.stream_type }} in the last 15 minutes."
+
+      # ─── Stale-data alerts (ingestion heartbeat) ──────────────────────────
+      #
+      # Driven by `astroml_ingestion_staleness_seconds`, which is re-sampled
+      # from the ingestion state store on every `/metrics` scrape — so these
+      # fire on their own timeline even when the worker is gone and pushing
+      # nothing. Both are `NaN` (and therefore silent) until the first
+      # heartbeat lands, so an API-only deployment that runs no ingestion does
+      # not page anyone. See docs/ingestion-monitoring.md.
+      - alert: IngestionDataStale
+        expr: astroml_ingestion_staleness_seconds > 900
+        for: 5m
+        labels:
+          severity: warning
+          runbook: "docs/runbooks/ingestion_heartbeat_stale.md"
+        annotations:
+          summary: "Ingested data is stale ({{ $value | humanizeDuration }} behind)"
+          description: "The newest processed ledger is {{ $value | humanizeDuration }} old, past the 15m stale threshold. Ingestion is slow or intermittent but not yet fully stopped."
+
+      - alert: IngestionHeartbeatStopped
+        expr: time() - astroml_ingestion_last_success_timestamp_seconds > 3600
+        for: 5m
+        labels:
+          severity: critical
+          runbook: "docs/runbooks/ingestion_heartbeat_stale.md"
+        annotations:
+          summary: "No ingestion heartbeat for over an hour"
+          description: "The last successfully processed ledger was {{ $value | humanizeDuration }} ago. The ingestion worker has stopped, crashed, or is wedged."
 
       - alert: PersistentRateLimit
         expr: astroml_ingestion_rate_limit_backoff_seconds > 60
         for: 10m
         labels:
           severity: warning
+          runbook: "docs/runbooks/rate_limiting.md"
         annotations:
           summary: "Persistent rate limiting for {{ $labels.stream_type }}"
           description: "The ingestion service is facing persistent rate limiting with backoff > 60s for over 10 minutes."
+
+  - name: astroml_llm_alerts
+    rules:
+      - alert: LLMProviderDown
+        expr: astroml_llm_provider_health == 0
+        for: 2m
+        labels:
+          severity: critical
+          runbook: "docs/runbooks/llm_provider_down.md"
+        annotations:
+          summary: "LLM provider {{ $labels.provider }} is down"
+          description: "The {{ $labels.provider }} LLM provider has been unreachable for more than 2 minutes."
+
+      - alert: LLMHighErrorRate
+        expr: rate(astroml_llm_requests_total{status="error"}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          runbook: "docs/runbooks/llm_high_error_rate.md"
+        annotations:
+          summary: "High LLM error rate for {{ $labels.provider }}"
+          description: "LLM error rate for {{ $labels.provider }} is currently {{ $value }} requests/sec."
+
+      - alert: LLMCostThreshold
+        expr: increase(astroml_llm_cost_usd_total[1h]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          runbook: "docs/runbooks/llm_cost_spike.md"
+        annotations:
+          summary: "LLM cost spike for {{ $labels.provider }}"
+          description: "LLM cost for {{ $labels.provider }} exceeded $10 in the last hour."
+
+      - alert: LLMHighLatency
+        expr: histogram_quantile(0.95, rate(astroml_llm_request_latency_seconds_bucket[5m])) > 5
+        for: 3m
+        labels:
+          severity: warning
+          runbook: "docs/runbooks/llm_high_latency.md"
+        annotations:
+          summary: "High LLM latency for {{ $labels.provider }}"
+          description: "P95 latency for {{ $labels.provider }} is {{ $value }}s (threshold 5s)."
+
+  # ─── API health, latency and DB pool (issues #550, #567, #569, #570) ────────────
+  - name: astroml_api_alerts
+    rules:
+      - alert: ApiAvailabilityLow
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.001
+        for: 5m
+        labels:
+          severity: critical
+          runbook: "docs/runbooks/api_availability.md"
+        annotations:
+          summary: "API availability below 99.9% SLO (issue #570)"
+          description: "API error rate is {{ $value | humanizePercentage }}, exceeding the 0.1% error budget."
+
+      - alert: DatabasePoolNearExhaustion
+        expr: db_pool_utilization_ratio >= 0.8
+        for: 5m
+        labels:
+          severity: warning
+          runbook: "docs/runbooks/db_pool_exhaustion.md"
+        annotations:
+          summary: "Database pool {{ $labels.pool }} above 80% utilization"
+          description: "Pool {{ $labels.pool }} has been at {{ $value | humanizePercentage }} of capacity for 5m. Check for leaked sessions or slow queries, then raise DB_POOL_MAX_SIZE."
+
+      - alert: DatabasePoolExhausted
+        expr: db_pool_utilization_ratio >= 1
+        for: 1m
+        labels:
+          severity: critical
+          runbook: "docs/runbooks/db_pool_exhaustion.md"
+        annotations:
+          summary: "Database pool {{ $labels.pool }} exhausted"
+          description: "Every connection in pool {{ $labels.pool }} is checked out; new requests block until pool_timeout expires."
+
+      - alert: DatabaseQueryLatencyHigh
+        expr: histogram_quantile(0.99, sum(rate(db_query_duration_seconds_bucket[5m])) by (le, query)) > 0.5
+        for: 5m
+        labels:
+          severity: critical
+          runbook: "docs/runbooks/db_query_latency.md"
+        annotations:
+          summary: "Database P99 query latency > 500ms SLO (issue #570)"
+          description: "P99 query latency is {{ $value }}s, exceeding the 500ms threshold."
+
+      - alert: ApiHighLatency
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, endpoint)) > 1
+        for: 5m
+        labels:
+          severity: warning
+          runbook: "docs/runbooks/api_high_latency.md"
+        annotations:
+          summary: "P95 latency above 1s for {{ $labels.endpoint }}"
+          description: "P95 request latency for {{ $labels.endpoint }} is {{ $value }}s over the last 5 minutes."
+
+      - alert: ApiHighErrorRate
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          runbook: "docs/runbooks/api_high_error_rate.md"
+        annotations:
+          summary: "API 5xx rate above 5%"
+          description: "{{ $value | humanizePercentage }} of requests returned 5xx over the last 5 minutes."
+
+      - alert: IngestionJobsStalled
+        expr: active_jobs{job_type="ingestion"} == 0
+        for: 30m
+        labels:
+          severity: warning
+          runbook: "docs/runbooks/ingestion_jobs_stalled.md"
+        annotations:
+          summary: "No active ingestion jobs for 30m"
+          description: "The active_jobs gauge for ingestion has been zero for 30 minutes; the backfill or stream worker may have died."
+
+      - alert: ModelInferenceLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(model_inference_latency_bucket[10m])) by (le, model)) > 2
+        for: 10m
+        labels:
+          severity: warning
+          runbook: "docs/runbooks/model_inference_latency.md"
+        annotations:
+          summary: "Model {{ $labels.model }} P95 inference latency above 2s"
+          description: "P95 inference latency for {{ $labels.model }} is {{ $value }}s over the last 10 minutes."
+
+  # ─── Infrastructure alerts (issue #570) ────────────
+  - name: astroml_infrastructure_alerts
+    rules:
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.2
+        for: 5m
+        labels:
+          severity: critical
+          runbook: "docs/runbooks/disk_space_low.md"
+        annotations:
+          summary: "Disk space below 20% (issue #570)"
+          description: "Disk space on {{ $labels.instance }} is {{ $value | humanizePercentage }}, below the 20% threshold."
+
+      - alert: MemoryHigh
+        expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+          runbook: "docs/runbooks/memory_high.md"
+        annotations:
+          summary: "Available memory below 10%"
+          description: "Available memory on {{ $labels.instance }} is {{ $value | humanizePercentage }}, below the 10% threshold."
+
+      - alert: CPUHigh
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+        for: 10m
+        labels:
+          severity: warning
+          runbook: "docs/runbooks/cpu_high.md"
+        annotations:
+          summary: "CPU usage above 90% for 10 minutes"
+          description: "CPU usage on {{ $labels.instance }} is {{ $value }}%, above the 90% threshold."

@@ -721,8 +721,8 @@ cargo test --lib security -- --nocapture
 ## Support
 
 For issues, questions, or contributions:
-- GitHub Issues: https://github.com/menjay7/astroml/issues
-- Documentation: https://github.com/menjay7/astroml/docs
+- GitHub Issues: https://github.com/Traqora/astroml/issues
+- Documentation: https://github.com/Traqora/astroml/docs
 
 ## License
 

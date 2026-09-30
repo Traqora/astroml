@@ -1,10 +1,11 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { getPointsHistory } from '../api/loyalty'
+import type { PointsHistoryResponse } from '../lib/types'
 
 export function usePointsHistory(page: number, pageSize: number) {
-  return useQuery({
+  return useQuery<PointsHistoryResponse>({
     queryKey: ['pointsHistory', page, pageSize],
     queryFn: () => getPointsHistory(page, pageSize),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
 }

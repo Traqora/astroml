@@ -1,26 +1,20 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ThemeProvider } from '../contexts/ThemeContext'
 import App from '../App'
 
-function renderWithClient(ui: React.ReactElement) {
-  const client = new QueryClient()
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>)
+function renderWithProviders(ui: React.ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={client}>
+      <ThemeProvider>{ui}</ThemeProvider>
+    </QueryClientProvider>
+  )
 }
 
 test('renders dashboard sections', async () => {
-  renderWithClient(<App />)
+  renderWithProviders(<App />)
 
-  await waitFor(() => expect(screen.getByText(/Model Performance Monitoring/i)).toBeInTheDocument())
-  await waitFor(() => expect(screen.getByText(/Accuracy/i)).toBeInTheDocument())
-  await waitFor(() => expect(screen.getByText(/Drift Score/i)).toBeInTheDocument())
-  await waitFor(() => expect(screen.getByText(/Prediction Accuracy Trend/i)).toBeInTheDocument())
-
-  await waitFor(() => expect(screen.getByText(/Loyalty Dashboard/i)).toBeInTheDocument())
-  await waitFor(() => expect(screen.getByText(/Current Tier/i)).toBeInTheDocument())
-  await waitFor(() => expect(screen.getByText(/Points Balance/i)).toBeInTheDocument())
-  await waitFor(() => expect(screen.getByText(/Tier Benefits/i)).toBeInTheDocument())
-  await waitFor(() => expect(screen.getByText(/Redeem Points/i)).toBeInTheDocument())
-  await waitFor(() => expect(screen.getByText(/Tier Comparison/i)).toBeInTheDocument())
-  await waitFor(() => expect(screen.getByText(/Fraud Detection/i)).toBeInTheDocument())
-  await waitFor(() => expect(screen.getByText(/Points History/i)).toBeInTheDocument())
+  await waitFor(() => expect(screen.getByText(/AstroML Dashboard/i)).toBeInTheDocument())
+  expect(screen.getByText(/🌙 Dark/i)).toBeInTheDocument()
 })

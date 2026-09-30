@@ -1,13 +1,22 @@
+from astroml.utils.exceptions import AstroMLError
 """MLflow experiment tracking integration for AstroML."""
+
 from __future__ import annotations
 
 import logging
+import tempfile
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING
+from typing import Any
 
 import numpy as np
-import torch
-import torch.nn as nn
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    import torch.nn as nn
+
+
+from api.models.orm import ModelRegistry
+from astroml.db.session import get_session
+from astroml.storage import ArtifactStore, create_artifact_store
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +26,9 @@ class MLflowTracker:
 
     Gracefully degrades to a no-op when MLflow is not installed or
     when ``enabled=False`` so training still works without the dependency.
+
+    Supports configurable artifact storage backends (local, S3, GCS) via
+    the artifact_uri parameter.
     """
 
     def __init__(
@@ -24,12 +36,26 @@ class MLflowTracker:
         enabled: bool = True,
         tracking_uri: str = "mlruns",
         experiment_name: str = "astroml_experiment",
-        run_name: Optional[str] = None,
+        run_name: str | None = None,
         log_model_weights: bool = True,
+        artifact_uri: str | None = None,
+        artifact_store: ArtifactStore | None = None,
     ):
+        """Initialize MLflow tracker with optional artifact store.
+
+        Args:
+            enabled: Whether to enable MLflow tracking
+            tracking_uri: MLflow tracking server URI
+            experiment_name: Name of the experiment
+            run_name: Name of the run (auto-generated if None)
+            log_model_weights: Whether to log model weights
+            artifact_uri: URI for artifact storage (e.g., "file:///path", "s3://bucket/prefix")
+            artifact_store: Pre-configured ArtifactStore instance (takes precedence over artifact_uri)
+        """
         self.enabled = enabled
         self.log_model_weights = log_model_weights
         self._run = None
+        self.artifact_store = artifact_store
 
         if not self.enabled:
             return
@@ -52,24 +78,34 @@ class MLflowTracker:
                 "Install it with: pip install mlflow"
             )
             self.enabled = False
+            return
+
+        # Initialize artifact store if provided
+        if artifact_uri and not artifact_store:
+            try:
+                self.artifact_store = create_artifact_store(artifact_uri)
+                logger.info(f"Artifact store initialized: {artifact_uri}")
+            except AstroMLError as e:
+                logger.warning(f"Failed to initialize artifact store: {e}")
+                self.artifact_store = None
 
     # ------------------------------------------------------------------
     # Public helpers
     # ------------------------------------------------------------------
 
-    def log_params(self, params: Dict[str, Any]) -> None:
+    def log_params(self, params: dict[str, Any]) -> None:
         """Log a flat dictionary of hyper-parameters."""
         if not self.enabled or self._run is None:
             return
         self._mlflow.log_params(params)
 
-    def log_metric(self, key: str, value: float, step: Optional[int] = None) -> None:
+    def log_metric(self, key: str, value: float, step: int | None = None) -> None:
         """Log a single scalar metric."""
         if not self.enabled or self._run is None:
             return
         self._mlflow.log_metric(key, value, step=step)
 
-    def log_metrics(self, metrics: Dict[str, float], step: Optional[int] = None) -> None:
+    def log_metrics(self, metrics: dict[str, float], step: int | None = None) -> None:
         """Log multiple scalar metrics at once."""
         if not self.enabled or self._run is None:
             return
@@ -77,30 +113,125 @@ class MLflowTracker:
 
     def log_model_artifact(
         self,
-        model: nn.Module,
+        model: "nn.Module",
         artifact_path: str = "model",
-        checkpoint_path: Optional[str] = None,
-    ) -> None:
+        checkpoint_path: str | None = None,
+    ) -> str | None:
         """Log model weights as an MLflow artifact.
 
         Saves ``model.state_dict()`` to a temporary ``.pth`` file and
-        uploads it.  If *checkpoint_path* already exists on disk it is
+        uploads it. If *checkpoint_path* already exists on disk it is
         uploaded directly (avoids a redundant save).
+
+        If an artifact store is configured, also saves to the artifact store
+        and returns the artifact URI.
+
+        Args:
+            model: PyTorch model to log
+            artifact_path: Path within MLflow artifacts
+            checkpoint_path: Optional existing checkpoint file to log
+
+        Returns:
+            Artifact URI if artifact store is configured, None otherwise
         """
         if not self.enabled or self._run is None or not self.log_model_weights:
-            return
+            return None
 
-        import tempfile, os
+        import os
 
+        artifact_uri = None
+
+        # Determine which file to log
         if checkpoint_path and Path(checkpoint_path).exists():
-            self._mlflow.log_artifact(checkpoint_path, artifact_path=artifact_path)
+            file_to_log = checkpoint_path
+            should_cleanup = False
         else:
-            with tempfile.NamedTemporaryFile(suffix=".pth", delete=False) as tmp:
-                torch.save(model.state_dict(), tmp.name)
-                self._mlflow.log_artifact(tmp.name, artifact_path=artifact_path)
-                os.unlink(tmp.name)
+            # Create temporary file
+            tmp_file = tempfile.NamedTemporaryFile(suffix=".pth", delete=False)
+            tmp_file.close()
+            # Imported here rather than at module scope: this is the only
+            # line in the module that needs torch, and importing it eagerly
+            # made the whole astroml.tracking package — including the
+            # metadata-only ModelRegistry — unimportable without a deep
+            # learning stack installed.
+            import torch
 
-    def log_roc_auc(self, y_true: np.ndarray, y_score: np.ndarray, step: Optional[int] = None) -> None:
+            torch.save(model.state_dict(), tmp_file.name)
+            file_to_log = tmp_file.name
+            should_cleanup = True
+
+        try:
+            # Log to MLflow
+            self._mlflow.log_artifact(file_to_log, artifact_path=artifact_path)
+
+            # Log to artifact store if configured
+            if self.artifact_store:
+                remote_path = f"{artifact_path}/{Path(file_to_log).name}"
+                artifact_uri = self.artifact_store.save(file_to_log, remote_path)
+                logger.info(f"Model artifact saved to store: {artifact_uri}")
+        finally:
+            # Cleanup temporary file if created
+            if should_cleanup and Path(file_to_log).exists():
+                os.unlink(file_to_log)
+
+        return artifact_uri
+
+    def save_artifact(
+        self,
+        local_path: str | Path,
+        artifact_path: str = "artifacts",
+    ) -> str | None:
+        """Save an arbitrary artifact to both MLflow and artifact store.
+
+        Args:
+            local_path: Path to local file to save
+            artifact_path: Path within artifact storage
+
+        Returns:
+            Artifact URI if artifact store is configured, None otherwise
+        """
+        if not self.enabled or self._run is None:
+            return None
+
+        local_path = Path(local_path)
+        if not local_path.exists():
+            raise FileNotFoundError(f"Artifact not found: {local_path}")
+
+        # Log to MLflow
+        self._mlflow.log_artifact(str(local_path), artifact_path=artifact_path)
+
+        # Log to artifact store if configured
+        artifact_uri = None
+        if self.artifact_store:
+            remote_path = f"{artifact_path}/{local_path.name}"
+            artifact_uri = self.artifact_store.save(local_path, remote_path)
+            logger.info(f"Artifact saved to store: {artifact_uri}")
+
+        return artifact_uri
+
+    def load_artifact(
+        self,
+        remote_path: str,
+        local_path: str | Path,
+    ) -> Path:
+        """Load an artifact from the artifact store to local filesystem.
+
+        Args:
+            remote_path: Path in artifact store
+            local_path: Destination path on local filesystem
+
+        Returns:
+            Path to loaded file
+
+        Raises:
+            RuntimeError: If no artifact store is configured
+        """
+        if not self.artifact_store:
+            raise RuntimeError("No artifact store configured")
+
+        return self.artifact_store.load(remote_path, local_path)
+
+    def log_roc_auc(self, y_true: np.ndarray, y_score: np.ndarray, step: int | None = None) -> None:
         """Compute and log ROC-AUC."""
         if not self.enabled or self._run is None:
             return
@@ -112,6 +243,131 @@ class MLflowTracker:
         except Exception as exc:
             logger.warning("Could not compute ROC-AUC: %s", exc)
 
+    def register_model(
+        self,
+        model_name: str,
+        version: str,
+        path: str,
+        owner: str | None = None,
+        tags: list[str] | None = None,
+        status: str | None = "inactive",
+    ) -> ModelRegistry | None:
+        """Register a model version to the model registry.
+
+        Automatically syncs metrics and parameters from the current MLflow run
+        and stores the mlflow_run_id.
+
+        Args:
+            model_name: Name of the model
+            version: Version identifier
+            path: Path to model file
+            owner: Optional owner of the model
+            tags: Optional tags for the model
+            status: Optional status (inactive, active, deprecated)
+
+        Returns:
+            The created ModelRegistry entry if successful, None otherwise
+        """
+        if not self.enabled or self._run is None:
+            logger.warning("MLflow not enabled, skipping model registration")
+            return None
+
+        db = get_session()
+        try:
+            # Sync metrics from MLflow run
+            metrics = {}
+            if self._run.data.metrics:
+                metrics = dict(self._run.data.metrics)
+
+            # Check if model already exists
+            existing = (
+                db.query(ModelRegistry)
+                .filter(ModelRegistry.name == model_name, ModelRegistry.version == version)
+                .first()
+            )
+            if existing:
+                logger.warning(
+                    f"Model {model_name} version {version} already exists, "
+                    f"updating mlflow_run_id and metrics"
+                )
+                existing.mlflow_run_id = self._run.info.run_id
+                existing.metrics = metrics
+                db.commit()
+                db.refresh(existing)
+                return existing
+
+            # Create new model entry
+            entry = ModelRegistry(
+                name=model_name,
+                version=version,
+                path=path,
+                owner=owner,
+                tags=tags,
+                mlflow_run_id=self._run.info.run_id,
+                metrics=metrics,
+                status=status or "inactive",
+            )
+            db.add(entry)
+            db.commit()
+            db.refresh(entry)
+            logger.info(
+                "Model registered | name=%s version=%s mlflow_run_id=%s",
+                model_name,
+                version,
+                self._run.info.run_id,
+            )
+            return entry
+        except AstroMLError as e:
+            logger.error(f"Failed to register model: {e}")
+            db.rollback()
+            return None
+        finally:
+            db.close()
+
+    def load_run_metadata(self, model_name: str, version: str) -> dict[str, Any] | None:
+        """Load MLflow run metadata for a registered model version.
+
+        Args:
+            model_name: Name of the model
+            version: Version identifier
+
+        Returns:
+            Run metadata dict if found, None otherwise
+        """
+        if not self.enabled:
+            logger.warning("MLflow not enabled, cannot load run metadata")
+            return None
+
+        db = get_session()
+        try:
+            entry = (
+                db.query(ModelRegistry)
+                .filter(ModelRegistry.name == model_name, ModelRegistry.version == version)
+                .first()
+            )
+            if not entry or not entry.mlflow_run_id:
+                logger.warning(f"No MLflow run ID found for {model_name} v{version}")
+                return None
+
+            # Get run data from MLflow
+            run = self._mlflow.get_run(entry.mlflow_run_id)
+            return {
+                "run_id": run.info.run_id,
+                "experiment_id": run.info.experiment_id,
+                "status": run.info.status,
+                "start_time": run.info.start_time,
+                "end_time": run.info.end_time,
+                "metrics": run.data.metrics,
+                "params": run.data.params,
+                "tags": run.data.tags,
+                "artifact_uri": run.info.artifact_uri,
+            }
+        except AstroMLError as e:
+            logger.error(f"Failed to load run metadata: {e}")
+            return None
+        finally:
+            db.close()
+
     def end(self) -> None:
         """End the active MLflow run."""
         if self.enabled and self._run is not None:
@@ -122,7 +378,7 @@ class MLflowTracker:
     # Context-manager support
     # ------------------------------------------------------------------
 
-    def __enter__(self) -> "MLflowTracker":
+    def __enter__(self) -> MLflowTracker:
         return self
 
     def __exit__(self, *_: Any) -> None:

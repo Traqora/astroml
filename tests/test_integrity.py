@@ -1,4 +1,5 @@
 """Unit tests for integrity validation utilities."""
+
 import pytest
 
 from astroml.validation import integrity

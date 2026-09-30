@@ -1,14 +1,15 @@
 """Shared fixtures for tests/validation/ test suite."""
+
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 import pytest
 
 
 @pytest.fixture
-def valid_transactions() -> List[Dict[str, Any]]:
+def valid_transactions() -> list[dict[str, Any]]:
     """Three structurally complete, unique transactions."""
     return [
         {
@@ -36,17 +37,17 @@ def valid_transactions() -> List[Dict[str, Any]]:
 
 
 @pytest.fixture
-def transactions_with_missing_fields() -> List[Dict[str, Any]]:
+def transactions_with_missing_fields() -> list[dict[str, Any]]:
     """Three transactions each missing a different required field."""
     return [
-        {"id": "tx_004", "amount": 100.0},                         # missing source_account
-        {"source_account": "GKLM", "amount": 50.0},               # missing id
-        {"id": "tx_006", "source_account": None, "amount": 75.0}, # null required field
+        {"id": "tx_004", "amount": 100.0},  # missing source_account
+        {"source_account": "GKLM", "amount": 50.0},  # missing id
+        {"id": "tx_006", "source_account": None, "amount": 75.0},  # null required field
     ]
 
 
 @pytest.fixture
-def duplicate_transactions() -> List[Dict[str, Any]]:
+def duplicate_transactions() -> list[dict[str, Any]]:
     """Two unique transactions plus one exact duplicate of the first."""
     base = {
         "id": "tx_007",
@@ -73,9 +74,11 @@ def fraud_scores():
     """Well-separated fraud prediction arrays for calibration tests."""
     np.random.seed(42)
     y_true = np.array([0] * 400 + [1] * 100)
-    y_prob = np.concatenate([
-        np.random.beta(2, 8, 400),
-        np.random.beta(8, 2, 100),
-    ])
+    y_prob = np.concatenate(
+        [
+            np.random.beta(2, 8, 400),
+            np.random.beta(8, 2, 100),
+        ]
+    )
     y_prob = np.clip(y_prob, 0.01, 0.99)
     return y_true, y_prob

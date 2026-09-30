@@ -11,6 +11,39 @@ on:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # CodeQL static analysis
+  # ---------------------------------------------------------------------------
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["python", "javascript"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
+
+  # ---------------------------------------------------------------------------
   # Python security tests (pytest)
   # ---------------------------------------------------------------------------
   python-security:
@@ -24,6 +57,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
+          cache: pip
 
       - name: Install dependencies
         run: |
@@ -50,12 +84,22 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
+          cache: pip
 
       - name: Install pip-audit
         run: pip install pip-audit
 
       - name: Audit requirements.txt
         run: |
+          # `--severity-filter` is not a pip-audit flag (checked against 2.10.1:
+          # it accepts -r/--requirement, --desc, --format, --output and
+          # --ignore-vuln). argparse therefore bound "critical,high" to the
+          # positional `project_path` and aborted with
+          # "argument project_path: not allowed with argument -r/--requirement"
+          # before auditing anything. pip-audit cannot express a severity
+          # threshold on the CLI, so this gates on every advisory; narrowing it
+          # to critical/high needs either --ignore-vuln entries or a bump of the
+          # offending pins.
           pip-audit -r requirements.txt --desc on --format columns
         continue-on-error: false
 

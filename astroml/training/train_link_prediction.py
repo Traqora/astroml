@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import random
-from typing import List
 
 import torch
 from torch.optim import Adam
@@ -12,10 +11,12 @@ from astroml.models.link_prediction import LinkPredictor
 from astroml.tasks.link_prediction_task import LinkPredictionTask
 
 
-def _build_synthetic_ledger_edges(num_accounts: int, num_edges: int, num_ledgers: int) -> List[Edge]:
+def _build_synthetic_ledger_edges(
+    num_accounts: int, num_edges: int, num_ledgers: int
+) -> list[Edge]:
     rng = random.Random(42)
     accounts = [f"account_{i}" for i in range(num_accounts)]
-    edges: List[Edge] = []
+    edges: list[Edge] = []
     for i in range(num_edges):
         src = rng.choice(accounts)
         dst = rng.choice([a for a in accounts if a != src])

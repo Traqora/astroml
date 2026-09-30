@@ -4,23 +4,24 @@ This module provides deterministic hash generation for transactions
 using SHA-256. The hash is computed from stable, immutable fields
 to enable deduplication and integrity verification.
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
-from typing import Any, Dict, Optional, Set
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Default fields to include in transaction hash computation
-DEFAULT_HASH_FIELDS: Set[str] = {"id", "payload", "timestamp"}
+DEFAULT_HASH_FIELDS: set[str] = {"id", "payload", "timestamp"}
 
 
 def compute_transaction_hash(
-    transaction: Dict[str, Any],
-    fields: Optional[Set[str]] = None,
-    stored_hash: Optional[str] = None,
+    transaction: dict[str, Any],
+    fields: set[str] | None = None,
+    stored_hash: str | None = None,
 ) -> str:
     """Compute a deterministic SHA-256 hash for a transaction.
 
@@ -40,7 +41,7 @@ def compute_transaction_hash(
         fields = DEFAULT_HASH_FIELDS
 
     # Filter to only include requested fields that exist in transaction
-    hash_data: Dict[str, Any] = {}
+    hash_data: dict[str, Any] = {}
     for field in fields:
         if field in transaction:
             hash_data[field] = transaction[field]
@@ -61,9 +62,9 @@ def compute_transaction_hash(
 
 
 def verify_transaction_hash(
-    transaction: Dict[str, Any],
+    transaction: dict[str, Any],
     expected_hash: str,
-    fields: Optional[Set[str]] = None,
+    fields: set[str] | None = None,
 ) -> bool:
     """Verify that a transaction matches an expected hash.
 
@@ -80,8 +81,8 @@ def verify_transaction_hash(
 
 
 def hash_batch(
-    transactions: list[Dict[str, Any]],
-    fields: Optional[Set[str]] = None,
+    transactions: list[dict[str, Any]],
+    fields: set[str] | None = None,
 ) -> list[str]:
     """Compute hashes for a batch of transactions.
 

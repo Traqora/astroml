@@ -1,39 +1,98 @@
 """Prometheus metrics for ingestion services."""
-from prometheus_client import Counter, Gauge, Histogram, Summary
+
+from prometheus_client import Counter, Gauge, Histogram
 
 # Stream metrics
 STREAM_RECORDS_PROCESSED = Counter(
     "astroml_ingestion_records_total",
     "Total number of Stellar records processed",
-    ["stream_type", "horizon_url"]
+    ["stream_type", "horizon_url"],
 )
 
 STREAM_ERRORS = Counter(
     "astroml_ingestion_errors_total",
     "Total number of ingestion errors",
-    ["stream_type", "horizon_url", "error_type"]
+    ["stream_type", "horizon_url", "error_type"],
 )
 
 STREAM_CONNECTION_HEALTH = Gauge(
     "astroml_ingestion_connection_health",
     "Connection health status (1 for healthy, 0 for unhealthy)",
-    ["stream_type", "horizon_url"]
+    ["stream_type", "horizon_url"],
 )
 
 STREAM_RATE_LIMIT_BACKOFF = Gauge(
     "astroml_ingestion_rate_limit_backoff_seconds",
     "Current rate limit backoff in seconds",
-    ["stream_type", "horizon_url"]
+    ["stream_type", "horizon_url"],
 )
 
 STREAM_PROCESSING_LATENCY = Histogram(
     "astroml_ingestion_processing_seconds",
     "Time spent processing a batch of records",
-    ["stream_type", "horizon_url"]
+    ["stream_type", "horizon_url"],
 )
 
 STREAM_CURSOR = Gauge(
     "astroml_ingestion_cursor",
     "Current cursor position (numeric representation if possible)",
-    ["stream_type", "horizon_url"]
+    ["stream_type", "horizon_url"],
+)
+
+STREAM_LAG_SECONDS = Gauge(
+    "astroml_ingestion_lag_seconds",
+    "Current lag in seconds (time since last record's created_at)",
+    ["stream_type", "horizon_url"],
+)
+
+# Batch UPSERT metrics
+BATCH_BUFFER_SIZE = Gauge(
+    "astroml_ingestion_batch_buffer_size",
+    "Current number of models in the batch buffer",
+)
+
+BATCH_FLUSH_TOTAL = Counter(
+    "astroml_ingestion_batch_flushes_total",
+    "Total number of batch flush operations",
+    ["status"],
+)
+
+BATCH_FLUSH_DURATION = Histogram(
+    "astroml_ingestion_batch_flush_seconds",
+    "Time spent flushing a batch of models",
+)
+
+# Per-batch ingestion progress / throughput metrics (Issue #727)
+INGESTION_BATCH_DURATION_SECONDS = Histogram(
+    "astroml_ingestion_batch_duration_seconds",
+    "Wall-clock time spent processing one batch of ledgers",
+)
+
+INGESTION_BATCH_LEDGERS = Counter(
+    "astroml_ingestion_batch_ledgers_total",
+    "Total number of ledgers handled in batch metrics",
+    ["status"],
+)
+
+INGESTION_BATCH_THROUGHPUT = Gauge(
+    "astroml_ingestion_batch_throughput_ledgers_per_second",
+    "Ledgers processed per second during the most recent batch",
+)
+
+# Ingestion heartbeat / stale-data metrics.
+#
+# Unlabelled on purpose: there is one ingestion pipeline per state store, and a
+# labelled-by-source gauge would make the `absent()`/staleness alerts harder to
+# reason about without buying anything. Sampled from the state store on every
+# `/metrics` scrape by `astroml.observability.ingestion.update_ingestion_metrics`,
+# so staleness keeps climbing while ingestion is silent. Both are `NaN` until
+# the first heartbeat lands.
+INGESTION_LAST_SUCCESS_TIMESTAMP = Gauge(
+    "astroml_ingestion_last_success_timestamp_seconds",
+    "Unix timestamp of the most recently processed ledger (ingestion heartbeat)",
+)
+
+INGESTION_STALENESS_SECONDS = Gauge(
+    "astroml_ingestion_staleness_seconds",
+    "Seconds since the most recently processed ledger (data freshness lag)",
 )

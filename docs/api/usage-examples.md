@@ -10,7 +10,7 @@ This guide provides comprehensive examples and integration patterns for using As
 2. [Data Ingestion Examples](#data-ingestion-examples)
 3. [Graph Building Examples](#graph-building-examples)
 4. [Machine Learning Examples](#machine-learning-examples)
-5. [Anomaly Detection Examples](#anomaly-detection-examples)
+5. [Anomaly Detection System](#anomaly-detection-system)
 6. [Research Workflows](#research-workflows)
 7. [Production Integration](#production-integration)
 8. [Advanced Patterns](#advanced-patterns)

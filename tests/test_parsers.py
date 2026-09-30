@@ -1,4 +1,5 @@
 """Tests for astroml.ingestion.parsers."""
+
 from datetime import datetime, timezone
 
 import pytest
@@ -9,7 +10,6 @@ from astroml.ingestion.parsers import (
     parse_operation,
     parse_transaction,
 )
-
 
 # -- Fixtures: sample Horizon JSON responses ----------------------------------
 

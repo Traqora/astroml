@@ -1,0 +1,5 @@
+groups:
+  - name: ingestion
+    rules:
+      - alert: IngestionSuccessDrop
+        expr: ingestion_success_rate < 0.95

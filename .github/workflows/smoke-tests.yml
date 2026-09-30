@@ -1,0 +1,64 @@
+name: Smoke Tests (Manual Trigger)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to test'
+        required: true
+        type: choice
+        options:
+          - production
+          - staging
+      base_url:
+        description: 'Base URL for smoke tests (auto-detected if not provided)'
+        required: false
+        type: string
+
+jobs:
+  run-smoke-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pytest
+
+      - name: Determine base URL
+        id: url
+        run: |
+          if [ -n "${{ github.event.inputs.base_url }}" ]; then
+            echo "url=${{ github.event.inputs.base_url }}" >> $GITHUB_OUTPUT
+          else
+            # Auto-detect based on environment
+            if [ "${{ github.event.inputs.environment }}" = "production" ]; then
+              echo "url=https://api.astroml.example.com" >> $GITHUB_OUTPUT
+            else
+              echo "url=https://api-staging.astroml.example.com" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Run smoke tests (issue #560)
+        run: |
+          timeout 300 python tests/e2e/test_deployment_smoke.py ${{ steps.url.outputs.url }}
+        env:
+          BASE_URL: ${{ steps.url.outputs.url }}
+
+      - name: Notify on failure
+        if: failure()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: 'failure'
+          text: |
+            Smoke tests failed for ${{ github.event.inputs.environment }}
+            URL: ${{ steps.url.outputs.url }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

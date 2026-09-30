@@ -1,0 +1,202 @@
+# Prometheus monitoring configuration for AstroML Model Serving
+# Issue #639: Automated model serving with auto-scaling metrics
+#
+# Defines scrape configurations, recording rules, and alerting rules
+# for model serving infrastructure metrics.
+
+# ── Global settings ──────────────────────────────────────────────────────────
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    service: astroml
+    component: serving
+
+# ── Scrape configurations ────────────────────────────────────────────────────
+scrape_configs:
+  # Model serving metrics
+  - job_name: "astroml-serving"
+    scrape_interval: 10s
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - "astroml-serving.astroml.svc.cluster.local:8080"
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):\d+'
+        replacement: '${1}'
+
+  # GPU metrics (DCGM exporter)
+  - job_name: "nvidia-dcgm"
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+          - "nvidia-dcgm-exporter.astroml.svc.cluster.local:9400"
+
+  # Node metrics (for HPA resource metrics)
+  - job_name: "kubernetes-nodes"
+    kubernetes_sd_configs:
+      - role: node
+    relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+
+  # Pod metrics
+  - job_name: "kubernetes-pods"
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        regex: astroml-model-serving
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_container_port_number]
+        regex: "8080"
+        action: keep
+
+# ── Recording rules for HPA metrics ──────────────────────────────────────────
+rule_files:
+  - "serving-recording-rules.yml"
+
+# Change this to point to your recording rules file, containing:
+
+# groups:
+#   - name: astroml_serving_rules
+#     interval: 30s
+#     rules:
+#       # Request rate per pod (used by HPA)
+#       - record: astroml_inference_requests_per_second
+#         expr: |
+#           rate(astroml_inference_requests_total[1m])
+#           /
+#           count(up{job="astroml-serving"})
+#
+#       # P99 latency across all pods (used by HPA)
+#       - record: astroml_inference_latency_p99_ms
+#         expr: |
+#           histogram_quantile(0.99,
+#             rate(astroml_inference_latency_seconds_bucket[1m])
+#           ) * 1000
+#
+#       # GPU utilization percentage (used by HPA)
+#       - record: astroml_gpu_utilization_pct
+#         expr: |
+#           avg_over_time(nvidia_gpu_duty_cycle[1m]) * 100
+#
+#       # Average CPU utilization across serving pods
+#       - record: astroml_serving_cpu_utilization_pct
+#         expr: |
+#           avg(
+#             rate(container_cpu_usage_seconds_total{
+#               pod=~"astroml-model-serving-.*"
+#             }[1m])
+#           ) * 100
+#
+#       # Average memory utilization across serving pods
+#       - record: astroml_serving_memory_utilization_pct
+#         expr: |
+#           avg(
+#             container_memory_working_set_bytes{
+#               pod=~"astroml-model-serving-.*"
+#             }
+#             /
+#             container_spec_memory_limit_bytes{
+#               pod=~"astroml-model-serving-.*"
+#             }
+#           ) * 100
+#
+#       # Scaling event counter
+#       - record: astroml_scaling_events_total
+#         expr: rate(astroml_autoscaler_scale_events_total[5m])
+
+# ── Alerting rules for serving ───────────────────────────────────────────────
+# groups:
+#   - name: astroml_serving_alerts
+#     interval: 30s
+#     rules:
+#       # High latency alert
+#       - alert: HighInferenceLatency
+#         expr: astroml_inference_latency_p99_ms > 500
+#         for: 5m
+#         labels:
+#           severity: warning
+#           component: serving
+#         annotations:
+#           summary: "High inference latency (P99 > 500ms)"
+#           description: "P99 latency is {{ $value }}ms over the last 5 minutes."
+#           runbook: "https://docs.astroml.io/runbooks/high-inference-latency"
+#
+#       # Scaling at capacity alert
+#       - alert: AutoscalerAtMaxReplicas
+#         expr: |
+#           kube_hpa_status_current_replicas{
+#             hpa="astroml-model-serving-hpa"
+#           }
+#           >=
+#           kube_hpa_spec_max_replicas{
+#             hpa="astroml-model-serving-hpa"
+#           }
+#         for: 10m
+#         labels:
+#           severity: critical
+#           component: autoscaling
+#         annotations:
+#           summary: "HPA at maximum replicas"
+#           description: "The serving HPA has been at max replicas for 10+ minutes."
+#           runbook: "https://docs.astroml.io/runbooks/hpa-at-capacity"
+#
+#       # No healthy replicas alert
+#       - alert: NoHealthyReplicas
+#         expr: sum(up{job="astroml-serving"}) == 0
+#         for: 2m
+#         labels:
+#           severity: critical
+#           component: serving
+#         annotations:
+#           summary: "No healthy serving replicas"
+#           description: "All model serving replicas are down."
+#           runbook: "https://docs.astroml.io/runbooks/no-healthy-replicas"
+#
+#       # High error rate alert
+#       - alert: HighInferenceErrorRate
+#         expr: |
+#           rate(astroml_inference_errors_total[5m])
+#           /
+#           rate(astroml_inference_requests_total[5m])
+#           > 0.05
+#         for: 5m
+#         labels:
+#           severity: warning
+#           component: serving
+#         annotations:
+#           summary: "High inference error rate (>5%)"
+#           description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+#           runbook: "https://docs.astroml.io/runbooks/high-error-rate"
+
+# ── Metric instrumentation guide ─────────────────────────────────────────────
+# The following custom metrics should be exposed by the model serving application
+# at the /metrics endpoint:
+#
+# Counter metrics:
+#   astroml_inference_requests_total{model, version, status}
+#     - Total inference requests (labels: model, version, status=success/error)
+#   astroml_inference_errors_total{model, error_type}
+#     - Total inference errors (labels: model, error_type=timeout/oome/...)
+#   astroml_autoscaler_scale_events_total{direction}
+#     - Total scaling events (labels: direction=up/down)
+#
+# Histogram metrics:
+#   astroml_inference_latency_seconds{model}
+#     - Inference latency in seconds (buckets: 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5)
+#   astroml_inference_batch_size{model}
+#     - Batch size distribution
+#
+# Gauge metrics:
+#   astroml_active_replicas
+#     - Current number of active replicas
+#   astroml_queue_depth{model}
+#     - Current inference queue depth
+#   astroml_active_connections{model}
+#     - Active inference connections
+#   astroml_gpu_memory_used_bytes{model}
+#     - GPU memory in use (if GPU-enabled)

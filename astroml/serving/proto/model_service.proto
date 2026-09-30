@@ -1,0 +1,15 @@
+syntax = "proto3";
+package modelservice;
+
+service ModelService {
+  rpc Predict (PredictRequest) returns (PredictResponse);
+}
+
+message PredictRequest {
+  string model_name = 1;
+  repeated float features = 2;
+}
+
+message PredictResponse {
+  repeated float predictions = 1;
+}

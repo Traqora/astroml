@@ -36,7 +36,7 @@ The AstroML Docker setup includes:
 
 1. **Clone and navigate to the project:**
    ```bash
-   git clone https://github.com/tecch-wiz/astroml.git
+   git clone https://github.com/Traqora/astroml.git
    cd astroml
    ```
 

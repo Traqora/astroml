@@ -274,7 +274,7 @@ fn test_get_active_validators() {
     client.deactivate_validator(&admin, &validator2);
     
     // Get active validators
-    let active_validators = client.get_active_validators();
+    let active_validators = client.get_active_validators(&None::<u32>);
     assert_eq!(active_validators.len(), 1);
     assert_eq!(active_validators.get_unchecked(0).address, validator1);
 }

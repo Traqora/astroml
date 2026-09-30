@@ -5,14 +5,15 @@ before they enter the processing pipeline. A transaction is considered
 corrupted if it fails schema validation, has missing required fields,
 or has hash mismatches.
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
-from .hashing import compute_transaction_hash, verify_transaction_hash
+from .hashing import compute_transaction_hash
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +40,10 @@ class ValidationError:
         timestamp: When the validation error was detected.
     """
 
-    transaction_id: Optional[str]
+    transaction_id: str | None
     error_type: str
     message: str
-    field: Optional[str] = None
+    field: str | None = None
     timestamp: str = ""
 
     def __post_init__(self) -> None:
@@ -62,8 +63,8 @@ class ValidationResult:
     """
 
     is_valid: bool
-    errors: List[ValidationError]
-    transaction_id: Optional[str]
+    errors: list[ValidationError]
+    transaction_id: str | None
     hash: str
 
 
@@ -72,9 +73,9 @@ class TransactionValidator:
 
     def __init__(
         self,
-        required_fields: Optional[Set[str]] = None,
-        field_types: Optional[Dict[str, type]] = None,
-        hash_fields: Optional[Set[str]] = None,
+        required_fields: set[str] | None = None,
+        field_types: dict[str, type] | None = None,
+        hash_fields: set[str] | None = None,
     ) -> None:
         """Initialize the validator.
 
@@ -89,11 +90,11 @@ class TransactionValidator:
 
     def validate(
         self,
-        transaction: Dict[str, Any],
-        stored_hash: Optional[str] = None,
+        transaction: dict[str, Any],
+        stored_hash: str | None = None,
     ) -> ValidationResult:
         """Validate a single transaction."""
-        errors: List[ValidationError] = []
+        errors: list[ValidationError] = []
 
         # Check for malformed structure first
         if not isinstance(transaction, dict):
@@ -174,9 +175,9 @@ class TransactionValidator:
 
     def validate_batch(
         self,
-        transactions: List[Dict[str, Any]],
-        stored_hashes: Optional[List[str]] = None,
-    ) -> List[ValidationResult]:
+        transactions: list[dict[str, Any]],
+        stored_hashes: list[str] | None = None,
+    ) -> list[ValidationResult]:
         """Validate a batch of transactions.
 
         Args:
@@ -186,7 +187,7 @@ class TransactionValidator:
         Returns:
             List of ValidationResult in the same order as input transactions.
         """
-        results: List[ValidationResult] = []
+        results: list[ValidationResult] = []
 
         for i, transaction in enumerate(transactions):
             stored_hash = None
@@ -200,10 +201,10 @@ class TransactionValidator:
 
 
 def validate_transaction(
-    transaction: Dict[str, Any],
-    required_fields: Optional[Set[str]] = None,
-    field_types: Optional[Dict[str, type]] = None,
-    stored_hash: Optional[str] = None,
+    transaction: dict[str, Any],
+    required_fields: set[str] | None = None,
+    field_types: dict[str, type] | None = None,
+    stored_hash: str | None = None,
 ) -> ValidationResult:
     """Convenience function to validate a single transaction.
 

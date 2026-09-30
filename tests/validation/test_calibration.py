@@ -3,11 +3,13 @@
 Focuses on input validation, metric range correctness, and edge-case
 robustness of CalibrationAnalyzer.
 """
+
 from __future__ import annotations
+
+from unittest.mock import patch
 
 import numpy as np
 import pytest
-from unittest.mock import patch
 
 from astroml.validation.calibration import CalibrationAnalyzer, create_sample_fraud_data
 
@@ -18,16 +20,12 @@ class TestInputValidation:
     def test_rejects_probabilities_above_one(self):
         analyzer = CalibrationAnalyzer()
         with pytest.raises(ValueError, match="y_prob must be between 0 and 1"):
-            analyzer.compute_calibration_curve(
-                np.array([0, 1, 0]), np.array([0.2, 1.5, 0.3])
-            )
+            analyzer.compute_calibration_curve(np.array([0, 1, 0]), np.array([0.2, 1.5, 0.3]))
 
     def test_rejects_negative_probabilities(self):
         analyzer = CalibrationAnalyzer()
         with pytest.raises(ValueError, match="y_prob must be between 0 and 1"):
-            analyzer.compute_calibration_curve(
-                np.array([0, 1, 0]), np.array([-0.1, 0.8, 0.3])
-            )
+            analyzer.compute_calibration_curve(np.array([0, 1, 0]), np.array([-0.1, 0.8, 0.3]))
 
     def test_rejects_length_mismatch(self):
         with pytest.raises(ValueError, match="same length"):
@@ -50,8 +48,16 @@ class TestMetricBounds:
     def test_all_expected_metrics_present(self, fraud_scores):
         y_true, y_prob = fraud_scores
         metrics = CalibrationAnalyzer().compute_calibration_metrics(y_true, y_prob)
-        for key in ("brier_score", "log_loss", "ece", "mce", "ace",
-                    "overconfidence", "underconfidence", "sharpness"):
+        for key in (
+            "brier_score",
+            "log_loss",
+            "ece",
+            "mce",
+            "ace",
+            "overconfidence",
+            "underconfidence",
+            "sharpness",
+        ):
             assert key in metrics
 
     def test_brier_score_in_unit_interval(self, fraud_scores):

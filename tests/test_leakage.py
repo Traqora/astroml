@@ -6,23 +6,26 @@ import pytest
 
 from astroml.validation import leakage
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_df(n=10):
     """Return a simple time-ordered DataFrame for testing."""
-    return pd.DataFrame({
-        "timestamp": pd.date_range("2024-01-01", periods=n, freq="D"),
-        "amount": np.arange(n, dtype=float),
-        "score": np.random.default_rng(42).random(n),
-    })
+    return pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2024-01-01", periods=n, freq="D"),
+            "amount": np.arange(n, dtype=float),
+            "score": np.random.default_rng(42).random(n),
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # temporal_train_test_split
 # ---------------------------------------------------------------------------
+
 
 def test_temporal_split_cutoff():
     df = _make_df(10)
@@ -81,6 +84,7 @@ def test_temporal_split_invalid_ratio():
 # validate_temporal_split
 # ---------------------------------------------------------------------------
 
+
 def test_validate_split_clean():
     df = _make_df(10)
     train, test = leakage.temporal_train_test_split(df, "timestamp")
@@ -107,6 +111,7 @@ def test_validate_split_empty_partitions():
 # check_feature_leakage
 # ---------------------------------------------------------------------------
 
+
 def test_check_feature_leakage_unsorted():
     df = _make_df(10).sample(frac=1, random_state=0)  # shuffle
     results = leakage.check_feature_leakage(df, "timestamp")
@@ -130,6 +135,7 @@ def test_check_feature_leakage_clean():
 # check_target_leakage
 # ---------------------------------------------------------------------------
 
+
 def test_check_target_leakage_high_corr():
     df = _make_df(20)
     # Create a feature that is a near-perfect linear copy of the target.
@@ -141,9 +147,11 @@ def test_check_target_leakage_high_corr():
 
 def test_check_target_leakage_clean():
     rng = np.random.default_rng(99)
-    df = pd.DataFrame({
-        "feature": rng.random(50),
-        "target": rng.random(50),
-    })
+    df = pd.DataFrame(
+        {
+            "feature": rng.random(50),
+            "target": rng.random(50),
+        }
+    )
     results = leakage.check_target_leakage(df, "target")
     assert results == []

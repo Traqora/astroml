@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+jobs:
+  lint-typecheck-test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_DB: astroml_test
+          POSTGRES_USER: astroml
+          POSTGRES_PASSWORD: astroml
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U astroml -d astroml_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://astroml:astroml@localhost:5432/astroml_test
+      REDIS_URL: redis://localhost:6379/0
+      PYTHONPATH: .
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements*.txt
+            pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-cpu.txt -r requirements-api.txt -r requirements-dev.txt
+          python -m pip install pip-audit
+          python -m pip install -e . --no-deps
+
+      - name: Check formatting with Black
+        run: black --check astroml api tests
+
+      - name: Run Ruff linting
+        run: ruff check astroml api tests
+
+      - name: Check naming conventions with Ruff
+        run: ruff check --select N --ignore N803,N805,N806,N812,N815 astroml api
+
+      - name: Run mypy type checking
+        run: mypy astroml/
+
+      - name: Check public API docstring coverage
+        run: interrogate astroml api tests
+
+      - name: Check code complexity with xenon
+        run: xenon --max-absolute C --max-modules D --max-average C astroml/
+
+      - name: Check function complexity
+        run: python -m astroml.ci.complexity_check astroml api
+
+      - name: Run security audit
+        run: pip-audit
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short -p no:randomly --continue-on-collection-errors --cov=astroml --cov=api --cov-report=xml --junitxml=test-results/pytest-${{ matrix.python-version }}.xml
+
+      - name: Upload test and coverage artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-python-${{ matrix.python-version }}
+          path: |
+            coverage.xml
+            test-results/*.xml
+          if-no-files-found: ignore

@@ -9,3 +9,31 @@ database:
   name: astroml
   user: astroml
   password: ""
+
+  # Connection pool configuration
+  pool:
+    # Minimum number of connections to keep in the pool
+    min_size: 5
+    # Maximum number of connections in the pool
+    max_size: 20
+    # Maximum number of connections that can be created beyond max_size
+    max_overflow: 10
+    # Timeout in seconds for acquiring a connection from the pool
+    pool_timeout: 30
+    # Time in seconds after which a connection is recycled
+    pool_recycle: 1800
+    # Number of seconds between connection health checks
+    pool_pre_ping: true
+    # Maximum number of times to retry a connection attempt
+    max_retries: 3
+    # Delay in seconds between connection retries
+    retry_delay: 1.0
+
+  # Connection health check settings
+  health_check:
+    # Interval in seconds between health checks
+    interval: 60
+    # Timeout in seconds for health check queries
+    timeout: 5
+    # Whether to enable health check logging
+    log_enabled: true

@@ -64,6 +64,41 @@ configs/
 - **Pre-configured Experiments**: Debug, baseline, hyperparameter search
 - **Automatic Output Organization**: Results saved to timestamped directories
 - **Configuration Tracking**: Full config saved with results
+- **Database Config Validation**: `db.*` is checked against a structured schema (#992)
+
+## 🗄️ Database Config Validation (#992)
+
+`astroml.db.schema` carries a `db` config-group schema whose fields mirror
+`astroml.db.session.DatabaseConfig` one-to-one, and validators that check a
+composed config against it. Call them from a Hydra entry point before anything
+opens a connection:
+
+```python
+from astroml.db.schema import assert_valid_config, validate_all
+
+# Raises SchemaValidationError (a ValueError) listing every problem found.
+db_config = assert_valid_config(cfg)
+
+# Or collect findings instead of raising: valid, errors, warnings.
+report = validate_all(cfg)
+print(report, report.errors, report.warnings)
+```
+
+Place the database settings under a `db` group in the config directory:
+
+```
+configs/
+└── db/
+    └── default.yaml   # host, port, name, user, password, pool_*
+```
+
+Why it matters: `DatabaseConfig` is a pydantic model with the default
+`extra="ignore"` policy, so a key Hydra cannot see — an inlined typo, or a YAML
+file loaded outside a config group — is dropped without a word and the run
+quietly connects with the default. The validators report those keys, check
+numeric ranges pydantic does not bound (the pool fields), and assert the ORM
+`Base.metadata` invariants, all with located findings and structured logging
+rather than a swallowed exception.
 
 ## 📊 Test Results
 

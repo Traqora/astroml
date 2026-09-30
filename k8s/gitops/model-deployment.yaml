@@ -1,0 +1,125 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: astroml-model
+  namespace: astroml
+  labels:
+    app: astroml-model
+    managed-by: gitops
+  annotations:
+    gitops.astroml.io/managed: "true"
+    gitops.astroml.io/sync-policy: automated
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: astroml-model
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: astroml-model
+      annotations:
+        gitops.astroml.io/revision: "{{ .Values.revision }}"
+    spec:
+      serviceAccountName: astroml
+      containers:
+      - name: model-server
+        image: ghcr.io/astroml/astroml:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: astroml-config
+              key: DATABASE_URL
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: astroml-config
+              key: REDIS_URL
+        - name: MODEL_VERSION
+          valueFrom:
+            configMapKeyRef:
+              name: astroml-gitops-config
+              key: MODEL_VERSION
+        command: ["python", "-m", "astroml.api.server"]
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: models
+          mountPath: /app/models
+          readOnly: true
+      volumes:
+      - name: models
+        persistentVolumeClaim:
+          claimName: astroml-models-pvc
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: astroml-gitops-config
+  namespace: astroml
+  labels:
+    managed-by: gitops
+  annotations:
+    gitops.astroml.io/managed: "true"
+data:
+  MODEL_VERSION: "latest"
+  SYNC_INTERVAL: "60s"
+  DRIFT_DETECTION_ENABLED: "true"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: astroml-model-svc
+  namespace: astroml
+  labels:
+    app: astroml-model
+    managed-by: gitops
+spec:
+  selector:
+    app: astroml-model
+  ports:
+  - port: 80
+    targetPort: 8000
+    name: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: astroml-models-pvc
+  namespace: astroml
+  labels:
+    managed-by: gitops
+spec:
+  accessModes:
+  - ReadOnlyMany
+  resources:
+    requests:
+      storage: 10Gi

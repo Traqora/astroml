@@ -1,0 +1,100 @@
+# Great Expectations configuration for AstroML automated data validation.
+#
+# Resolves part of #644.
+#
+# Loaded by astroml.validation.great_expectations.  When the `great_expectations`
+# package is installed, `datasources` and `stores` are handed to GE; otherwise
+# the in-repo validation engine uses `suites`, `profiling` and `ci` only, so this
+# file is the single source of truth either way.
+
+config_version: 1
+
+# ── Where validation artefacts live ──────────────────────────────────────────
+stores:
+  expectations:
+    class_name: ExpectationsStore
+    base_directory: configs/validation/suites
+  validations:
+    class_name: ValidationsStore
+    base_directory: validation_results
+  data_docs:
+    class_name: DataDocsStore
+    base_directory: docs/data_docs
+
+data_docs:
+  site_name: astroml-data-docs
+  output_dir: docs/data_docs
+  # Regenerate the site after every validation run.
+  build_on_validation: true
+
+# ── Data sources ─────────────────────────────────────────────────────────────
+datasources:
+  warehouse:
+    class_name: Datasource
+    execution_engine: PandasExecutionEngine
+    # Resolved from the DATABASE_URL environment variable at runtime.
+    connection_string: ${DATABASE_URL}
+    assets:
+      - name: transactions
+        suite: transactions
+      - name: accounts
+        suite: accounts
+      - name: features
+        suite: features
+
+  parquet_lake:
+    class_name: Datasource
+    execution_engine: PandasExecutionEngine
+    base_directory: data/processed
+    assets:
+      - name: training_snapshot
+        pattern: "*.parquet"
+        suite: training_snapshot
+
+# ── Automated suite generation ───────────────────────────────────────────────
+profiling:
+  # Widen inferred numeric bounds by this fraction of the observed span.
+  tolerance: 0.1
+  # Maximum share of nulls tolerated before the not-null expectation is dropped.
+  null_tolerance: 0.0
+  # Columns with at most this many distinct values get a value-set expectation.
+  max_categories: 20
+  # Add a uniqueness expectation when profiling sees no repeated values.
+  infer_uniqueness: true
+
+# ── Hand-authored suites ─────────────────────────────────────────────────────
+suites:
+  transactions:
+    expectations:
+      - expectation_type: expect_column_to_exist
+        kwargs: { column: transaction_id }
+      - expectation_type: expect_column_values_to_be_unique
+        kwargs: { column: transaction_id }
+      - expectation_type: expect_column_values_to_not_be_null
+        kwargs: { column: account_id }
+      - expectation_type: expect_column_values_to_be_between
+        kwargs: { column: amount, min_value: 0, max_value: 1000000000 }
+      - expectation_type: expect_column_values_to_be_in_set
+        kwargs:
+          column: status
+          value_set: [pending, confirmed, failed]
+
+  accounts:
+    expectations:
+      - expectation_type: expect_column_values_to_be_unique
+        kwargs: { column: account_id }
+      - expectation_type: expect_column_values_to_match_regex
+        kwargs: { column: account_id, regex: "^G[A-Z2-7]{55}$" }
+      - expectation_type: expect_column_values_to_be_between
+        kwargs: { column: balance, min_value: 0, max_value: null }
+
+# ── CI/CD gate ───────────────────────────────────────────────────────────────
+ci:
+  # Fail the pipeline when any expectation in these suites fails.
+  fail_on_error: true
+  # Suites the CI data-validation job runs, in order.
+  suites: [transactions, accounts, features]
+  # Publish data docs as a build artefact.
+  publish_data_docs: true
+  # Emit a JUnit XML report for the CI test summary.
+  junit_report: validation_results/junit.xml

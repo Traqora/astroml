@@ -12,8 +12,8 @@ import logging
 import torch
 from torch import nn
 
-from astroml.models.sage_encoder import InductiveSAGEEncoder
 from astroml.features.gnn.sampler import MultiHopSampler
+from astroml.models.sage_encoder import InductiveSAGEEncoder
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ def train_epoch(
     train_nodes: torch.Tensor,
     optimizer: torch.optim.Optimizer,
     batch_size: int = 512,
-    device: str = 'cpu',
+    device: str = "cpu",
 ) -> float:
     """Train encoder for one epoch using mini-batch reconstruction loss.
 
@@ -78,14 +78,14 @@ def train_epoch(
     """
     encoder.train()
     decoder = nn.Linear(encoder.convs[-1].out_dim, features.size(1)).to(device)
-    decoder_opt = torch.optim.Adam(decoder.parameters(), lr=optimizer.defaults['lr'])
+    decoder_opt = torch.optim.Adam(decoder.parameters(), lr=optimizer.defaults["lr"])
 
     perm = torch.randperm(train_nodes.size(0))
     total_loss = 0.0
     num_batches = 0
 
     for start in range(0, train_nodes.size(0), batch_size):
-        batch_indices = perm[start:start + batch_size]
+        batch_indices = perm[start: start + batch_size]
         batch_nodes = train_nodes[batch_indices]
 
         # Sample neighborhoods
@@ -98,7 +98,7 @@ def train_epoch(
         # After encoding, slice to the number of target nodes (sampled_node_ids places
         # target nodes at indices [0..len(batch_nodes)-1]).
         embeddings = encoder(x, list(reversed(adjs)))
-        embeddings = embeddings[:batch_nodes.size(0)]
+        embeddings = embeddings[: batch_nodes.size(0)]
 
         # Reconstruction target: mean of neighbors' raw features
         targets = build_reconstruction_target(edge_index, features, batch_nodes).to(device)

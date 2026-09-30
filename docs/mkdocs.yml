@@ -1,0 +1,36 @@
+site_name: AstroML Documentation
+site_description: Documentation for AstroML including API, Models, and Pipelines
+site_author: AstroML Team
+
+# Issue #703/#704 — the config lives inside docs/, so the default docs_dir
+# (docs/ relative to this file, i.e. docs/docs) does not exist and every
+# mkdocs build aborted. Point it at the directory holding this file.
+docs_dir: .
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - search.suggest
+    - search.highlight
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - API Reference: api/index.md
+  - Model Registry: model-registry.md
+  - Feature Store: FEATURE_STORE.md
+  - Model Cards: models/index.md
+  - Pipelines: pipelines/index.md
+  - Contributor Roadmap: contributor-roadmap.md
+  - Runbooks:
+    - PostgreSQL Disaster Recovery: runbooks/postgres_disaster_recovery.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences

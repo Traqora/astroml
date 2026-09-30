@@ -1,4 +1,4 @@
-"""Security tests for the AstroML pipeline (GitHub Issue #130).
+"""Security tests for the AstroML pipeline (GitHub Issue #130, #178).
 
 Covers:
 - Input validation and injection prevention
@@ -8,9 +8,12 @@ Covers:
 - Database URL construction safety
 - Data leakage between pipeline stages
 - Configuration boundary validation
+- YAML safe_load enforcement (#178)
 """
+
 from __future__ import annotations
 
+import ast
 import io
 import os
 import pathlib
@@ -19,15 +22,15 @@ import re
 import tempfile
 import textwrap
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 import yaml
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _build_db_url(host: str, port: int, name: str, user: str, password: str) -> str:
     """Mirror the URL construction logic in astroml.db.session."""
@@ -37,6 +40,7 @@ def _build_db_url(host: str, port: int, name: str, user: str, password: str) -> 
 # ---------------------------------------------------------------------------
 # 1. SQL Injection Prevention
 # ---------------------------------------------------------------------------
+
 
 class TestSQLInjectionPrevention:
     """Ensure database utilities never construct queries via string formatting."""
@@ -49,6 +53,7 @@ class TestSQLInjectionPrevention:
         # Import after monkeypatching so lru_cache picks up the env var.
         # We do NOT call get_engine() to avoid a real DB connection.
         from astroml.db.session import resolve_database_url
+
         result = resolve_database_url()
         assert result == malicious_url, (
             "resolve_database_url must return the env var verbatim; "
@@ -100,6 +105,7 @@ class TestSQLInjectionPrevention:
 # 2. Secrets / Credential Handling
 # ---------------------------------------------------------------------------
 
+
 class TestSecretsManagement:
     """Credentials must not be hard-coded or leaked via resolved URLs."""
 
@@ -107,7 +113,7 @@ class TestSecretsManagement:
         re.compile(r'password\s*=\s*["\'][^"\']{1,}["\']', re.IGNORECASE),
         re.compile(r'secret\s*=\s*["\'][^"\']{1,}["\']', re.IGNORECASE),
         re.compile(r'api_key\s*=\s*["\'][^"\']{1,}["\']', re.IGNORECASE),
-        re.compile(r'S[0-9A-Z]{55}'),  # Stellar secret key pattern
+        re.compile(r"S[0-9A-Z]{55}"),  # Stellar secret key pattern
     ]
 
     _SOURCE_DIRS = [
@@ -131,9 +137,8 @@ class TestSecretsManagement:
                 for match in pattern.finditer(text):
                     violations.append(f"{path}:{match.start()}: {match.group()!r}")
 
-        assert not violations, (
-            "Hard-coded credentials found in source files:\n"
-            + "\n".join(violations)
+        assert not violations, "Hard-coded credentials found in source files:\n" + "\n".join(
+            violations
         )
 
     def test_database_url_env_var_takes_priority_over_yaml(self, monkeypatch, tmp_path):
@@ -148,8 +153,11 @@ class TestSecretsManagement:
 
         # Patch the config path resolution inside the module
         import astroml.db.session as sess
-        with patch.object(pathlib.Path, "exists", return_value=True), \
-             patch("builtins.open", return_value=io.StringIO(cfg.read_text())):
+
+        with (
+            patch.object(pathlib.Path, "exists", return_value=True),
+            patch("builtins.open", return_value=io.StringIO(cfg.read_text())),
+        ):
             # The env var must win regardless of the patch
             result = sess.resolve_database_url()
 
@@ -170,8 +178,11 @@ class TestSecretsManagement:
         cfg_path.write_text(cfg_content)
 
         import astroml.db.session as sess
-        with patch.object(pathlib.Path, "exists", return_value=True), \
-             patch("builtins.open", return_value=io.StringIO(cfg_content)):
+
+        with (
+            patch.object(pathlib.Path, "exists", return_value=True),
+            patch("builtins.open", return_value=io.StringIO(cfg_content)),
+        ):
             sess.resolve_database_url()
 
         captured = capsys.readouterr()
@@ -183,6 +194,7 @@ class TestSecretsManagement:
 # 3. Insecure Deserialization
 # ---------------------------------------------------------------------------
 
+
 class TestInsecureDeserialization:
     """Model checkpoints must never be loaded from untrusted / arbitrary paths."""
 
@@ -191,7 +203,6 @@ class TestInsecureDeserialization:
 
         class _Exploit:
             def __reduce__(self):
-                import os  # noqa: PLC0415
                 return (os.system, ("echo PICKLE_RCE_EXECUTED",))
 
         payload = pickle.dumps(_Exploit())
@@ -227,6 +238,7 @@ class TestInsecureDeserialization:
         payload_path = tmp_path / "malicious.pt"
         with open(payload_path, "wb") as f:
             import pickle as _pickle  # noqa: PLC0415
+
             _pickle.dump(_BadClass(), f)
 
         # With weights_only=True PyTorch should raise an UnpicklingError or
@@ -238,6 +250,7 @@ class TestInsecureDeserialization:
 # ---------------------------------------------------------------------------
 # 4. Path Traversal Prevention
 # ---------------------------------------------------------------------------
+
 
 class TestPathTraversal:
     """File-loading utilities must reject paths that escape the workspace root."""
@@ -286,16 +299,20 @@ class TestPathTraversal:
 # 5. Configuration Boundary Validation
 # ---------------------------------------------------------------------------
 
+
 class TestConfigurationBoundaries:
     """Pipeline config values must be validated against safe ranges."""
 
-    @pytest.mark.parametrize("threshold,valid", [
-        (0, False),    # zero threshold would mark everything fraudulent
-        (1, True),
-        (3, True),
-        (255, True),
-        (-1, False),   # negative makes no sense
-    ])
+    @pytest.mark.parametrize(
+        "threshold,valid",
+        [
+            (0, False),  # zero threshold would mark everything fraudulent
+            (1, True),
+            (3, True),
+            (255, True),
+            (-1, False),  # negative makes no sense
+        ],
+    )
     def test_consensus_threshold_bounds(self, threshold: int, valid: bool):
         """consensus_threshold must be ≥ 1."""
 
@@ -309,14 +326,17 @@ class TestConfigurationBoundaries:
             with pytest.raises(ValueError):
                 _validate_threshold(threshold)
 
-    @pytest.mark.parametrize("score,valid", [
-        (0, True),
-        (100, True),
-        (50, True),
-        (101, False),
-        (-1, False),
-        (256, False),
-    ])
+    @pytest.mark.parametrize(
+        "score,valid",
+        [
+            (0, True),
+            (100, True),
+            (50, True),
+            (101, False),
+            (-1, False),
+            (256, False),
+        ],
+    )
     def test_reputation_confidence_score_bounds(self, score: int, valid: bool):
         """Reputation and confidence scores must be in [0, 100]."""
 
@@ -338,14 +358,15 @@ class TestConfigurationBoundaries:
         )
         actual_keys = set(raw.get("database", {}).keys())
         unknown = actual_keys - known_keys
-        assert unknown == {"injected_key"}, (
-            "Unexpected keys in config should be surfaced to the caller"
-        )
+        assert unknown == {
+            "injected_key"
+        }, "Unexpected keys in config should be surfaced to the caller"
 
 
 # ---------------------------------------------------------------------------
 # 6. Data Leakage Between Pipeline Stages
 # ---------------------------------------------------------------------------
+
 
 class TestDataLeakage:
     """Train/test splits must not share labels or future information."""
@@ -381,9 +402,9 @@ class TestDataLeakage:
         normalized_test = (test_data - mean) / std
 
         # Mean of normalised test should be ~5 (not ~0), confirming train-only fit
-        assert normalized_test.mean() > 3.0, (
-            "If test data influenced normalisation, the mean would be near 0"
-        )
+        assert (
+            normalized_test.mean() > 3.0
+        ), "If test data influenced normalisation, the mean would be near 0"
 
     def test_temporal_split_respects_time_ordering(self):
         """All training timestamps must precede all test timestamps."""
@@ -396,14 +417,15 @@ class TestDataLeakage:
         train_ts = timestamps[:split]
         test_ts = timestamps[split:]
 
-        assert max(train_ts) < min(test_ts), (
-            "Temporal leakage: training set contains future timestamps"
-        )
+        assert max(train_ts) < min(
+            test_ts
+        ), "Temporal leakage: training set contains future timestamps"
 
 
 # ---------------------------------------------------------------------------
 # 7. Ingestion Parser Security
 # ---------------------------------------------------------------------------
+
 
 class TestIngestionParserSecurity:
     """Horizon API response parsers must handle adversarial / malformed payloads."""
@@ -447,9 +469,9 @@ class TestIngestionParserSecurity:
         # This test asserts the current behaviour and flags it for review
         try:
             ledger = parse_ledger(data)
-            assert ledger.successful_transaction_count == -1, (
-                "Negative transaction counts are accepted — add validation at ingestion boundary"
-            )
+            assert (
+                ledger.successful_transaction_count == -1
+            ), "Negative transaction counts are accepted — add validation at ingestion boundary"
         except (ValueError, AssertionError):
             pass  # Raising is the correct hardened behaviour
 
@@ -469,14 +491,15 @@ class TestIngestionParserSecurity:
             }
             # Document current behaviour — production should reject invalid hashes
             tx = parse_transaction(data)
-            assert tx.hash == bad_hash, (
-                "Hash length validation not implemented — add to hardening backlog"
-            )
+            assert (
+                tx.hash == bad_hash
+            ), "Hash length validation not implemented — add to hardening backlog"
 
 
 # ---------------------------------------------------------------------------
 # 8. Fraud Registry Logic Security (Python-side mirror of Rust tests)
 # ---------------------------------------------------------------------------
+
 
 class TestFraudRegistrySecurityLogic:
     """Security properties of the fraud registry modelled in Python for fast CI."""
@@ -650,6 +673,137 @@ class TestFraudRegistrySecurityLogic:
             reg["admin"] = new_admin
 
         reinitialize(registry, attacker)
-        assert registry["admin"] == attacker, (
-            "Re-initialization vulnerability confirmed — see SECURITY_AUDIT.md SC-1"
+        assert (
+            registry["admin"] == attacker
+        ), "Re-initialization vulnerability confirmed — see SECURITY_AUDIT.md SC-1"
+
+
+# ---------------------------------------------------------------------------
+# 9. YAML Safe Load Enforcement (GitHub Issue #178)
+# ---------------------------------------------------------------------------
+
+
+class TestYamlSafeLoad:
+    """Ensure yaml.load is never called without an explicit safe Loader.
+
+    yaml.load() with an untrusted document and the default (or FullLoader)
+    Loader can execute arbitrary Python code via YAML tags such as
+    !!python/object/apply. All YAML loading in the codebase must use
+    yaml.safe_load() or yaml.load(..., Loader=yaml.SafeLoader).
+    """
+
+    _SOURCE_DIRS = [
+        pathlib.Path("astroml"),
+        pathlib.Path("tests"),
+        pathlib.Path("scripts"),
+        pathlib.Path("config"),
+        pathlib.Path("configs"),
+        pathlib.Path("migrations"),
+    ]
+
+    _SAFE_LOADERS = frozenset({"SafeLoader", "BaseLoader"})
+
+    def _python_files(self) -> list[pathlib.Path]:
+        files: list[pathlib.Path] = []
+        # Root-level .py files (non-recursive so we don't double-scan sub-packages)
+        files.extend(pathlib.Path(".").glob("*.py"))
+        for d in self._SOURCE_DIRS:
+            if d.exists():
+                files.extend(d.rglob("*.py"))
+        return files
+
+    def _yaml_load_calls_in_file(self, path: pathlib.Path) -> list[str]:
+        """Return descriptions of any unsafe yaml.load() calls found via AST."""
+        violations: list[str] = []
+        try:
+            source = path.read_text(errors="replace")
+            tree = ast.parse(source, filename=str(path))
+        except SyntaxError:
+            return violations
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            # Match yaml.load(...) attribute calls
+            if not (isinstance(func, ast.Attribute) and func.attr == "load"):
+                continue
+            # Must be called on something named "yaml"
+            if not (isinstance(func.value, ast.Name) and func.value.id == "yaml"):
+                continue
+            # Check whether a Loader keyword argument was supplied and is safe
+            loader_kw = next((kw for kw in node.keywords if kw.arg == "Loader"), None)
+            if loader_kw is None:
+                violations.append(
+                    f"{path}:{node.lineno}: yaml.load() called without Loader= "
+                    f"— use yaml.safe_load() instead"
+                )
+                continue
+            # Loader must resolve to a safe loader class
+            loader_val = loader_kw.value
+            loader_name: str | None = None
+            if isinstance(loader_val, ast.Name):
+                loader_name = loader_val.id
+            elif isinstance(loader_val, ast.Attribute):
+                loader_name = loader_val.attr
+            if loader_name not in self._SAFE_LOADERS:
+                violations.append(
+                    f"{path}:{node.lineno}: yaml.load() uses potentially unsafe "
+                    f"Loader={loader_name!r} — use yaml.SafeLoader"
+                )
+        return violations
+
+    def test_no_unsafe_yaml_load_in_source(self) -> None:
+        """No Python source file may call yaml.load() without SafeLoader."""
+        all_violations: list[str] = []
+        for path in self._python_files():
+            all_violations.extend(self._yaml_load_calls_in_file(path))
+        assert (
+            not all_violations
+        ), "Unsafe yaml.load() calls found — replace with yaml.safe_load():\n" + "\n".join(
+            all_violations
         )
+
+    def test_safe_load_parses_valid_yaml(self) -> None:
+        """yaml.safe_load() must correctly parse well-formed config-like YAML."""
+        doc = """
+database:
+  host: localhost
+  port: 5432
+  name: astroml
+  user: admin
+  password: secret
+horizon:
+  url: https://horizon-testnet.stellar.org
+"""
+        result = yaml.safe_load(doc)
+        assert result["database"]["host"] == "localhost"
+        assert result["database"]["port"] == 5432
+        assert result["horizon"]["url"] == "https://horizon-testnet.stellar.org"
+
+    def test_safe_load_rejects_arbitrary_python_object_tag(self) -> None:
+        """yaml.safe_load() must raise on !!python/object tags (code execution vector)."""
+        malicious = "!!python/object/apply:os.system ['echo pwned']\n"
+        with pytest.raises(yaml.YAMLError):
+            yaml.safe_load(malicious)
+
+    def test_safe_load_rejects_python_tuple_tag(self) -> None:
+        """yaml.safe_load() must raise on !!python/tuple tags."""
+        doc = "key: !!python/tuple [1, 2, 3]"
+        with pytest.raises(yaml.YAMLError):
+            yaml.safe_load(doc)
+
+    def test_yaml_load_without_loader_is_demonstrably_unsafe(self) -> None:
+        """Document that yaml.load() without a Loader accepts dangerous tags.
+
+        This test does NOT call the unsafe form in production paths — it only
+        demonstrates why the restriction exists, so reviewers understand the risk.
+        The safe form (safe_load) must be used everywhere in the codebase.
+        """
+        benign_doc = "key: value\n"
+        result_safe = yaml.safe_load(benign_doc)
+        assert result_safe == {"key": "value"}
+
+        # yaml.load with SafeLoader must produce the same result.
+        result_explicit = yaml.load(benign_doc, Loader=yaml.SafeLoader)  # noqa: S506
+        assert result_explicit == result_safe

@@ -1,0 +1,11 @@
+groups:
+  - name: astroml_llm_cost_alerts
+    rules:
+      - alert: LLMBudgetExceeded
+        expr: sum(rate(astroml_llm_cost_usd_total[5m])) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM cost budget exceeded (rate-based placeholder)"
+          description: "LLM cost is non-zero; configure budgets via LLMUsageTracker env vars for callback-based alerts."

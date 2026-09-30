@@ -2,31 +2,146 @@ name: CI
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: ["main", "master"]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: ["main", "master"]
 
 jobs:
   test:
+    # #186 — CI matrix: CPU is mandatory; the optional GPU job runs only
+    # when a CUDA-capable runner is present (the CUDA-availability check
+    # below short-circuits otherwise so the matrix completes cleanly on
+    # standard GitHub-hosted runners). `requirements-cpu.txt` is used when
+    # present so CPU CI doesn't pull heavy CUDA-bound wheels.
+    name: pytest (${{ matrix.flavor }}, py${{ matrix.python-version }}, torch${{ matrix.torch-version }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.10"]
+        python-version: ["3.10", "3.11", "3.12"]
+        flavor: ["cpu"]
+        torch-version: ["2.0", "2.1", "2.2"]
+        exclude:
+          # requirements-cpu.txt pins torch==2.0.0+cpu and torch 2.0/2.1 publish
+          # no cp312 wheels, so every 3.12 row fails inside `pip install` before
+          # a single test runs. Regaining 3.12 coverage means raising the torch
+          # pin, which is a dependency decision rather than a CI one.
+          - python-version: "3.12"
+        include:
+          - python-version: "3.11"
+            flavor: "gpu"
+            torch-version: "2.1"
+
+    continue-on-error: ${{ matrix.flavor == 'gpu' }}
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements*.txt
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pytest pytest-asyncio
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Install dependencies (${{ matrix.flavor }})
+        env:
+          PIP_CACHE_DIR: ~/.cache/pip
+        run: |
+          python -m pip install --upgrade pip
+          # pytest-cov is required by the run step below (--cov=...).
+          pip install pytest pytest-asyncio pytest-xdist pytest-cov
 
-    - name: Run pytest
-      run: |
-        pytest -v
+          # Install torch first to pin the version, then install remaining deps
+          if [ "${{ matrix.flavor }}" = "cpu" ]; then
+            pip install torch==${{ matrix.torch-version }}.* --index-url https://download.pytorch.org/whl/cpu
+          else
+            pip install torch==${{ matrix.torch-version }}.*
+          fi
+
+          if [ "${{ matrix.flavor }}" = "cpu" ] && [ -f requirements-cpu.txt ]; then
+            pip install -r requirements-cpu.txt
+          elif [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          # The CPU legs run the whole tests/ tree, and a chunk of it imports
+          # the API layer (fastapi, httpx, aiosqlite, pydantic-settings,
+          # strawberry). Neither requirements-cpu.txt nor requirements.txt
+          # declares those — only api/requirements.txt does — so 27+ test
+          # modules errored at collection on `ModuleNotFoundError: No module
+          # named 'fastapi'` before asserting anything. Separate command:
+          # resolving both graphs in one invocation trips pip's
+          # `error: resolution-too-deep`.
+          pip install -r requirements-api.txt
+          pip install -e . --no-deps
+
+      - name: Verify torch installation
+        run: |
+          python -c "import torch; print(f'torch {torch.__version__} installed; CUDA available: {torch.cuda.is_available()}')"
+
+      - name: Run pytest (CPU)
+        if: matrix.flavor == 'cpu'
+        run: pytest -v -m "not gpu" -p no:randomly --tb=short --continue-on-collection-errors --cov=astroml --cov-report=xml --cov-report=term
+
+      - name: Upload coverage to Codecov
+        if: matrix.flavor == 'cpu' && matrix.python-version == '3.11' && matrix.torch-version == '2.1'
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          flags: py${{ matrix.python-version }}-torch${{ matrix.torch-version }}
+          fail_ci_if_error: false
+
+      - name: Run pytest (GPU)
+        if: matrix.flavor == 'gpu'
+        run: |
+          python - <<'PY'
+          import sys
+          try:
+              import torch
+          except ImportError:
+              print("torch not installed; skipping GPU pytest")
+              sys.exit(0)
+          if not torch.cuda.is_available():
+              print("CUDA not available on this runner; GPU job no-op")
+              sys.exit(0)
+          import subprocess
+          subprocess.check_call(["pytest", "-v", "-m", "gpu"])
+          PY
+
+  test-api:
+    name: API integration tests (py3.11)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements*.txt
+
+      - name: Install dependencies
+        env:
+          PIP_CACHE_DIR: ~/.cache/pip
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio pytest-xdist httpx fastapi sqlalchemy
+          if [ -f requirements-cpu.txt ]; then
+            pip install -r requirements-cpu.txt
+          elif [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          # api/app.py imports strawberry.fastapi and api/auth/security.py imports
+          # jose, so collecting api/tests needs the service's own requirement set
+          # — the same file api/Dockerfile installs. Without it five test modules
+          # errored at collection before a single API test ran.
+          pip install -r requirements-api.txt
+          pip install -e . --no-deps
+
+      - name: Run API integration tests
+        run: pytest api/tests/ -v --tb=short -p no:randomly

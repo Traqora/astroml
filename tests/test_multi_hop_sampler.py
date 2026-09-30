@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import torch
+
 from astroml.features.gnn.sampler import MultiHopSampler
 
 

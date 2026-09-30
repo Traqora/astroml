@@ -1,0 +1,33 @@
+name: pre-commit
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          # Issue #203: cache pip wheels so pre-commit hooks install faster
+          cache: pip
+
+      - name: Install pre-commit and detect-secrets
+        env:
+          PIP_CACHE_DIR: ~/.cache/pip
+        run: |
+          pip install pre-commit
+          pip install detect-secrets
+
+      - name: Run pre-commit
+        run: pre-commit run --all-files
+
+      - name: Run secrets scan
+        run: detect-secrets scan --baseline .secrets.baseline --all-files

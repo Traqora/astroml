@@ -4,8 +4,9 @@ from __future__ import annotations
 unseen nodes in subgraph B. Verifies the core inductive learning property."""
 
 import torch
-from astroml.models.sage_encoder import InductiveSAGEEncoder
+
 from astroml.features.gnn.sampler import MultiHopSampler
+from astroml.models.sage_encoder import InductiveSAGEEncoder
 from astroml.training.train_sage import train_epoch
 
 
@@ -25,16 +26,21 @@ def test_inductive_generalization():
 
     # --- Train encoder ---
     encoder = InductiveSAGEEncoder(
-        input_dim=8, hidden_dim=16, output_dim=8,
-        num_layers=2, dropout=0.0, aggregator='mean',
+        input_dim=8,
+        hidden_dim=16,
+        output_dim=8,
+        num_layers=2,
+        dropout=0.0,
+        aggregator="mean",
     )
     sampler = MultiHopSampler(train_edge_index, num_train_nodes, fanout=[5, 3])
     optimizer = torch.optim.Adam(encoder.parameters(), lr=0.01)
     train_nodes = torch.arange(num_train_nodes)
 
     for _ in range(20):
-        train_epoch(encoder, sampler, train_features, train_edge_index,
-                    train_nodes, optimizer, batch_size=5)
+        train_epoch(
+            encoder, sampler, train_features, train_edge_index, train_nodes, optimizer, batch_size=5
+        )
 
     # --- Subgraph B (unseen): nodes 0-4, completely disjoint accounts ---
     num_test_nodes = 5

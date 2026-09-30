@@ -12,6 +12,7 @@ a more granular view of account state changes than operations alone.
 The effects table is referenced by the enhanced streaming service but was missing
 from the database schema.
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -40,23 +41,15 @@ def upgrade() -> None:
         sa.Column("details", postgresql.JSONB(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
-    
+
     # Create indexes for performance
-    op.create_index(
-        "ix_effects_account_created_at",
-        "effects",
-        ["account", "created_at"]
-    )
-    op.create_index(
-        "ix_effects_type_created_at", 
-        "effects",
-        ["type", "created_at"]
-    )
+    op.create_index("ix_effects_account_created_at", "effects", ["account", "created_at"])
+    op.create_index("ix_effects_type_created_at", "effects", ["type", "created_at"])
     op.create_index(
         "ix_effects_destination_created_at",
         "effects",
         ["destination_account", "created_at"],
-        postgresql_where=sa.text("destination_account IS NOT NULL")
+        postgresql_where=sa.text("destination_account IS NOT NULL"),
     )
     op.create_index("ix_effects_account", "effects", ["account"])
     op.create_index("ix_effects_type", "effects", ["type"])
@@ -71,6 +64,6 @@ def downgrade() -> None:
     op.drop_index("ix_effects_destination_created_at", table_name="effects")
     op.drop_index("ix_effects_type_created_at", table_name="effects")
     op.drop_index("ix_effects_account_created_at", table_name="effects")
-    
+
     # Drop the table
     op.drop_table("effects")

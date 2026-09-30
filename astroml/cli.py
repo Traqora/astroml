@@ -4,6 +4,16 @@ from __future__ import annotations
 
 import argparse
 import json
+from typing import Optional
+
+from .ingestion.service import IngestionService
+from .ingestion.state import StateStore
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    parser = argparse.ArgumentParser(prog="astroml", description="AstroML utilities CLI")
+    sub = parser.add_subparsers(dest="command", required=True)
+
 import os
 import pathlib
 
@@ -239,6 +249,32 @@ def main(argv: list[str] | None = None) -> int:
         help="Optional explicit input format.",
     )
 
+    agent = sub.add_parser("agent", help="LLM Agent Framework for autonomous task execution")
+    agent_sub = agent.add_subparsers(dest="agent_command", required=True)
+
+    agent_interactive = agent_sub.add_parser("interactive", help="Run agent in interactive mode")
+    agent_interactive.add_argument(
+        "--agent-type",
+        choices=["fraud-detection", "model-training", "generic"],
+        default="generic",
+        help="Type of agent to use",
+    )
+
+    agent_run = agent_sub.add_parser("run", help="Run agent on a single task")
+    agent_run.add_argument(
+        "--agent-type",
+        choices=["fraud-detection", "model-training", "generic"],
+        default="generic",
+        help="Type of agent to use",
+    )
+    agent_run.add_argument("--task", required=True, help="Task description")
+    agent_run.add_argument("--context", help="Context as JSON string")
+    agent_run.add_argument("--verbose", action="store_true", help="Enable verbose output")
+
+    agent_sub.add_parser("list-tools", help="List available tools")
+
+    args = parser.parse_args(argv)
+
     args = parser.parse_args(argv)
 
     # Wire the top-level --env flag into ASTROML_ENV so downstream loaders
@@ -252,11 +288,11 @@ def main(argv: list[str] | None = None) -> int:
         service = IngestionService(state_store=store)
 
         # Example fetch/process functions; in real usage, users would customize/import
-        def fetch_fn(ledger_id -> Any: int):
+        def fetch_fn(ledger_id: int):
             # Placeholder fetch, replace with real data retrieval
             return {"ledger": ledger_id, "data": f"payload-{ledger_id}"}
 
-        def process_fn(ledger_id -> Any: int, payload: dict):
+        def process_fn(ledger_id: int, payload: dict):
             # Placeholder processing; replace with DB writes or other side effects
             # For CLI visibility we do minimal printing; real apps would use logging
             print(f"processed ledger {ledger_id}")

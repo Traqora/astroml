@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 from importlib import import_module
 
 __all__ = [
@@ -59,7 +60,7 @@ _LAZY = {
 }
 
 
-def __getattr__(name: str):
+def __getattr__(name -> Any: str):
     if name in _LAZY:
         module_path, attr = _LAZY[name]
         module = import_module(module_path)

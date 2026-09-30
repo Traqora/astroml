@@ -57,7 +57,7 @@ class Recommendation:
 class RecommendationRanker:
     """Rank recommendations based on relevance and user context."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize recommendation ranker."""
         self.priority_weights = {
             "high": 3.0,

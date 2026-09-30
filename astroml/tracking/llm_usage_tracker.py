@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Token usage + cost tracking utilities for LLM calls.
 
 This repo currently doesn't include a concrete LLM provider integration.
@@ -26,7 +27,7 @@ from datetime import datetime, timezone
 try:
     from prometheus_client import REGISTRY as _PROM_REGISTRY
     from prometheus_client import Counter, Gauge, Histogram
-except Exception:  # pragma: no cover
+except AstroMLError:  # pragma: no cover
     Counter = Gauge = Histogram = None  # type: ignore
     _PROM_REGISTRY = None  # type: ignore
 
@@ -125,7 +126,7 @@ class LLMUsageTracker:
             """Return existing counter if already registered, else create."""
             try:
                 return Counter(name, doc, labels)
-            except Exception:
+            except AstroMLError:
                 # DuplicateTimeseries: collector already registered in global
                 # REGISTRY (happens when multiple LLMUsageTracker instances are
                 # created in the same process, e.g. during tests).
@@ -137,7 +138,7 @@ class LLMUsageTracker:
         def _get_or_create_histogram(name: str, doc: str, labels: list) -> Histogram:
             try:
                 return Histogram(name, doc, labels)
-            except Exception:
+            except AstroMLError:
                 for key, col in _PROM_REGISTRY._names_to_collectors.items():
                     if key.startswith(name):
                         return col  # type: ignore[return-value]
@@ -146,7 +147,7 @@ class LLMUsageTracker:
         def _get_or_create_gauge(name: str, doc: str) -> Gauge:
             try:
                 return Gauge(name, doc)
-            except Exception:
+            except AstroMLError:
                 col = _PROM_REGISTRY._names_to_collectors.get(name)
                 if col is not None:
                     return col  # type: ignore[return-value]
@@ -179,7 +180,7 @@ class LLMUsageTracker:
         try:
             if self.alert_budget_usd_per_window:
                 self._prom["llm_cost_budget_usd_gauge"].set(float(self.alert_budget_usd_per_window))
-        except Exception:
+        except AstroMLError:
             pass
 
     def register_cost_alert_callback(self, cb: Callable[[dict], None]) -> None:
@@ -310,7 +311,7 @@ class LLMUsageTracker:
                     prom["llm_cost_usd_total"].labels(provider=provider, model=model).inc(
                         resolved_cost_usd
                     )
-                except Exception:
+                except AstroMLError:
                     pass
 
         # Append JSONL log (all calls logged)

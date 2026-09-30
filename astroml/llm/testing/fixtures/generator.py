@@ -25,7 +25,7 @@ class FixtureConfig:
 class FixtureGenerator:
     """Generates test fixtures for various domains."""
 
-    def __init__(self, config: FixtureConfig | None = None):
+    def __init__(self, config -> Any: FixtureConfig | None = None):
         self.config = config or FixtureConfig()
 
     def generate_pytest_fixture(

@@ -31,6 +31,7 @@ Dependencies:
 from __future__ import annotations
 
 import logging
+import math
 import re
 from dataclasses import dataclass, field
 from typing import Any, Literal, Mapping, Sequence
@@ -44,6 +45,28 @@ from astroml.db.models import Base
 from astroml.db.session import DatabaseConfig
 
 logger = logging.getLogger(__name__)
+
+
+def validate_router_weights(weights: Mapping[str, float]) -> dict[str, float]:
+    """Validate router weights and return them normalised to sum to 1.0 (issue #987).
+
+    Raises:
+        ValueError: if ``weights`` is empty, a key is blank, a weight is
+            not a finite non-negative number, or all weights are zero.
+    """
+    if not weights:
+        raise ValueError("router weights must not be empty")
+    for name, weight in weights.items():
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError(f"invalid route name: {name!r}")
+        if isinstance(weight, bool) or not isinstance(weight, (int, float)):
+            raise ValueError(f"weight for {name!r} must be a number, got {weight!r}")
+        if not math.isfinite(weight) or weight < 0:
+            raise ValueError(f"weight for {name!r} must be finite and >= 0, got {weight!r}")
+    total = float(sum(weights.values()))
+    if total <= 0:
+        raise ValueError("router weights must not all be zero")
+    return {name: float(weight) / total for name, weight in weights.items()}
 
 DB_CONFIG_GROUP = "db"
 """Hydra config-group/package name the database schema is composed under."""

@@ -12,14 +12,14 @@ from .sources.connectors import (
 
 
 class Indexer:
-    def __init__(self):
+    def __init__(self) -> Any:
         self.documents: list[dict[str, Any]] = []
         self.embeddings: list[list[float]] = []
         self.vocab: dict[str, int] = {}
         self.doc_freqs: dict[str, int] = {}
         self.term_freqs: list[dict[str, int]] = []
 
-    def rebuild_index(self):
+    def rebuild_index(self) -> Any:
         self.documents = []
         connectors = [
             DocsConnector(),

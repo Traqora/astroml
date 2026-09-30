@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Base LLM Provider interface and unified response structures."""
 
 import json
@@ -30,7 +31,7 @@ class LLMResponse(BaseModel):
 class LLMProvider(ABC):
     """Abstract base class for LLM providers."""
 
-    def __init__(self, api_key: str, model: str = ""):
+    def __init__(self, api_key -> Any: str, model: str = ""):
         self.api_key = api_key
         self.model = model
         self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
@@ -91,7 +92,7 @@ class LLMProvider(ABC):
                                 tc["function"]["name"], tc["function"]["arguments"]
                             )
                         )
-                    except Exception as e:
+                    except AstroMLError as e:
                         tool_result = {"error": str(e)}
 
                 messages.append(
@@ -147,7 +148,7 @@ class LLMProvider(ABC):
 
                 text = self._generate_raw(prompt, **kwargs)
                 break
-            except Exception as e:
+            except AstroMLError as e:
                 err_str = str(e)
                 # Check for transient errors
                 is_transient = (
@@ -247,5 +248,5 @@ class LLMProvider(ABC):
         try:
             self.generate("health_check_ping", max_tokens=5)
             return True
-        except Exception:
+        except AstroMLError:
             return False

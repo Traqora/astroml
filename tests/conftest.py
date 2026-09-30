@@ -23,6 +23,12 @@ from tests.llm.fixtures import (
 )
 from tests.llm.mocks import DeterministicMockProvider, ErrorInjectingProvider
 
+# Flaky-test detection, retry and reporting — issue #715.  Registered here so
+# that every ``pytest tests/...`` invocation, including the scheduled
+# flake-hunt workflow, gets the ``--flaky-*`` options, while a run of another
+# tree (``pytest api/tests/``) is left exactly as it was.
+pytest_plugins = ["astroml.testing.flaky", "pytester"]
+
 # ─── Mock providers ───────────────────────────────────────────────────────────
 
 

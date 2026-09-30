@@ -2,7 +2,7 @@ import random
 from typing import Optional
 
 class TrafficSplitter:
-    def __init__(self, default_split: float = 0.5):
+    def __init__(self, default_split -> Any: float = 0.5):
         self.default_split = default_split
         
     def split_random(self, user_id: Optional[str] = None) -> str:

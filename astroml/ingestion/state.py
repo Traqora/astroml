@@ -4,6 +4,7 @@ import json
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import Any
 
 from astroml.utils.ranges import LedgerRangeSet
 
@@ -75,7 +76,13 @@ class IngestionState:
             self.last_processed_ledger = max(self.last_processed_ledger, ledger_id)
         self.last_processed_at = processed_at or utc_now_iso()
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
+        """Serialise to the on-disk form written by :meth:`StateStore.save`.
+
+        Returns:
+            Mapping of the state's fields, with ``processed_ledgers`` in the
+                compact ``[[low, high], ...]`` range form.
+        """
         return {
             "last_processed_ledger": self.last_processed_ledger,
             # Compact ``[[low, high], ...]`` form. Bounded by the number of
@@ -86,7 +93,19 @@ class IngestionState:
         }
 
     @staticmethod
-    def from_dict(data: dict) -> IngestionState:
+    def from_dict(data: dict[str, Any]) -> IngestionState:
+        """Rebuild a state from the mapping produced by :meth:`to_dict`.
+
+        Missing keys are tolerated rather than raised: a partially written or
+        older file should resume the work it describes, not fail the process
+        that is trying to pick up where it left off.
+
+        Args:
+            data: Parsed contents of the state file.
+
+        Returns:
+            The equivalent :class:`IngestionState`.
+        """
         # ``from_list`` accepts both the compact form and the flat list of ids
         # written before #724, so an in-progress backfill resumes across the
         # upgrade instead of starting over.
@@ -122,6 +141,21 @@ class StateStore:
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
 
     def load(self) -> IngestionState:
+        """Read the state file.
+
+        A file that does not exist yet is an empty state, not an error: first
+        run and "nothing has been recorded" are the same situation for a
+        resume, and the caller should not have to special-case them.
+
+        Returns:
+            The persisted :class:`IngestionState`, or a fresh empty one.
+
+        Raises:
+            json.JSONDecodeError: If the file exists but is not valid JSON. The
+                file is written atomically, so this means genuine corruption —
+                silently starting over would discard the processed set and
+                re-ingest the whole range.
+        """
         if not os.path.exists(self.path):
             return IngestionState(last_processed_ledger=None, processed_ledgers=LedgerRangeSet())
         with open(self.path, encoding="utf-8") as f:
@@ -129,12 +163,34 @@ class StateStore:
         return IngestionState.from_dict(data)
 
     def save(self, state: IngestionState) -> None:
+        """Write ``state`` to disk, replacing the previous file atomically.
+
+        Side effects: creates ``<path>.tmp`` and then renames it over ``path``.
+        The rename is what keeps a crash mid-write from leaving a truncated
+        file that :meth:`load` would read as corruption.
+
+        Args:
+            state: The state to persist.
+        """
         tmp_path = f"{self.path}.tmp"
         with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(state.to_dict(), f, indent=2)
         os.replace(tmp_path, self.path)
 
     def mark_processed(self, ledger_id: int) -> IngestionState:
+        """Record ``ledger_id`` as processed and persist the result.
+
+        Read-modify-write on every call: the store holds no cache, so two
+        writers cannot diverge from the file between calls. Cost is one full
+        serialisation per ledger, which is why a large backfill uses
+        :class:`~astroml.ingestion.memory_efficient.ChunkedStateStore` instead.
+
+        Args:
+            ledger_id: Ledger that finished processing.
+
+        Returns:
+            The state as just written, including the new heartbeat timestamp.
+        """
         state = self.load()
         state.record_processed(ledger_id)
         self.save(state)
@@ -160,10 +216,29 @@ class StreamStateManager:
             return {}
 
     def save_cursor(self, stream_id: str, cursor: str) -> None:
+        """Record ``stream_id``'s resume point and persist it immediately.
+
+        Each call writes the whole cursor map, so a stream that checkpoints
+        per record turns into per-record file writes. Callers should checkpoint
+        at a boundary, not on every event.
+
+        Args:
+            stream_id: Stream the cursor belongs to.
+            cursor: Horizon paging token to resume from.
+        """
         self._cursors[stream_id] = cursor
         self._save()
 
     def get_cursor(self, stream_id: str) -> str | None:
+        """Return where ``stream_id`` should resume, or ``None`` if unseen.
+
+        Args:
+            stream_id: Stream to look up.
+
+        Returns:
+            The last saved cursor, or ``None`` — which means start fresh, not
+                that there is no saved position to trust.
+        """
         return self._cursors.get(stream_id)
 
     def _save(self) -> None:

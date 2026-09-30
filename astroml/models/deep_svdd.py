@@ -19,7 +19,7 @@ from sklearn.preprocessing import StandardScaler
 class DeepSVDDNetwork(nn.Module):
     """Neural network for Deep SVDD feature extraction."""
 
-    def __init__(self, input_dim: int, hidden_dims: list, dropout: float = 0.1):
+    def __init__(self, input_dim -> Any: int, hidden_dims: list, dropout: float = 0.1):
         super().__init__()
 
         layers = []
@@ -65,7 +65,7 @@ class DeepSVDD(nn.Module, BaseEstimator):
 
         self.to(device)
 
-    def init_center(self, data_loader: torch.utils.data.DataLoader):
+    def init_center(self, data_loader -> Any: torch.utils.data.DataLoader):
         """Initialize hypersphere center from normal data."""
         self.eval()
         with torch.no_grad():

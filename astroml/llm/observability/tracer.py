@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Distributed tracing for LLM requests — OpenTelemetry-compatible.
 
 Resolves #456: Full request lifecycle tracing from prompt to response,
@@ -103,7 +104,7 @@ class LLMTracer:
             provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
             otel_trace.set_tracer_provider(provider)
             return otel_trace.get_tracer(service_name)
-        except Exception:  # noqa: BLE001
+        except AstroMLError:  # noqa: BLE001
             logger.debug("OpenTelemetry initialisation failed; falling back to internal tracing.")
             return None
 

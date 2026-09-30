@@ -1,8 +1,9 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 from .semantic import SemanticCache
 
 
 class CacheWarmingStrategy:
-    def __init__(self, semantic_cache: SemanticCache):
+    def __init__(self, semantic_cache -> Any: SemanticCache):
         self.cache = semantic_cache
         self.common_templates = [
             "Explain transaction details for high risk withdrawals",
@@ -11,7 +12,7 @@ class CacheWarmingStrategy:
             "List recent security incidents in LLM routing",
         ]
 
-    def warm_cache(self):
+    def warm_cache(self) -> Any:
         # Seed cache with standard response completions
         responses = {
             "Explain transaction details for high risk withdrawals": "High risk withdrawals typically involve transaction amounts exceeding $10,000, unverified international destinations, or sudden change in typical velocity.",

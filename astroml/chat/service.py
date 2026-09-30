@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """Chat service for real-time messaging (issue #306)."""
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 class ChatService:
     """Service for managing chat sessions and messages."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize chat service."""
         self.sessions: dict[str, ChatSession] = {}
         self.agents: dict[str, Agent] = {}

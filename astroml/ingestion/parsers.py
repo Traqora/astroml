@@ -25,6 +25,26 @@ def _parse_datetime(iso_string: str) -> datetime:
     return datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
 
 
+#: Bit widths of the fields packed into a Stellar toid.  The id of every
+#: ledger, transaction, operation and effect is ``ledger << 32 | tx << 12 | op``
+#: (see https://developers.stellar.org/docs/learn/glossary#total-order-id),
+#: which is what makes an operation id usable as an ingest-time natural key.
+_TOD_LEDGER_SHIFT = 32
+
+
+def ledger_sequence_from_operation_id(operation_id: int) -> int:
+    """Recover the ledger sequence an operation was applied in from its toid.
+
+    ``operation_id`` is Horizon's operation id, which packs the ledger, the
+    transaction's application order within it, and the operation's index within
+    the transaction.  Only the ledger is needed to key an ingestion write.
+
+    >>> ledger_sequence_from_operation_id(53919970611201)
+    12554
+    """
+    return int(operation_id) >> _TOD_LEDGER_SHIFT
+
+
 def parse_ledger(data: dict) -> Ledger:
     """Parse a Horizon ledger JSON dict into a Ledger ORM instance."""
     return Ledger(
@@ -176,6 +196,25 @@ def _extract_asset(data: dict) -> tuple[str | None, str | None]:
     return (data.get("asset_code"), data.get("asset_issuer"))
 
 
+def extract_asset_string(data: dict, prefix: str = "") -> str:
+    """Extract and format an asset string consistently as code:issuer or XLM."""
+    asset_type = data.get(f"{prefix}asset_type", data.get("asset_type", ""))
+    if asset_type == "native":
+        return "XLM"
+    
+    code = data.get(f"{prefix}asset_code", data.get("asset_code"))
+    issuer = data.get(f"{prefix}asset_issuer", data.get("asset_issuer"))
+    
+    if code == "XLM" and not issuer:
+        return "XLM"
+    elif code and issuer:
+        return f"{code}:{issuer}"
+    elif code:
+        return str(code)
+    else:
+        return "UNKNOWN"
+
+
 def extract_path_payment_hops(data: dict) -> list[dict]:
     """Decompose a path payment into ordered per-hop dicts.
 
@@ -191,31 +230,9 @@ def extract_path_payment_hops(data: dict) -> list[dict]:
     receiver = _extract_destination(data, data["type"])
     path = data.get("path", [])  # intermediate assets
 
-    # Build asset chain: [source_asset, ...path_assets..., dest_asset]
-    def _asset_str(asset_dict: dict) -> str:
-        if asset_dict.get("asset_type") == "native":
-            return "XLM"
-        code = asset_dict.get("asset_code", "UNKNOWN")
-        issuer = asset_dict.get("asset_issuer", "")
-        return f"{code}:{issuer}" if issuer else code
-
-    src_asset_type = data.get("source_asset_type", data.get("asset_type", ""))
-    if src_asset_type == "native":
-        src_asset = "XLM"
-    else:
-        src_code = data.get("source_asset_code", data.get("asset_code", "UNKNOWN"))
-        src_issuer = data.get("source_asset_issuer", data.get("asset_issuer", ""))
-        src_asset = f"{src_code}:{src_issuer}" if src_issuer else src_code
-
-    dst_asset_type = data.get("asset_type", "")
-    if dst_asset_type == "native":
-        dst_asset = "XLM"
-    else:
-        dst_code = data.get("asset_code", "UNKNOWN")
-        dst_issuer = data.get("asset_issuer", "")
-        dst_asset = f"{dst_code}:{dst_issuer}" if dst_issuer else dst_code
-
-    path_assets = [_asset_str(p) for p in path]
+    src_asset = extract_asset_string(data, prefix="source_")
+    dst_asset = extract_asset_string(data)
+    path_assets = [extract_asset_string(p) for p in path]
     asset_chain = [src_asset] + path_assets + [dst_asset]
 
     # Amounts: source_amount on first hop, destination_amount on last hop,

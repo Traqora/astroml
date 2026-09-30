@@ -57,6 +57,19 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          # `astroml.llm.__init__` imports the ML stack (numpy, scipy and
+          # prometheus-client) plus `api.models.orm` (pydantic, fastapi,
+          # sqlalchemy). pyproject.toml declares no base dependencies, so
+          # `pip install -e .` alone left this job dying at import time with
+          # `ModuleNotFoundError: No module named 'numpy'`. The two
+          # requirement files are the single source of truth for that stack.
+          # They are installed as two commands on purpose: resolving
+          # requirements-cpu.txt (torch, pytorch-lightning, s3fs/gcsfs) together
+          # with api/requirements.txt (10 pinned OpenTelemetry packages plus
+          # weasyprint) in one invocation exceeds pip's backtracking limit and
+          # the job dies on `error: resolution-too-deep`.
+          pip install -r requirements-cpu.txt
+          pip install -r requirements-api.txt
           pip install -e .
 
       - name: Get changed files
@@ -255,6 +268,19 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          # `astroml.llm.__init__` imports the ML stack (numpy, scipy and
+          # prometheus-client) plus `api.models.orm` (pydantic, fastapi,
+          # sqlalchemy). pyproject.toml declares no base dependencies, so
+          # `pip install -e .` alone left this job dying at import time with
+          # `ModuleNotFoundError: No module named 'numpy'`. The two
+          # requirement files are the single source of truth for that stack.
+          # They are installed as two commands on purpose: resolving
+          # requirements-cpu.txt (torch, pytorch-lightning, s3fs/gcsfs) together
+          # with api/requirements.txt (10 pinned OpenTelemetry packages plus
+          # weasyprint) in one invocation exceeds pip's backtracking limit and
+          # the job dies on `error: resolution-too-deep`.
+          pip install -r requirements-cpu.txt
+          pip install -r requirements-api.txt
           pip install -e .
 
       - name: Validate documentation

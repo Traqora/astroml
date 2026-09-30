@@ -1,25 +1,31 @@
+"""Base node features from a transaction graph.
+
+Features computed per node:
+
+- ``in_degree`` / ``out_degree``
+- ``total_received`` / ``total_sent`` (volume)
+- ``account_age``: seconds between ``first_seen`` and the reference time
+- ``first_seen``: earliest timestamp observed for the node
+- ``unique_asset_count`` / ``asset_entropy``: asset-diversity metrics
+
+Inputs:
+    edges: iterable of dict-like with keys ``src``, ``dst``, ``amount``,
+        ``timestamp`` (ints/floats acceptable) and an optional ``asset``.
+    nodes_first_seen: optional mapping ``node_id -> first_seen_ts`` (epoch
+        seconds). If not provided, age is computed from the minimum timestamp
+        observed in ``edges`` for that node.
+    ref_time: reference timestamp (epoch seconds) used to compute age. Defaults
+        to the maximum timestamp seen in ``edges``.
+
+Returns:
+    pandas.DataFrame indexed by node id with columns
+    ``['in_degree', 'out_degree', 'total_received', 'total_sent',
+    'account_age', 'first_seen', 'unique_asset_count', 'asset_entropy']``.
+"""
+
 from __future__ import annotations
 
 from astroml.features.asset_diversity import compute_asset_diversity
-
-"""
-Base node features from transaction graph.
-
-Features per node:
-- in_degree / out_degree
-- total_received / total_sent (volume)
-- account_age: seconds since first_seen_ts relative to a provided reference time
-
-Inputs:
-- edges: iterable of dict-like with keys: src, dst, amount, timestamp (ints/floats acceptable)
-- nodes: optional mapping node_id -> first_seen_ts (epoch seconds). If not provided, age is computed
-         from the minimum timestamp observed in edges for that node.
-- ref_time: reference timestamp (epoch seconds) to compute age. Defaults to max timestamp in edges.
-
-Returns:
-- pandas.DataFrame indexed by node id with columns:
-  ['in_degree','out_degree','total_received','total_sent','account_age']
-"""
 
 from collections.abc import Hashable, Iterable
 
@@ -34,6 +40,34 @@ def compute_node_features(
     nodes_first_seen: dict[Hashable, float] | None = None,
     ref_time: float | None = None,
 ) -> pd.DataFrame:
+    """Aggregate per-node features from a list of transaction edges.
+
+    Args:
+        edges: Iterable of edge dicts with ``src``, ``dst``, ``amount``,
+            ``timestamp`` and optional ``asset`` keys.
+        nodes_first_seen: Optional ``node_id -> first_seen_ts`` overrides.
+        ref_time: Reference timestamp for ``account_age``; defaults to the
+            latest timestamp in ``edges``.
+
+    Returns:
+        DataFrame indexed by node id, sorted by index.
+
+    Examples:
+        >>> edges = [
+        ...     {"src": "A", "dst": "B", "amount": 10, "timestamp": 100, "asset": "XLM"},
+        ...     {"src": "A", "dst": "C", "amount": 20, "timestamp": 200, "asset": "USDC"},
+        ...     {"src": "B", "dst": "A", "amount": 5, "timestamp": 300, "asset": "XLM"},
+        ... ]
+        >>> features = compute_node_features(edges, ref_time=400)
+        >>> list(features.columns)
+        ['in_degree', 'out_degree', 'total_received', 'total_sent', 'account_age', 'first_seen', 'unique_asset_count', 'asset_entropy']
+        >>> int(features.at["A", "out_degree"])
+        2
+        >>> float(features.at["A", "total_sent"])
+        30.0
+        >>> float(features.at["A", "account_age"])
+        300.0
+    """
     rows_src = []
     rows_dst = []
 
@@ -185,3 +219,31 @@ def compute_node_features(
     ]
 
     return feats.sort_index()
+
+def compute_rolling_node_features(
+    edges: Iterable[Edge],
+    window: float,
+    ref_time: float,
+    window_name: str,
+    nodes_first_seen: dict[Hashable, float] | None = None,
+) -> pd.DataFrame:
+    """Compute rolling window account aggregate features.
+    
+    Filters edges to those within [ref_time - window, ref_time] and computes
+    aggregates (volumes, degrees).
+    """
+    valid_edges = []
+    min_ts = ref_time - window
+    for e in edges:
+        ts = float(e.get("timestamp", 0.0) or 0.0)
+        if min_ts <= ts <= ref_time:
+            valid_edges.append(e)
+            
+    feats = compute_node_features(valid_edges, nodes_first_seen=nodes_first_seen, ref_time=ref_time)
+    
+    # We only care about aggregations, not account age or first_seen for rolling
+    feats = feats.drop(columns=["first_seen", "account_age"], errors="ignore")
+    
+    # Rename columns with window_name
+    feats = feats.add_suffix(f"_{window_name}")
+    return feats

@@ -5,7 +5,7 @@ from typing import Any
 
 
 class MetricsCollector:
-    def __init__(self):
+    def __init__(self) -> Any:
         # In-memory circular buffers for recent requests (timestamp, latency, tokens, error, cost, feature, model, is_cached, ttft, safety_incident, feedback)
         self.history: deque = deque(maxlen=5000)
         self.features: dict[str, dict[str, Any]] = {}

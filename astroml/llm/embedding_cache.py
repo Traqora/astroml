@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Semantic embedding cache for LLM embedding computations.
 
 Reduces embedding API costs by:
@@ -61,7 +62,7 @@ class _TFIDFEncoder:
     that ``dot(a, b) == cosine_similarity(a, b)``.
     """
 
-    def __init__(self, max_vocab: int = 4096):
+    def __init__(self, max_vocab -> Any: int = 4096):
         self._max_vocab = max_vocab
         self._vocab: dict[str, int] = {}  # token → column index
         self._df: dict[str, int] = {}  # token → document frequency
@@ -214,7 +215,7 @@ class EmbeddingCache:
                 self._redis = client
                 # Restore persisted stats if available.
                 self._load_stats()
-            except Exception:
+            except AstroMLError:
                 logger.warning("EmbeddingCache: Redis unavailable — using in-memory fallback.")
                 self._redis = None
 
@@ -241,7 +242,7 @@ class EmbeddingCache:
             raw = self._redis.get(self._STATS_KEY)
             if raw:
                 self._stats.from_dict(json.loads(raw))
-        except Exception:
+        except AstroMLError:
             pass
 
     def _save_stats(self) -> None:
@@ -249,7 +250,7 @@ class EmbeddingCache:
             return
         try:
             self._redis.setex(self._STATS_KEY, self.ttl * 24, json.dumps(self._stats.to_dict()))
-        except Exception:
+        except AstroMLError:
             pass
 
     # ---------- index read/write ----------
@@ -266,7 +267,7 @@ class EmbeddingCache:
                         e["vector"] = np.array(e["vector"], dtype=np.float32)
                     return entries
                 return []
-            except Exception:
+            except AstroMLError:
                 pass
         return list(self._fallback_index)
 
@@ -277,7 +278,7 @@ class EmbeddingCache:
             try:
                 self._redis.setex(self._INDEX_KEY, self.ttl * 2, json.dumps(serialisable))
                 return
-            except Exception:
+            except AstroMLError:
                 pass
         # Fallback — keep numpy arrays in memory directly.
         self._fallback_index = [{"hash": e["hash"], "vector": e["vector"]} for e in index]
@@ -292,7 +293,7 @@ class EmbeddingCache:
                 if raw:
                     return json.loads(raw)
                 return None
-            except Exception:
+            except AstroMLError:
                 pass
         return self._fallback.get(text_hash)
 
@@ -303,7 +304,7 @@ class EmbeddingCache:
             try:
                 self._redis.setex(key, self.ttl, payload)
                 return
-            except Exception:
+            except AstroMLError:
                 pass
         self._fallback[text_hash] = entry
 
@@ -313,7 +314,7 @@ class EmbeddingCache:
         if self._redis_ok():
             try:
                 existed = bool(self._redis.delete(key))
-            except Exception:
+            except AstroMLError:
                 pass
         if text_hash in self._fallback:
             del self._fallback[text_hash]
@@ -498,7 +499,7 @@ class EmbeddingCache:
         if self._redis_ok():
             try:
                 self._redis.delete(self._STATS_KEY)
-            except Exception:
+            except AstroMLError:
                 pass
 
         old_stats = self._stats.to_dict()

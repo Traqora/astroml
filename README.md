@@ -5,6 +5,11 @@
 [![codecov](https://codecov.io/gh/Traqora/astroml/branch/main/graph/badge.svg)](https://codecov.io/gh/Traqora/astroml)
 [![Code Complexity](https://img.shields.io/badge/complexity-A-brightgreen)](https://github.com/mombu/xenon)
 
+> 🌐 **Languages:** This README is being translated under
+> [`docs/i18n/`](./docs/i18n/). Available so far:
+> [Español (partial)](./docs/i18n/es/README.es.md).
+> See [`docs/i18n/README.md`](./docs/i18n/README.md) to add a locale.
+
 ## Dynamic Graph Machine Learning Framework for the Stellar Network
 
 **AstroML** is a research-driven Python framework for building **dynamic graph machine learning models** on the Stellar Development Foundation Stellar blockchain.
@@ -17,11 +22,53 @@ It treats blockchain data as a **multi-asset, time-evolving graph**, enabling ad
 
 AstroML provides end-to-end tooling for:
 
-
+* Ledger ingestion and normalization
+* Dynamic transaction graph construction
+* Feature engineering for blockchain accounts
+* Graph Neural Networks (GNNs)
+* Self-supervised node embeddings
+* Anomaly detection
+* Temporal modeling
+* Reproducible ML experimentation
+* **LLM Agent Framework** for multi-step reasoning and autonomous task execution
 
 ---
 
-## 🧠 Core Idea
+## � LLM Agent Framework
+
+AstroML now includes a powerful **LLM Agent Framework** for autonomous task execution and multi-step reasoning:
+
+### Key Capabilities
+
+* **Multi-step reasoning** with think-act-observe loops
+* **Task planning** with automatic decomposition
+* **Tool calling** for autonomous execution
+* **Memory management** with conversation and vector storage
+* **Pre-configured agents** for fraud detection and model training
+
+### Quick Start
+
+```bash
+# Interactive agent mode
+python -m astroml agent interactive --agent-type fraud-detection
+
+# Run a single task
+python -m astroml agent run \
+  --agent-type model-training \
+  --task "Train a fraud detection model" \
+  --verbose
+
+# List available tools
+python -m astroml agent list-tools
+```
+
+### Documentation
+
+See [AGENTS_FRAMEWORK.md](./AGENTS_FRAMEWORK.md) for complete documentation.
+
+---
+
+## �🧠 Core Idea
 
 Blockchain networks are naturally **graph-structured systems**:
 

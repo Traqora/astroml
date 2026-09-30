@@ -220,7 +220,7 @@ class FineTuneTrainer:
         )
         model = get_peft_model(model, lora_config)
 
-        def tokenize_function(examples):
+        def tokenize_function(examples) -> Any:
             return tokenizer(
                 examples["text"],
                 truncation=True,

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -224,3 +225,55 @@ def test_horizon_stream_raises_on_non_200_status():
             await server.wait_closed()
 
     asyncio.run(run_test())
+
+
+def test_cursor_advances_on_an_increasing_paging_token():
+    client = HorizonStreamingClient(cursor="1000")
+    client._advance_cursor("1001")
+    assert client.cursor == "1001"
+
+
+def test_cursor_ignores_a_non_advancing_paging_token(caplog):
+    client = HorizonStreamingClient(cursor="1000")
+    with caplog.at_level(logging.WARNING):
+        client._advance_cursor("1000")
+    assert client.cursor == "1000"
+    assert "non-advancing" in caplog.text
+
+
+def test_cursor_ignores_a_regressing_paging_token(caplog):
+    # A malicious or misbehaving upstream sending an earlier paging_token
+    # must not move the resume cursor backward: reconnecting on it would
+    # replay transactions already delivered to on_transaction.
+    client = HorizonStreamingClient(cursor="5000")
+    with caplog.at_level(logging.WARNING):
+        client._advance_cursor("4999")
+    assert client.cursor == "5000"
+    assert "non-advancing" in caplog.text
+
+
+def test_cursor_ignores_a_non_numeric_paging_token(caplog):
+    client = HorizonStreamingClient(cursor="1000")
+    with caplog.at_level(logging.WARNING):
+        client._advance_cursor("not-a-number")
+    assert client.cursor == "1000"
+    assert "non-numeric" in caplog.text
+
+
+def test_cursor_accepts_the_first_numeric_token_from_the_default_now_cursor():
+    # The default "now" cursor is not itself numeric, so the very first
+    # real paging_token received must be adopted unconditionally rather
+    # than being rejected as non-advancing against an unparsable baseline.
+    client = HorizonStreamingClient()
+    assert client.cursor == "now"
+    client._advance_cursor("12345")
+    assert client.cursor == "12345"
+
+
+def test_cursor_comparison_is_numeric_not_lexicographic():
+    # "9" > "10" lexicographically but not numerically; the cursor must
+    # compare as integers so equal-value tokens with different padding, or
+    # a genuine increase past a power of ten, are not misjudged.
+    client = HorizonStreamingClient(cursor="9")
+    client._advance_cursor("10")
+    assert client.cursor == "10"

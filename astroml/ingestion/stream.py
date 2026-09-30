@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Horizon Streaming Client for real-time Stellar data ingestion.
 
 Connects to a Stellar Horizon server via Server-Sent Events (SSE) and
@@ -20,6 +21,7 @@ from datetime import timedelta
 import aiohttp
 from aiohttp_sse_client import client as sse_client
 
+from astroml.db.repositories import NormalizedTransactionRepository
 from astroml.db.schema import Ledger, Transaction
 from astroml.db.session import get_session
 from astroml.ingestion.batch import BatchBuffer
@@ -80,7 +82,7 @@ class HorizonStreamClient:
                 self._batch_buffer.close()
                 logger.info("Batch buffer closed | total_flushed=%d flush_count=%d",
                     flushed, self._batch_buffer.flush_count)
-            except Exception:
+            except AstroMLError:
                 logger.exception("Error closing batch buffer")
             finally:
                 self._batch_buffer = None
@@ -144,7 +146,7 @@ class HorizonStreamClient:
                 if not self._running:
                     break
                 await self._handle_reconnect(exc)
-            except Exception:
+            except AstroMLError:
                 logger.exception("Unexpected error in stream loop")
                 if not self._running:
                     break
@@ -215,7 +217,7 @@ class HorizonStreamClient:
             else:
                 logger.warning("Unsupported endpoint: %s", endpoint)
                 return
-        except Exception:
+        except AstroMLError:
             logger.exception("Failed to persist event (paging_token=%s)", paging_token)
             return
 
@@ -240,7 +242,7 @@ class HorizonStreamClient:
             try:
                 session = self._batch_buffer._session
                 existing_ledger = session.get(Ledger, tx.ledger_sequence)
-            except Exception:
+            except AstroMLError:
                 pass
             if existing_ledger is None:
                 ledger = Ledger(
@@ -279,10 +281,14 @@ class HorizonStreamClient:
         """Synchronous DB write for both raw and normalized operation."""
         session = get_session()
         try:
+            # ``Operation`` is keyed by Horizon's operation id, so merge already
+            # resolves it.  The normalized row has only a surrogate primary key,
+            # and merging it inserted a duplicate on every replay (#728), so it
+            # goes through the natural-key upsert instead.
             session.merge(op)
-            session.merge(normalized)
+            NormalizedTransactionRepository(session).upsert(normalized)
             session.commit()
-        except Exception:
+        except AstroMLError:
             session.rollback()
             raise
         finally:
@@ -295,7 +301,7 @@ class HorizonStreamClient:
         try:
             session.merge(model)
             session.commit()
-        except Exception:
+        except AstroMLError:
             session.rollback()
             raise
         finally:

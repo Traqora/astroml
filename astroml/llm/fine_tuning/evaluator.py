@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Post-tuning evaluation for fine-tuned models.
 
 Provides automated evaluation against holdout sets, baseline
@@ -101,7 +102,7 @@ class FineTuneEvaluator:
                 try:
                     pred = trainer(record["input"])
                     predictions.append(str(pred))
-                except Exception as e:
+                except AstroMLError as e:
                     logger.warning(f"Prediction failed: {e}")
                     predictions.append("")
         else:
@@ -123,7 +124,7 @@ class FineTuneEvaluator:
                 provider = get_llm_provider("openai")
                 response = provider.generate(record["input"], model=baseline_model)
                 predictions.append(response)
-            except Exception as e:
+            except AstroMLError as e:
                 logger.warning(f"Baseline prediction failed: {e}")
                 predictions.append("")
         return predictions

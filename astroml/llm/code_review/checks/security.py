@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """
 Security checks for code review.
 
@@ -44,7 +45,7 @@ class SecurityCheck(BaseCheck):
     - Insecure dependencies
     """
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize the security check."""
         self.vulnerability_patterns = self._init_patterns()
 

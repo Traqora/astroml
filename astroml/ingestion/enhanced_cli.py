@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Enhanced CLI for the robust Stellar ingestion service.
 
 Provides command-line interface for running enhanced streams with
@@ -282,7 +283,7 @@ async def _run_single_stream_enhanced(args: argparse.Namespace) -> None:
         await run_single_stream(config)
     except KeyboardInterrupt:
         logger.info("Interrupted by user")
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Stream failed: %s", e)
         raise
 
@@ -300,7 +301,7 @@ async def _run_multi_stream_enhanced(args: argparse.Namespace) -> None:
         await run_multi_stream_service(horizon_urls, stream_types)
     except KeyboardInterrupt:
         logger.info("Interrupted by user")
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Multi-Horizon service failed: %s", e)
         raise
 
@@ -319,7 +320,7 @@ async def _main() -> None:
             await _run_multi_stream_enhanced(args)
         else:
             await _run_single_stream_enhanced(args)
-    except Exception:
+    except AstroMLError:
         sys.exit(1)
 
 

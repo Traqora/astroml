@@ -156,8 +156,8 @@ security-audit:
 
 .PHONY: secrets-scan
 secrets-scan:
-	@echo "🔍 Running detect-secrets to scan for leaked credentials..."
-	detect-secrets scan --baseline .secrets.baseline
+	@echo "🔍 Running detect-secrets gate (fails on new or unaudited secrets)..."
+	python -m astroml.ci.secrets_gate --baseline .secrets.baseline
 
 .PHONY: benchmark
 benchmark:

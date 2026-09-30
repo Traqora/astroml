@@ -23,7 +23,7 @@ class SQLAnalyzer:
     related to security, performance, and correctness.
     """
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize the SQL analyzer."""
         self.patterns = self._init_patterns()
 

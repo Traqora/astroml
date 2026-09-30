@@ -33,3 +33,9 @@ Use built-in parameterized generics where possible (`dict[str, Any]`, `list[str]
 - Document public classes, methods, and functions. Run `make lint-docs` to
   enforce the repository's docstring coverage floor before submitting.
 - Keep functions small and testable.
+
+## Contributor Roadmap
+
+New contributor? Start with [docs/contributor-roadmap.md](docs/contributor-roadmap.md):
+how issues are labelled by difficulty, how Stellar Wave rewards work, and
+what response times to expect. Claim an issue by commenting before you start.

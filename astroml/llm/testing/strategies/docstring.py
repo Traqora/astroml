@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class DocstringStrategy:
     """Strategy that generates tests by parsing docstrings for examples."""
 
-    def __init__(self, docstring: str):
+    def __init__(self, docstring -> Any: str):
         self.docstring = docstring
 
     def extract_examples(self) -> list[dict[str, Any]]:

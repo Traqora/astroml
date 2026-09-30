@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """Permission system for tool access control."""
 
 
@@ -14,7 +15,7 @@ PermissionDenied = PermissionDeniedError
 class PermissionChecker:
     """Checks whether a user is allowed to execute a given tool."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         self._acl: dict[str, set[str | None]] = {}
 
     def allow(self, tool_name: str, user_id: str | None = None) -> None:

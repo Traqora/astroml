@@ -222,3 +222,75 @@ This audit trail system helps meet compliance requirements for:
 - Immutable log storage (WORM)
 - Blockchain-based audit trail verification
 - Advanced search and analytics
+
+## Pipeline Audit Logging (Issue #757)
+
+Beyond the API-level audit trail above, AstroML records an **immutable
+who/what/when/result trail for critical pipeline operations**: model
+activations, configuration changes, and rollbacks.
+
+### Operations recorded
+
+| Operation | Recorded when | Key fields |
+| --- | --- | --- |
+| `model_activated` | A model version is activated in the pipeline | `version`, `activated_by` |
+| `model_deactivated` | A model version is taken out of service | `version` |
+| `model_rolled_back` | A rollback to a previous model version | `from_version`, `to_version`, `reason` |
+| `config_changed` | A pipeline/model configuration file is edited | per-key `before`/`after` changes |
+| `config_rolled_back` | A configuration rollback | `from_version`, `to_version` |
+| `feature_config_changed` | Feature-builder YAML definitions change (#742) | changed builders, definition hashes |
+
+Each record contains:
+
+- **Who**: the `actor` (user ID or service identity)
+- **What**: the `operation`, `target` (model/config path), and `details`
+- **When**: a UTC ISO-8601 `timestamp`
+- **Result**: an `outcome` (`success` / `failure`)
+
+### Tamper evidence
+
+Records are **hash-chained**: every entry stores the hash of its predecessor
+plus a content hash over its own fields. `PipelineAuditLogger.verify_chain()`
+detects any silent edit, deletion, or reordering of history. Records themselves
+are frozen dataclasses and are persisted through the append-only
+`AuditStore` backends (NDJSON files in production).
+
+### Usage
+
+```python
+from astroml.tracking.pipeline_audit import PipelineAuditLogger
+from astroml.governance.audit_logger import FileAuditStore
+
+audit = PipelineAuditLogger(
+    store=FileAuditStore("audit_logs/pipeline"),
+    actor="pipeline-service",
+)
+
+audit.log_model_activation("fraud-detector", "v3", actor="alice")
+audit.log_config_change(
+    "configs/model/thresholds.yaml",
+    {"false_positive_weight": {"before": 0.2, "after": 0.5}},
+    actor="bob",
+)
+audit.log_rollback("fraud-detector", "v3", "v2", actor="carol", reason="precision regression")
+
+assert audit.verify_chain()  # raises no error; returns False if history was edited
+```
+
+### Querying and verification
+
+```python
+from astroml.tracking.pipeline_audit import PipelineOperation
+
+# Newest-first records, filterable by operation / target / actor
+records = audit.query(operation=PipelineOperation.CONFIG_CHANGED, limit=50)
+
+# Verify the tamper-evidence chain across stored history
+ok = audit.verify_chain()
+```
+
+### Storage and retention
+
+Pipeline audit records are written to the same append-only NDJSON stores as
+API audit logs (90-day retention applies) and share the sensitive-field
+redaction list documented above.

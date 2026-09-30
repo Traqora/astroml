@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Dedicated model storage backend for saving, loading, and verifying ML model artifacts.
 
 Provides serialization, checksum calculation, and storage management for PyTorch,
@@ -108,7 +109,7 @@ class ModelStore:
                 import torch
 
                 torch.save(model_object.state_dict(), target_file)
-            except Exception:
+            except AstroMLError:
                 with open(target_file, "wb") as f:
                     pickle.dump(model_object, f)
         elif isinstance(model_object, (bytes, bytearray)):
@@ -183,12 +184,12 @@ class ModelStore:
         try:
             with open(target_file, "rb") as f:
                 return pickle.load(f)
-        except Exception:
+        except AstroMLError:
             try:
                 import torch
 
                 return torch.load(target_file, map_location="cpu")
-            except Exception as e:
+            except AstroMLError as e:
                 with open(target_file, "rb") as f:
                     return f.read()
 
@@ -276,7 +277,7 @@ class ModelStore:
             try:
                 with open(meta_file, "r", encoding="utf-8") as f:
                     sidecar = json.load(f)
-            except Exception:
+            except AstroMLError:
                 pass
 
         info: dict[str, Any] = {

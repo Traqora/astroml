@@ -7,7 +7,7 @@ from .base import LLMProvider
 
 
 class HuggingFaceProvider(LLMProvider):
-    def __init__(self, api_key: str, model: str = "meta-llama/Llama-2-7b-chat-hf"):
+    def __init__(self, api_key -> Any: str, model: str = "meta-llama/Llama-2-7b-chat-hf"):
         super().__init__(api_key, model)
 
     def _generate_raw(self, prompt: str, **kwargs: Any) -> str:

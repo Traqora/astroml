@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Polars-based preprocessing for large ledger backfill datasets.
 
 This module is designed for backfills with millions of rows. It keeps work in
@@ -86,7 +87,7 @@ def upsert_processed_ledger(
             select(ProcessedLedger).where(ProcessedLedger.ledger_sequence == ledger_sequence)
         ).scalar_one()
 
-    except Exception:
+    except AstroMLError:
         # Fallback to SQLAlchemy merge for SQLite or other databases
         existing = session.execute(
             select(ProcessedLedger).where(ProcessedLedger.ledger_sequence == ledger_sequence)
@@ -165,6 +166,13 @@ def scan_backfill_dataset(
     path = Path(input_path)
     fmt = input_format or _infer_input_format(path)
     normalized_fmt = "ndjson" if fmt == "jsonl" else fmt
+
+    # Issue #706 — an empty ledger range (zero-byte file) is valid input, not
+    # an error: the format scanners cannot infer a schema from no bytes and
+    # raise, so short-circuit to an empty frame. Downstream preprocessing
+    # treats missing columns as null and yields zero rows.
+    if path.is_file() and path.stat().st_size == 0:
+        return pl.LazyFrame()
 
     if normalized_fmt == "parquet":
         return pl.scan_parquet(_resolve_scan_target(path, ("*.parquet",)))

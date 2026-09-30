@@ -72,7 +72,7 @@ class ModelQuantizer:
     while maintaining >90% quality.
     """
 
-    def __init__(self, config: QuantizationConfig | None = None):
+    def __init__(self, config -> Any: QuantizationConfig | None = None):
         """Initialize quantizer."""
         self.config = config or QuantizationConfig()
 

@@ -13,7 +13,7 @@ jobs:
     # below short-circuits otherwise so the matrix completes cleanly on
     # standard GitHub-hosted runners). `requirements-cpu.txt` is used when
     # present so CPU CI doesn't pull heavy CUDA-bound wheels.
-    name: pytest (${ matrix.flavor }, py${{ matrix.python-version }}, torch${{ matrix.torch-version }})
+    name: pytest (${{ matrix.flavor }}, py${{ matrix.python-version }}, torch${{ matrix.torch-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -22,8 +22,11 @@ jobs:
         flavor: ["cpu"]
         torch-version: ["2.0", "2.1", "2.2"]
         exclude:
+          # requirements-cpu.txt pins torch==2.0.0+cpu and torch 2.0/2.1 publish
+          # no cp312 wheels, so every 3.12 row fails inside `pip install` before
+          # a single test runs. Regaining 3.12 coverage means raising the torch
+          # pin, which is a dependency decision rather than a CI one.
           - python-version: "3.12"
-            torch-version: "2.0"
         include:
           - python-version: "3.11"
             flavor: "gpu"
@@ -42,12 +45,13 @@ jobs:
           cache-dependency-path: |
             requirements*.txt
 
-      - name: Install dependencies (${ matrix.flavor }})
+      - name: Install dependencies (${{ matrix.flavor }})
         env:
           PIP_CACHE_DIR: ~/.cache/pip
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pytest-asyncio pytest-xdist
+          # pytest-cov is required by the run step below (--cov=...).
+          pip install pytest pytest-asyncio pytest-xdist pytest-cov
 
           # Install torch first to pin the version, then install remaining deps
           if [ "${{ matrix.flavor }}" = "cpu" ]; then
@@ -61,6 +65,15 @@ jobs:
           elif [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
+          # The CPU legs run the whole tests/ tree, and a chunk of it imports
+          # the API layer (fastapi, httpx, aiosqlite, pydantic-settings,
+          # strawberry). Neither requirements-cpu.txt nor requirements.txt
+          # declares those — only api/requirements.txt does — so 27+ test
+          # modules errored at collection on `ModuleNotFoundError: No module
+          # named 'fastapi'` before asserting anything. Separate command:
+          # resolving both graphs in one invocation trips pip's
+          # `error: resolution-too-deep`.
+          pip install -r requirements-api.txt
           pip install -e . --no-deps
 
       - name: Verify torch installation
@@ -123,6 +136,11 @@ jobs:
           elif [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
+          # api/app.py imports strawberry.fastapi and api/auth/security.py imports
+          # jose, so collecting api/tests needs the service's own requirement set
+          # — the same file api/Dockerfile installs. Without it five test modules
+          # errored at collection before a single API test ran.
+          pip install -r requirements-api.txt
           pip install -e . --no-deps
 
       - name: Run API integration tests

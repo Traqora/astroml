@@ -1,0 +1,113 @@
+# Declarative feature-builder definitions for AstroML (#742)
+#
+# Each entry under `builders` describes a feature that can be computed
+# without writing code:
+#
+#   name           Unique feature name (becomes the registry key).
+#   description    Human-readable description shown in docs and the registry.
+#   primitive      Computation primitive; see astroml/features/yaml_builders.py
+#                  (count, sum, mean, max, min, std, unique_count, ratio).
+#   inputs         Where the data comes from:
+#                    entity:  the feature owner (e.g. account)
+#                    source:  logical input table (e.g. transactions)
+#                    columns: the columns the primitive reads
+#   window         Trailing window (e.g. 7d, 12h, 30m). Omit for windowless.
+#   output_column  Column the built feature is written to.
+#   feature_type   numeric | categorical | boolean | text | vector | time_series
+#   tags / owner   Metadata carried into the feature registry.
+#   params         Extra primitive-specific parameters (e.g. value_column).
+#
+# Caching / recompute semantics (#743):
+#   Every change to window, primitive, inputs, or params changes the
+#   definition hash, producing a new cache key. Cached values keyed with the
+#   old hash are never read again and simply expire. Recompute happens when
+#   the definition hash changes, the data version changes, or the cache
+#   entry is expired/evicted.
+#
+# Load with:
+#   from astroml.features.yaml_builders import load_feature_builder_specs
+#   specs = load_feature_builder_specs("configs/feature_builders.yaml")
+
+builders:
+  - name: tx_count_7d
+    description: Number of transactions initiated by the account in a trailing 7-day window
+    primitive: count
+    feature_type: numeric
+    inputs:
+      entity: account
+      source: transactions
+      columns: [timestamp]
+    window: 7d
+    output_column: tx_count_7d
+    tags: [temporal, usage]
+
+  - name: tx_volume_sum_30d
+    description: Sum of transaction amounts initiated by the account in a trailing 30-day window
+    primitive: sum
+    feature_type: numeric
+    inputs:
+      entity: account
+      source: transactions
+      columns: [timestamp, amount]
+    window: 30d
+    output_column: tx_volume_sum_30d
+    params:
+      value_column: amount
+    tags: [temporal, monetary]
+
+  - name: avg_tx_amount_7d
+    description: Average transaction amount over a trailing 7-day window
+    primitive: mean
+    feature_type: numeric
+    inputs:
+      entity: account
+      source: transactions
+      columns: [timestamp, amount]
+    window: 7d
+    output_column: avg_tx_amount_7d
+    params:
+      value_column: amount
+    tags: [temporal, monetary]
+
+  - name: max_single_tx_30d
+    description: Largest single transaction amount in a trailing 30-day window
+    primitive: max
+    feature_type: numeric
+    inputs:
+      entity: account
+      source: transactions
+      columns: [timestamp, amount]
+    window: 30d
+    output_column: max_single_tx_30d
+    params:
+      value_column: amount
+    tags: [temporal, monetary, risk]
+
+  - name: counterparties_30d
+    description: Number of distinct counterparties transacted with in a trailing 30-day window
+    primitive: unique_count
+    feature_type: numeric
+    inputs:
+      entity: account
+      source: transactions
+      columns: [timestamp, counterparty]
+    window: 30d
+    output_column: counterparties_30d
+    params:
+      value_column: counterparty
+    tags: [temporal, network]
+
+  - name: inbound_to_outbound_ratio_30d
+    description: Ratio of inbound to outbound transaction volume over a trailing 30-day window
+    primitive: ratio
+    feature_type: numeric
+    inputs:
+      entity: account
+      source: transactions
+      columns: [timestamp, direction_in, direction_out]
+    window: 30d
+    output_column: inbound_to_outbound_ratio_30d
+    params:
+      numerator: direction_in
+      denominator: direction_out
+    tags: [temporal, risk, network]

@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Enriched artifact metadata for model registry entries — issue #765.
 
 Attaches useful metadata on registration: framework and torch versions,
@@ -199,7 +200,7 @@ def infer_output_schema(model: Any, sample_input: Any = None) -> dict[str, Any] 
                 "shape": list(output.shape),
                 "dtype": str(output.dtype),
             }
-    except Exception:
+    except AstroMLError:
         pass
 
     # Fallback: try to read from model attributes
@@ -224,7 +225,7 @@ def detect_git_commit() -> str | None:
         )
         if result.returncode == 0:
             return result.stdout.strip()
-    except Exception:
+    except AstroMLError:
         pass
     return None
 

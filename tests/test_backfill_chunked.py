@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import os
+
 import pytest
 
 from astroml.ingestion.service import IngestionService, LedgerOutcome
@@ -153,8 +156,6 @@ class TestChunkedBenchmark:
         assert result.tx_per_sec > 0
 
     def test_benchmark_appends_jsonl(self, tmp_path):
-        import json
-
         from astroml.ingestion.benchmark import run_chunked_benchmark
 
         out = tmp_path / "bench.jsonl"
@@ -167,3 +168,168 @@ class TestChunkedBenchmark:
         for line in lines:
             data = json.loads(line)
             assert "chunk_size" in data
+
+
+class TestBackfillCheckpoint:
+    def test_checkpoint_disabled_by_default(self, tmp_path):
+        """Without resume_from_checkpoint, no checkpoint file is created."""
+        svc = IngestionService()
+        checkpoint_path = str(tmp_path / "checkpoint.json")
+
+        list(
+            svc.ingest_backfill_chunked(
+                start_ledger=1,
+                end_ledger=10,
+                chunk_size=5,
+                checkpoint_path=checkpoint_path,
+            )
+        )
+
+        assert not os.path.exists(checkpoint_path)
+
+    def test_checkpoint_saves_after_successful_chunk(self, tmp_path):
+        """Checkpoint is saved after each successful chunk."""
+        svc = IngestionService()
+        checkpoint_path = str(tmp_path / "checkpoint.json")
+
+        chunks = list(
+            svc.ingest_backfill_chunked(
+                start_ledger=1,
+                end_ledger=10,
+                chunk_size=5,
+                resume_from_checkpoint=True,
+                checkpoint_path=checkpoint_path,
+            )
+        )
+
+        assert os.path.exists(checkpoint_path)
+        with open(checkpoint_path) as f:
+            data = json.load(f)
+        assert data["last_ledger"] == 10  # Last successfully processed
+
+    def test_resume_from_checkpoint_skips_processed_chunks(self, tmp_path):
+        """Resuming from checkpoint starts after the last saved position."""
+        checkpoint_path = str(tmp_path / "checkpoint.json")
+        processed_first_run: list[int] = []
+
+        def process_fn(ledger_id: int, _payload):
+            processed_first_run.append(ledger_id)
+
+        # First run: process ledgers 1-10, interrupted after first chunk
+        svc = IngestionService()
+        chunks = list(
+            svc.ingest_backfill_chunked(
+                start_ledger=1,
+                end_ledger=20,
+                chunk_size=5,
+                process_fn=process_fn,
+                resume_from_checkpoint=True,
+                checkpoint_path=checkpoint_path,
+            )
+        )
+        assert processed_first_run == list(range(1, 21))
+
+        # Manually set checkpoint to ledger 5 to simulate crash mid-run
+        with open(checkpoint_path, "w") as f:
+            json.dump({"last_ledger": 5, "updated_at": "2024-01-01T00:00:00"}, f)
+
+        # Second run: should resume from ledger 6
+        processed_second_run: list[int] = []
+        svc2 = IngestionService()
+        chunks2 = list(
+            svc2.ingest_backfill_chunked(
+                start_ledger=1,
+                end_ledger=20,
+                chunk_size=5,
+                process_fn=lambda lid, _: processed_second_run.append(lid),
+                resume_from_checkpoint=True,
+                checkpoint_path=checkpoint_path,
+            )
+        )
+
+        # Should process 6-20 (skipped 1-5 from checkpoint)
+        assert processed_second_run == list(range(6, 21))
+
+    def test_resume_handles_missing_checkpoint(self, tmp_path):
+        """When checkpoint file doesn't exist, starts from start_ledger."""
+        checkpoint_path = str(tmp_path / "nonexistent.json")
+        processed: list[int] = []
+
+        svc = IngestionService()
+        list(
+            svc.ingest_backfill_chunked(
+                start_ledger=1,
+                end_ledger=5,
+                chunk_size=2,
+                process_fn=lambda lid, _: processed.append(lid),
+                resume_from_checkpoint=True,
+                checkpoint_path=checkpoint_path,
+            )
+        )
+
+        assert processed == list(range(1, 6))
+
+    def test_checkpoint_cleared_on_completion(self, tmp_path):
+        """Checkpoint file is removed when backfill completes successfully."""
+        checkpoint_path = str(tmp_path / "checkpoint.json")
+
+        svc = IngestionService()
+        list(
+            svc.ingest_backfill_chunked(
+                start_ledger=1,
+                end_ledger=5,
+                chunk_size=2,
+                resume_from_checkpoint=True,
+                checkpoint_path=checkpoint_path,
+            )
+        )
+
+        assert not os.path.exists(checkpoint_path)
+
+    def test_checkpoint_beyond_end_ledger_returns_early(self, tmp_path):
+        """If checkpoint is already at or beyond end_ledger, nothing is processed."""
+        checkpoint_path = str(tmp_path / "checkpoint.json")
+
+        # Create a checkpoint beyond the target range
+        with open(checkpoint_path, "w") as f:
+            json.dump({"last_ledger": 100, "updated_at": "2024-01-01T00:00:00"}, f)
+
+        processed: list[int] = []
+        svc = IngestionService()
+        chunks = list(
+            svc.ingest_backfill_chunked(
+                start_ledger=1,
+                end_ledger=50,
+                chunk_size=10,
+                process_fn=lambda lid, _: processed.append(lid),
+                resume_from_checkpoint=True,
+                checkpoint_path=checkpoint_path,
+            )
+        )
+
+        assert chunks == []
+        assert processed == []
+
+    def test_checkpoint_corrupted_file_is_ignored(self, tmp_path):
+        """Corrupted checkpoint file is treated as missing, starts from scratch."""
+        checkpoint_path = str(tmp_path / "corrupt.json")
+
+        # Write invalid JSON
+        with open(checkpoint_path, "w") as f:
+            f.write("not valid json")
+
+        processed: list[int] = []
+        svc = IngestionService()
+        list(
+            svc.ingest_backfill_chunked(
+                start_ledger=1,
+                end_ledger=5,
+                chunk_size=2,
+                process_fn=lambda lid, _: processed.append(lid),
+                resume_from_checkpoint=True,
+                checkpoint_path=checkpoint_path,
+            )
+        )
+
+        # Should process the full range (checkpoint ignored)
+        assert processed == list(range(1, 6))

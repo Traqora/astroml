@@ -97,7 +97,7 @@ class UserProfile:
 class UserProfiler:
     """Profile users for personalized recommendations."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize user profiler."""
         self.profiles: Dict[str, UserProfile] = {}
 

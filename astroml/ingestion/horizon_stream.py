@@ -12,6 +12,8 @@ from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlencode, urlparse
 
+from astroml.utils.exceptions import AstroMLError
+
 Transaction = dict[str, Any]
 TransactionHandler = Callable[[Transaction], Any]
 
@@ -81,6 +83,11 @@ class HorizonStreamingClient:
 
     @property
     def cursor(self) -> str:
+        """Where the stream will resume, or has resumed to.
+
+        Advances as transactions arrive (see :meth:`_handle_payload`), so
+        reading it after :meth:`stop` gives the reconnect point.
+        """
         return self._cursor
 
     @property
@@ -89,12 +96,33 @@ class HorizonStreamingClient:
         return self._duplicates_skipped
 
     async def start(self, on_transaction: TransactionHandler) -> None:
+        """Begin consuming in a background task and return immediately.
+
+        Args:
+            on_transaction: Called per transaction with the parsed Horizon
+                payload. May be a coroutine function; the awaitable is awaited.
+
+        Raises:
+            RuntimeError: If a stream is already running. Call
+                :meth:`stop` first rather than starting a second consumer,
+                which would advance ``cursor`` from two places at once.
+        """
         if self._task and not self._task.done():
             raise RuntimeError("stream already running")
         self._stop_event.clear()
         self._task = asyncio.create_task(self.stream(on_transaction))
 
     async def stop(self) -> None:
+        """Ask the stream to end and wait for its task to finish.
+
+        Returns once consumption has actually stopped, so a caller can be
+        sure no handler is still running — which is what makes it safe to
+        read :attr:`cursor` immediately afterwards.
+
+        Side effects: closes the open transport, which makes
+        :meth:`_consume_stream` return, and clears the tracked task. Never
+        raises: a transport that is already dead is the outcome we wanted.
+        """
         self._stop_event.set()
         writer = self._writer
         if writer is not None:
@@ -107,10 +135,29 @@ class HorizonStreamingClient:
         if self._task is not None:
             task = self._task
             self._task = None
+            # Called from inside the stream task itself (a handler that
+            # shuts down), awaiting our own task would deadlock forever.
             if task is not asyncio.current_task():
                 await task
 
     async def stream(self, on_transaction: TransactionHandler) -> None:
+        """Reconnect loop: keep consuming until :meth:`stop` is called.
+
+        Exponential backoff restarts at ``reconnect_delay`` after a
+        connection that ended cleanly and doubles per failed attempt up to
+        ``max_reconnect_delay``, so a Horizon outage costs one retry per
+        capped interval instead of a hot loop, while a routine server-side
+        disconnect reconnects promptly.
+
+        Args:
+            on_transaction: Handler passed through to each consumption; may be
+                a coroutine function.
+
+        Note:
+            Exceptions from ``on_transaction`` propagate out of this method
+            and end the loop — a failing handler is a bug to surface, not a
+            disconnected socket to retry.
+        """
         delay = self._reconnect_delay
 
         while not self._stop_event.is_set():
@@ -122,7 +169,7 @@ class HorizonStreamingClient:
                 self._logger.warning("Horizon stream disconnected. Reconnecting in %.2fs", delay)
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except AstroMLError:
                 if self._stop_event.is_set():
                     break
                 self._logger.exception("Horizon stream error. Reconnecting in %.2fs", delay)
@@ -223,14 +270,13 @@ class HorizonStreamingClient:
         previous_cursor = self._cursor
         paging_token = tx.get("paging_token")
         if paging_token is not None:
-            candidate = str(paging_token)
-            if self._should_rotate_baseline(candidate):
-                self._cursor = candidate
-            if self._dedupe and self._already_delivered(candidate):
+            token = str(paging_token)
+            if self._dedupe and self._already_delivered(token):
                 self._duplicates_skipped += 1
-                self._logger.debug("Horizon stream: skipping replayed paging_token %s", candidate)
+                self._logger.debug("Horizon stream: skipping replayed paging_token %s", token)
                 return
-            self._remember(candidate)
+            self._advance_cursor(token)
+            self._remember(token)
 
         try:
             result = on_transaction(tx)
@@ -255,23 +301,42 @@ class HorizonStreamingClient:
         while len(self._seen) > self._dedupe_capacity:
             self._seen.popitem(last=False)
 
-    def _should_rotate_baseline(self, candidate: str) -> bool:
-        """Decide whether ``candidate`` may become the new cursor baseline (#939).
+    def _advance_cursor(self, paging_token: str) -> None:
+        """Move the resume cursor forward to `paging_token`.
 
-        The cursor is the replay/skip baseline, so a stale event (a replayed
-        paging token lower than the current baseline) must never rewind it —
-        rewinding replays already-normalized transactions downstream. Tokens
-        that cannot be ordered (non-numeric) are accepted so custom cursor
-        schemes still advance; equal tokens are ignored.
+        Horizon paging tokens are monotonically increasing per stream (they
+        encode ledger/tx/op ordering), and the cursor is used verbatim as
+        the resume point on reconnect. A token that does not advance the
+        cursor (or, worse, moves it backward) is inconsistent with a single
+        well-behaved stream and, if applied blindly, would make a
+        reconnect replay transactions already delivered to `on_transaction`
+        or, if the two happen to compare unequal as strings while equal in
+        value, loop forever on the same page. Both the current and
+        candidate token are compared numerically when possible so this
+        does not misfire on differing zero-padding; a token that fails to
+        parse as an integer is treated as opaque and, conservatively,
+        rejected rather than assumed safe to adopt.
         """
-        if candidate == self._cursor:
-            return False
         try:
-            return int(candidate) > int(self._cursor)
-        except ValueError:
-            # Either side is non-numeric (e.g. the initial "now" cursor or a
-            # custom scheme): accept the server-provided token.
-            return True
+            candidate = int(paging_token)
+        except (TypeError, ValueError):
+            self._logger.warning("Ignoring non-numeric Horizon paging_token: %r", paging_token)
+            return
+
+        try:
+            current = int(self._cursor)
+        except (TypeError, ValueError):
+            current = None
+
+        if current is not None and candidate <= current:
+            self._logger.warning(
+                "Ignoring non-advancing Horizon paging_token: %r (current cursor %r)",
+                paging_token,
+                self._cursor,
+            )
+            return
+
+        self._cursor = paging_token
 
     def _request_path(self) -> str:
         query = urlencode({"cursor": self._cursor, "stream": "true"})

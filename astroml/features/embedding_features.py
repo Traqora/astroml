@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class TransactionEmbeddingComputer(BaseFeatureComputer):
     """Computer for transaction description embeddings."""
 
-    def __init__(self, provider: str = "openai", model: str = "text-embedding-ada-002"):
+    def __init__(self, provider -> Any: str = "openai", model: str = "text-embedding-ada-002"):
         super().__init__("transaction_embeddings")
         self.provider = provider
         self.model = model
@@ -61,7 +61,7 @@ class TransactionEmbeddingComputer(BaseFeatureComputer):
 class AccountBehaviorEmbeddingComputer(BaseFeatureComputer):
     """Computer for account behavior embeddings."""
 
-    def __init__(self, provider: str = "openai", model: str = "text-embedding-ada-002"):
+    def __init__(self, provider -> Any: str = "openai", model: str = "text-embedding-ada-002"):
         super().__init__("account_behavior_embeddings")
         self.provider = provider
         self.model = model
@@ -103,7 +103,7 @@ class AccountBehaviorEmbeddingComputer(BaseFeatureComputer):
 class AlertEmbeddingComputer(BaseFeatureComputer):
     """Computer for alert description embeddings."""
 
-    def __init__(self, provider: str = "openai", model: str = "text-embedding-ada-002"):
+    def __init__(self, provider -> Any: str = "openai", model: str = "text-embedding-ada-002"):
         super().__init__("alert_embeddings")
         self.provider = provider
         self.model = model

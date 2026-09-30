@@ -140,7 +140,7 @@ def configure_module_levels_from_env() -> None:
 
 
 class CorrelationId:
-    def __init__(self, correlation_id: str | None = None):
+    def __init__(self, correlation_id -> Any: str | None = None):
         self.correlation_id = correlation_id or str(uuid.uuid4())
         self.token = None
 

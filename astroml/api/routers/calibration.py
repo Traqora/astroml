@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """FastAPI router for model calibration and uncertainty estimation endpoints."""
 
 from __future__ import annotations

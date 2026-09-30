@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Claim submission service with background retry mechanism.
 
 This module provides functionality for submitting claims and automatically
@@ -203,7 +204,7 @@ class ClaimService:
             else:
                 raise ClaimSubmissionError("Submission failed")
 
-        except Exception as e:
+        except AstroMLError as e:
             submission.retry_count += 1
             backoff = self._calculate_backoff(submission.retry_count)
             submission.next_retry_at = datetime.now() + timedelta(seconds=backoff)
@@ -246,7 +247,7 @@ class ClaimService:
 
                 session.commit()
                 self.logger.debug(f"Updated claim {claim_reference} status to {status.value}")
-            except Exception as e:
+            except AstroMLError as e:
                 session.rollback()
                 self.logger.error(f"Failed to update claim status: {e}")
 
@@ -266,7 +267,7 @@ class ClaimService:
                     except (ClaimExpiredError, ClaimMaxRetriesExceededError):
                         # Remove from pending if expired or max retries exceeded
                         del self._pending_claims[claim_ref]
-                    except Exception as e:
+                    except AstroMLError as e:
                         self.logger.error(f"Unexpected error processing claim {claim_ref}: {e}")
 
             # Sleep for a short interval before next check
@@ -352,5 +353,5 @@ class ClaimService:
 
                 self.logger.info(f"Loaded {len(results)} pending claims from database")
 
-            except Exception as e:
+            except AstroMLError as e:
                 self.logger.error(f"Failed to load pending claims from database: {e}")

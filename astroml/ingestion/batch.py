@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Chunked UPSERT batching for ingestion writes.
 
 Provides batch accumulation and chunked persistence of ORM models
@@ -86,14 +87,14 @@ class BatchBuffer:
         return count
 
     def _flush(self) -> None:
-        """Internal flush: merge all buffered models and commit."""
+        """Internal flush: upsert all buffered models and commit."""
         if not self._buffer:
             return
 
         start = time.time()
         try:
             for model in self._buffer:
-                self._session.merge(model)
+                self._merge_one(model)
             self._session.commit()
             duration = time.time() - start
             flushed = len(self._buffer)
@@ -108,7 +109,7 @@ class BatchBuffer:
                 self._total_flushed,
                 self._flush_count,
             )
-        except Exception:
+        except AstroMLError:
             self._session.rollback()
             BATCH_FLUSH_TOTAL.labels(status="error").inc()
             logger.exception("Batch flush failed after %d models", len(self._buffer))
@@ -116,6 +117,26 @@ class BatchBuffer:
         finally:
             self._buffer.clear()
             BATCH_BUFFER_SIZE.set(0)
+
+    def _merge_one(self, model: object) -> None:
+        """Route one buffered model through the upsert that fits its key.
+
+        Most models carry a real primary key and ``merge()`` resolves them
+        correctly.  ``normalized_transactions`` does not: its primary key is a
+        surrogate ``id`` that a freshly normalized row does not have, so
+        ``merge()`` inserts on every replay and duplicates activity (#728).
+        Those rows are keyed on their natural key instead.
+
+        Imported here rather than at module scope because
+        :mod:`astroml.db.repositories` imports this module.
+        """
+        from astroml.db.models import NormalizedTransaction
+        from astroml.db.repositories import NormalizedTransactionRepository
+
+        if isinstance(model, NormalizedTransaction):
+            NormalizedTransactionRepository(self._session).upsert(model)
+            return
+        self._session.merge(model)
 
     def close(self) -> None:
         """Close the buffer, flushing remaining models if configured."""
@@ -146,7 +167,7 @@ class BatchBuffer:
         else:
             try:
                 self._session.rollback()
-            except Exception:
+            except AstroMLError:
                 logger.exception("Rollback on exit failed")
 
 

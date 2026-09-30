@@ -87,7 +87,7 @@ class Graph:
     directed: bool = True
     metadata: Dict[str, Any] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> Any:
         if self.metadata is None:
             self.metadata = {}
 
@@ -100,7 +100,7 @@ class Ingestor(ABC):
 
     Example:
         class StellarIngestor(Ingestor):
-            def ingest(self, start, end):
+            def ingest(self, start, end) -> Any:
                 # Implementation
                 return IngestionResult(...)
     """
@@ -155,7 +155,7 @@ class FeatureComputer(ABC):
 
     Example:
         class TransactionFeatureComputer(FeatureComputer):
-            def compute(self, data):
+            def compute(self, data) -> Any:
                 # Implementation
                 return pd.DataFrame(...)
     """
@@ -207,7 +207,7 @@ class GraphBuilder(ABC):
 
     Example:
         class TransactionGraphBuilder(GraphBuilder):
-            def build_graph(self, transactions):
+            def build_graph(self, transactions) -> Any:
                 # Implementation
                 return Graph(...)
     """

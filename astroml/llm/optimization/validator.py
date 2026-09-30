@@ -36,7 +36,7 @@ class QualityValidator:
     Ensures optimized models meet quality, performance, and compatibility requirements.
     """
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize validator."""
         self.requirements = {
             "min_quality_retention": 0.90,  # >90% of base model quality

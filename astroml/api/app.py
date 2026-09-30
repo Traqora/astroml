@@ -28,6 +28,7 @@ from astroml.api.routers import (
     accounts,
     compression,
     data_quality,
+    feature_selection,
     features,
     federated,
     fraud,
@@ -82,8 +83,7 @@ app.include_router(data_quality.router)
 app.include_router(federated.router)
 app.include_router(model_registry.router)
 app.include_router(validation.router)
-
-
+app.include_router(feature_selection.router)
 
 
 @app.get("/health", tags=["ops"])

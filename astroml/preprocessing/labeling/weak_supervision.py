@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Weak supervision with labeling functions (issue #624).
 
 Provides a framework for programmatic labeling via labeling functions (LFs)
@@ -53,7 +54,7 @@ class LabelingFunction:
         """Invoke the LF on a single sample. Returns an integer label or ABSTAIN."""
         try:
             return self.fn(sample)
-        except Exception:
+        except AstroMLError:
             logger.debug("LF %s raised on sample — treating as ABSTAIN", self.name, exc_info=True)
             return ABSTAIN
 

@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """FastAPI router for fairness evaluation and bias mitigation endpoints."""
 
 from __future__ import annotations
@@ -140,7 +141,7 @@ async def compute_metrics(request: MetricsRequest) -> MetricsResponse:
         return MetricsResponse(status="success", data=data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+    except AstroMLError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -158,7 +159,7 @@ async def detect_bias(request: BiasDetectRequest) -> BiasDetectResponse:
         return BiasDetectResponse(status="success", data=report_data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+    except AstroMLError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -187,7 +188,7 @@ async def intersectional_analysis(
         return IntersectionalResponse(status="success", data=data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+    except AstroMLError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -215,7 +216,7 @@ async def mitigate_bias(request: MitigateRequest) -> MitigateResponse:
         return MitigateResponse(status="success", data=data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+    except AstroMLError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -244,5 +245,5 @@ async def generate_fairness_report(
         return ReportResponse(status="success", data=report.to_dict())
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+    except AstroMLError as e:
         raise HTTPException(status_code=500, detail=str(e))

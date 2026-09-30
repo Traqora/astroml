@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Document ingestion for RAG system."""
 
 import time
@@ -8,7 +9,7 @@ from typing import Any
 class DocumentIngestor:
     """Ingests documents from various sources."""
 
-    def __init__(self, embeddings_service: Any, retriever: Any):
+    def __init__(self, embeddings_service -> Any: Any, retriever: Any):
         """Initialize ingestor.
 
         Args:
@@ -54,7 +55,7 @@ class DocumentIngestor:
                         }
                     )
 
-            except Exception as e:
+            except AstroMLError as e:
                 print(f"Error reading {file_path}: {e}")
                 continue
 

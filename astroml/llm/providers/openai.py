@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """OpenAI Provider implementation."""
 
 import json
@@ -8,7 +9,7 @@ from .base import LLMProvider
 
 
 class OpenAIProvider(LLMProvider):
-    def __init__(self, api_key: str, model: str = "gpt-4"):
+    def __init__(self, api_key -> Any: str, model: str = "gpt-4"):
         super().__init__(api_key, model)
 
     def _generate_raw(self, prompt: str, tools: list[dict] | None = None, **kwargs: Any) -> str:
@@ -110,6 +111,6 @@ class OpenAIProvider(LLMProvider):
 
             encoding = tiktoken.encoding_for_model(self.model)
             return len(encoding.encode(text))
-        except Exception:
+        except AstroMLError:
             # Approximate (~4 chars/token)
             return max(1, len(text) // 4)

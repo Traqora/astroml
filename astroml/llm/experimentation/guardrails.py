@@ -21,7 +21,7 @@ class SafetyGuardrails:
     Prevents deploying models with safety regressions.
     """
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize safety guardrails."""
         self.thresholds = {
             "max_hallucination_rate": 0.05,  # 5%

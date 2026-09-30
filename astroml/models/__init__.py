@@ -3,6 +3,8 @@
 from .gcn import GCN
 from .graph_sage import AGGREGATIONS, GraphSAGE, SAGEAggregator
 from .link_prediction import GCNEncoder, LinkPredictor
+from .registry import ModelRegistry
+from .rollback import RollbackGuard
 from .sage_encoder import InductiveSAGEEncoder
 from .temporal import (
     TemporalAttention,

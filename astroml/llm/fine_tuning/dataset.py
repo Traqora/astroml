@@ -36,7 +36,7 @@ class DatasetConfig:
 class DataQualityValidator:
     """Validates dataset quality for fine-tuning."""
 
-    def __init__(self, config: DatasetConfig):
+    def __init__(self, config -> Any: DatasetConfig):
         self.config = config
 
     def validate(self, data: pd.DataFrame) -> list[str]:
@@ -81,7 +81,7 @@ class FineTuneDataset:
     of training data for various fine-tuning targets.
     """
 
-    def __init__(self, config: DatasetConfig):
+    def __init__(self, config -> Any: DatasetConfig):
         self.config = config
         self.train: list[dict[str, str]] = []
         self.val: list[dict[str, str]] = []

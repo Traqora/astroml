@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Prometheus metrics server initialization and management.
 
 This module provides utilities for starting and managing the Prometheus
@@ -78,7 +79,7 @@ def start_metrics_server(port: int | None = None) -> bool:
             logger.error("Failed to start metrics server: %s", e)
             return False
 
-    except Exception as e:
+    except AstroMLError as e:
         logger.error("Failed to start metrics server: %s", e)
         return False
 

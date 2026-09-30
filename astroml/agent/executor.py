@@ -305,14 +305,30 @@ class AgentExecutor:
                 Message.assistant(response.content, tool_calls=step.tool_calls)
             )
 
-            for call in step.tool_calls:
-                result: ToolResult = await self.tools.run_call(
-                    call, retries=self.config.tool_retries
+            # Use parallel execution when multiple tools are called and enabled
+            if (
+                self.config.parallel_tool_execution
+                and len(step.tool_calls) >= self.config.parallel_tool_threshold
+            ):
+                results = await self.tools.run_calls_parallel(
+                    step.tool_calls,
+                    retries=self.config.tool_retries,
+                    max_workers=self.config.max_parallel_workers,
                 )
-                step.results.append(result)
-                self.memory.add(result_to_message(result))
-                if not result.ok:
-                    tool_errors += 1
+                for result in results:
+                    step.results.append(result)
+                    self.memory.add(result_to_message(result))
+                    if not result.ok:
+                        tool_errors += 1
+            else:
+                for call in step.tool_calls:
+                    result: ToolResult = await self.tools.run_call(
+                        call, retries=self.config.tool_retries
+                    )
+                    step.results.append(result)
+                    self.memory.add(result_to_message(result))
+                    if not result.ok:
+                        tool_errors += 1
 
             step.status = StepStatus.FAILED if step.failed else StepStatus.SUCCEEDED
             trace.steps.append(step)

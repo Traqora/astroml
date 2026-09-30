@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Ray-based distributed training (issue #625).
 
 Provides hyperparameter tuning with Ray Tune and distributed training

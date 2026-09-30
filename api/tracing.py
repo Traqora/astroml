@@ -11,6 +11,7 @@ try:
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
     from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
     from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+    from opentelemetry.instrumentation.celery import CeleryInstrumentor
     from opentelemetry.sdk.resources import SERVICE_NAME, Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
@@ -22,6 +23,7 @@ except ImportError:
     FastAPIInstrumentor = None
     HTTPXClientInstrumentor = None
     SQLAlchemyInstrumentor = None
+    CeleryInstrumentor = None
     Resource = None
     SERVICE_NAME = None
     TracerProvider = None

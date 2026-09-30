@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """Memory-efficient state tracking for large-range backfills — issue #766.
 
 Provides compact alternatives to ``IngestionState`` that avoid holding the
@@ -15,6 +16,10 @@ import logging
 import math
 import os
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - typing only, avoids an import cycle
+    from astroml.ingestion.state import IngestionState
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +46,18 @@ class _CompactLedgerSet:
         return idx < len(self._sorted) and self._sorted[idx] == item
 
     def add(self, item: int) -> None:
+        """Insert ``item``, keeping the backing list sorted.
+
+        Args:
+            item: Ledger id to record. Adding an id already present is a no-op
+                and does not change the length.
+
+        Note:
+            Insertion is O(N) in the number of stored ids because a Python
+            list shift is unavoidable once sorted. ``LedgerRangeSet``, which
+            stores runs instead of ids, is the better choice for a sequential
+            backfill; this structure suits an arbitrary set of ids.
+        """
         idx = bisect.bisect_left(self._sorted, item)
         if idx < len(self._sorted) and self._sorted[idx] == item:
             return  # already present
@@ -49,10 +66,14 @@ class _CompactLedgerSet:
     def __len__(self) -> int:
         return len(self._sorted)
 
-    def __iter__(self):  # type: ignore[override]
+    def __iter__(self) -> Any:  # type: ignore[override]
         return iter(self._sorted)
 
     def to_list(self) -> list[int]:
+        """Return the members as a new sorted list.
+
+        A copy, so a caller may mutate the result without corrupting the set.
+        """
         return list(self._sorted)
 
 
@@ -104,6 +125,19 @@ class _BloomFilterSet:
         return True
 
     def add(self, item: int) -> None:
+        """Set the bits for ``item``.
+
+        Args:
+            item: Ledger id to record. Re-adding an id is harmless for
+                membership but still increments the reported length — this
+                counter tracks additions, not distinct members.
+
+        Side effects: writes ``_num_hashes`` bits and never clears any, which
+        is why membership can drift towards "present" but never regress. That
+        is the acceptable direction for this use: a false positive skips a
+        ledger that was already ingested, whereas a false negative would
+        re-ingest one.
+        """
         for pos in self._get_positions(item):
             byte_idx = pos >> 3
             bit_idx = pos & 7
@@ -147,8 +181,28 @@ class MemoryEfficientState:
     mode: str = "compact"
 
     @classmethod
-    def from_legacy(cls, state) -> MemoryEfficientState:  # type: ignore[no-undef]
-        """Create from an ``IngestionState`` instance."""
+    def from_legacy(cls, state: IngestionState) -> MemoryEfficientState:
+        """Convert a full ``IngestionState`` into the bounded-memory form.
+
+        The mode is chosen from the size of the incoming processed set, so a
+        small state stays exact and only a large backfill pays the bloom
+        filter's false-positive rate.
+
+        Args:
+            state: Legacy state whose ``processed_ledgers`` are carried over.
+
+        Returns:
+            An equivalent state in ``"compact"`` mode at or below 100,000
+                ledgers, otherwise ``"bloom"`` mode sized for twice the
+                incoming count.
+
+        Note:
+            The result is *not* round-trippable in bloom mode:
+            :meth:`ChunkedStateStore.save` writes an empty processed list for a
+            bloom state, because the filter's bit array is not a set of ids.
+            Resume correctness above that threshold relies on
+            ``last_processed_ledger``.
+        """
         n = len(state.processed_ledgers)
         if n > 100_000:
             logger.info(
@@ -172,6 +226,16 @@ class MemoryEfficientState:
         return ledger_id in self._processed
 
     def add(self, ledger_id: int) -> None:
+        """Mark ``ledger_id`` processed and advance the high-water mark.
+
+        Args:
+            ledger_id: Ledger that finished processing.
+
+        Note:
+            In ``"bloom"`` mode the recorded membership is probabilistic (see
+            :meth:`_BloomFilterSet.add`); the high-water mark is always exact,
+            since it is a plain maximum.
+        """
         self._processed.add(ledger_id)
         if self.last_processed_ledger is None:
             self.last_processed_ledger = ledger_id
@@ -246,9 +310,26 @@ class ChunkedStateStore:
         os.replace(tmp_path, self.path)
 
     def should_flush(self) -> bool:
-        """Check if it's time to flush based on pending count."""
+        """Advance the pending counter and report whether it is time to flush.
+
+        Despite the predicate name this is *not* side-effect free: it
+        increments the counter, so calling it twice for one ledger halves the
+        effective ``flush_interval``. Call it exactly once per processed
+        ledger, and pair a ``True`` result with :meth:`save` followed by
+        :meth:`reset_flush_counter`.
+
+        Returns:
+            ``True`` once ``flush_interval`` ledgers have accumulated since the
+                last reset.
+        """
         self._pending_count += 1
         return self._pending_count >= self.flush_interval
 
     def reset_flush_counter(self) -> None:
+        """Zero the pending counter, to be called after a successful flush.
+
+        Side effects: none beyond the counter — it does not write to disk, so
+        calling it without a preceding :meth:`save` drops the flush deadline
+        for the buffered ledgers.
+        """
         self._pending_count = 0

@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 # Ensure all ORM models are imported so their tables are registered on Base.metadata
 import api.models.orm  # noqa: F401  (side-effect import registers tables)
-from api.models.orm import (
+from api.models import (
     Account,
     FraudAlert,
     LoyaltyPoints,

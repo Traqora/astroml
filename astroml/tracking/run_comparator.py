@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Run comparison engine for experiment tracking.
 
 Provides parallel coordinate plotting, hyperparameter importance analysis,
@@ -239,7 +240,7 @@ class RunComparator:
                 corr = _spearman_r(vals_arr, metric_arr)
                 if not np.isnan(corr):
                     scores.append((pname, abs(corr)))
-            except Exception:
+            except AstroMLError:
                 continue
 
         scores.sort(key=lambda x: x[1], reverse=True)

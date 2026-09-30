@@ -176,8 +176,11 @@ class TestGraphSnapshotIntegration:
             Edge(src="D", dst="E", timestamp=now_ts - 432000),  # 5 days ago
         ]
 
-        # Get last 3 days
-        nodes, window_edges = snapshot_last_n_days(edges, now_ts, days=3)
+        # Get last 3 days.  The list above runs newest-first, so it is not
+        # pre-sorted by timestamp and must say so — issue #732 rejects a
+        # presorted edge list that is not ordered rather than bisecting an
+        # unsorted array and returning a window that is quietly wrong.
+        nodes, window_edges = snapshot_last_n_days(edges, now_ts, days=3, presorted=False)
 
         # Should include edges from last 3 days
         assert len(window_edges) == 3

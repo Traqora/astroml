@@ -144,3 +144,78 @@ def test_ingest_stream_correlation_id_restored_on_error(service: IngestionServic
         list(service.ingest_stream(start_ledger=1, end_ledger=1, fetch_fn=fetch_fn))
 
     assert get_correlation_id() is None
+
+
+def test_ingest_backfill_chunked_uses_one_correlation_id_across_all_chunks(
+    service: IngestionService,
+) -> None:
+    """#957 — each chunk previously delegated to ``ingest_stream`` with no
+    shared correlation-id scope around the loop, so ``ingest_stream`` minted a
+    *fresh* id per chunk whenever the caller hadn't already set one. A single
+    backfill spanning several chunks therefore split across multiple
+    unrelated ``request_id``s in the logs, defeating #944/#950's tracing for
+    the run that most needs it."""
+    observed: list[str | None] = []
+
+    def process_fn(ledger_id: int, payload: object) -> None:
+        observed.append(get_correlation_id())
+
+    list(
+        service.ingest_backfill_chunked(
+            start_ledger=1, end_ledger=6, chunk_size=2, process_fn=process_fn
+        )
+    )
+
+    assert len(observed) == 6
+    assert all(observed)
+    assert len(set(observed)) == 1, "all chunks of one backfill must share one correlation id"
+    assert get_correlation_id() is None
+
+
+def test_ingest_backfill_chunked_inherits_caller_correlation_id(
+    service: IngestionService,
+) -> None:
+    """When the caller already established a correlation id, every chunk must
+    reuse it rather than minting new, unrelated ids per chunk."""
+    observed: list[str | None] = []
+
+    def process_fn(ledger_id: int, payload: object) -> None:
+        observed.append(get_correlation_id())
+
+    with CorrelationId("caller-backfill-id"):
+        list(
+            service.ingest_backfill_chunked(
+                start_ledger=1, end_ledger=6, chunk_size=2, process_fn=process_fn
+            )
+        )
+        assert get_correlation_id() == "caller-backfill-id"
+
+    assert observed == ["caller-backfill-id"] * 6
+    assert get_correlation_id() is None
+
+
+def test_ingest_backfill_chunked_distinct_runs_get_distinct_ids(
+    service: IngestionService,
+) -> None:
+    """Two independent, uninherited backfill calls must not share an id."""
+    first_ids: list[str | None] = []
+    second_ids: list[str | None] = []
+
+    list(
+        service.ingest_backfill_chunked(
+            start_ledger=1,
+            end_ledger=2,
+            chunk_size=1,
+            process_fn=lambda lid, p: first_ids.append(get_correlation_id()),
+        )
+    )
+    list(
+        service.ingest_backfill_chunked(
+            start_ledger=3,
+            end_ledger=4,
+            chunk_size=1,
+            process_fn=lambda lid, p: second_ids.append(get_correlation_id()),
+        )
+    )
+
+    assert set(first_ids) != set(second_ids)

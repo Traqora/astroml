@@ -17,7 +17,6 @@ from api.graphql.types import (
     AccountConnection,
     CreateAccountInput,
     CreateFraudAlertInput,
-    FraudAlert,
     FraudAlertConnection,
     MutationResult,
     PageInfo,
@@ -27,6 +26,7 @@ from api.graphql.types import (
 )
 from api.graphql.types import ApiKey as GApiKey
 from api.graphql.types import AuditLog as GAuditLog
+from api.graphql.types import FraudAlert as GFraudAlert
 from api.graphql.types import LoyaltyPoints as GLoyaltyPoints
 from api.graphql.types import Mentee as GMentee
 from api.graphql.types import Mentor as GMentor
@@ -41,7 +41,7 @@ from api.models.orm import (
     ApiKey,
     ApiTransaction,
     AuditLog,
-    FraudAlert,
+    FraudAlert as FraudAlertModel,
     LoyaltyPoints,
     Mentee,
     Mentor,
@@ -193,17 +193,17 @@ class Query:
         offset: int = 0,
     ) -> FraudAlertConnection:
         """Get paginated fraud alerts."""
-        query = info.context.session.query(FraudAlert)
+        query = info.context.session.query(FraudAlertModel)
         if account_id:
             query = query.filter_by(account_id=account_id)
         if resolved is not None:
             query = query.filter_by(resolved=resolved)
         total = query.count()
-        alerts = query.order_by(FraudAlert.detected_at.desc()).offset(offset).limit(limit).all()
+        alerts = query.order_by(FraudAlertModel.detected_at.desc()).offset(offset).limit(limit).all()
 
         return FraudAlertConnection(
             edges=[
-                FraudAlert(
+                GFraudAlert(
                     id=strawberry.ID(str(a.id)),
                     account_id=a.account_id,
                     pattern=a.pattern,
@@ -428,11 +428,11 @@ class Mutation:
         info: Info,
     ) -> MutationResult:
         """Create a new fraud alert."""
-        alert = FraudAlert(
+        alert = FraudAlertModel(
             account_id=input.account_id,
             pattern=input.pattern,
             risk_score=input.risk_score,
-            risk_level=FraudAlert.risk_level_for_score(input.risk_score),
+            risk_level=FraudAlertModel.risk_level_for_score(input.risk_score),
             description=input.description,
         )
         info.context.session.add(alert)
@@ -443,7 +443,7 @@ class Mutation:
     @strawberry.mutation
     def resolve_fraud_alert(self, id: ID, info: Info) -> MutationResult:
         """Resolve a fraud alert."""
-        alert = info.context.session.query(FraudAlert).filter_by(id=int(id)).first()
+        alert = info.context.session.query(FraudAlertModel).filter_by(id=int(id)).first()
         if not alert:
             return MutationResult(success=False, message="Fraud alert not found")
 
@@ -547,7 +547,7 @@ class Subscription:
                 await asyncio.sleep(0.1)
 
     @strawberry.subscription
-    async def fraud_alert_created(self) -> FraudAlert:
+    async def fraud_alert_created(self) -> GFraudAlert:
         """Subscribe to new fraud alerts."""
         import asyncio
 
@@ -556,7 +556,7 @@ class Subscription:
         while True:
             try:
                 alert_data = await fraud_alert_queue.get()
-                yield FraudAlert(
+                yield GFraudAlert(
                     id=strawberry.ID(str(alert_data.get("id", 0))),
                     account_id=alert_data.get("account_id", ""),
                     pattern=alert_data.get("pattern"),

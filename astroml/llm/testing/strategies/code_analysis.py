@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class CodeAnalysisStrategy:
     """Strategy that generates tests by analyzing source code structure."""
 
-    def __init__(self, source_code: str):
+    def __init__(self, source_code -> Any: str):
         self.source_code = source_code
         self.tree = ast.parse(source_code)
 

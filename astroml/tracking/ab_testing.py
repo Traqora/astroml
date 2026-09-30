@@ -46,7 +46,7 @@ class ABTestingFramework:
     with statistical analysis capabilities.
     """
 
-    def __init__(self, session: Session | None = None):
+    def __init__(self, session -> Any: Session | None = None):
         """Initialize the A/B testing framework.
 
         Args:

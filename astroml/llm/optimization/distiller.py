@@ -60,7 +60,7 @@ class KnowledgeDistiller:
     Enables efficient deployment while maintaining quality.
     """
 
-    def __init__(self, config: DistillationConfig):
+    def __init__(self, config -> Any: DistillationConfig):
         """Initialize distiller."""
         self.config = config
 

@@ -45,7 +45,7 @@ class ValidationError:
 class ValidationResult:
     """Result of validation with errors and status."""
 
-    def __init__(self, is_valid: bool, errors: list[ValidationError] = None):
+    def __init__(self, is_valid -> Any: bool, errors: list[ValidationError] = None):
         self.is_valid = is_valid
         self.errors = errors or []
 
@@ -288,10 +288,10 @@ class LedgerInput(BaseModel):
 class ValidationPipeline:
     """Pipeline for validating data through multiple stages."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         self.validators = []
 
-    def add_validator(self, validator_class, **kwargs):
+    def add_validator(self, validator_class, **kwargs) -> Any:
         """Add a validator to the pipeline."""
         self.validators.append((validator_class, kwargs))
         return self

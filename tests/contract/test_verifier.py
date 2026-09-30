@@ -9,6 +9,7 @@ from astroml.pipeline.contracts.semantic_contract import SemanticContract
 from astroml.pipeline.contracts.verifier import (
     ContractBreach,
     ContractVerifier,
+    MissingContractError,
     PipelineVerificationResult,
     VerificationResult,
 )
@@ -70,6 +71,12 @@ class TestContractVerifier:
         assert result.total_contracts == 1
 
     def test_verify_unknown_contract(self) -> None:
+        # Pinning the existing, surprising default behaviour: a name that
+        # is not registered is silently skipped (warning-logged only), so
+        # a config where EVERY requested name is misspelled or stale
+        # reports passed=True with total_contracts=0 rather than failing.
+        # See test_verify_unknown_contract_raises_in_strict_mode below for
+        # the opt-in fix (issue #968).
         verifier = ContractVerifier()
         schema = SchemaContract(name="schema")
         verifier.add_contract(schema, "s")
@@ -77,6 +84,34 @@ class TestContractVerifier:
         result = verifier.verify(df, contract_names=["unknown"])
         assert result.passed
         assert result.total_contracts == 0
+
+    def test_verify_unknown_contract_raises_in_strict_mode(self) -> None:
+        # issue #968: a CI validation entry point must not be able to
+        # silently no-op when its contract config drifts from what's
+        # actually registered. strict=True turns that into a loud failure.
+        verifier = ContractVerifier()
+        schema = SchemaContract(name="schema")
+        verifier.add_contract(schema, "s")
+        df = pd.DataFrame({"a": [1]})
+        with pytest.raises(MissingContractError, match="unknown"):
+            verifier.verify(df, contract_names=["unknown"], strict=True)
+
+    def test_verify_strict_mode_does_not_affect_known_contracts(self) -> None:
+        verifier = ContractVerifier()
+        schema = SchemaContract.from_schema({"columns": {"a": {"dtype": "int64"}}}, name="schema")
+        verifier.add_contract(schema, "s")
+        df = pd.DataFrame({"a": [1]})
+        result = verifier.verify(df, contract_names=["s"], strict=True)
+        assert result.passed
+        assert result.total_contracts == 1
+
+    def test_verify_strict_mode_defaults_to_false(self) -> None:
+        # Backward compatibility: existing callers that don't pass `strict`
+        # keep the historical silent-skip behaviour.
+        verifier = ContractVerifier()
+        df = pd.DataFrame({"a": [1]})
+        result = verifier.verify(df, contract_names=["unknown"])
+        assert result.passed
 
     def test_verify_with_multiple_contracts(self) -> None:
         verifier = ContractVerifier()
@@ -232,6 +267,27 @@ class TestVerifierPipeline:
         result = verifier.verify_pipeline(df, {"pre": ["s1", "s2"]})
         assert result.passed
         assert len(result.stages[0].results) == 2
+
+    def test_verify_pipeline_silently_passes_an_all_unknown_stage_by_default(self) -> None:
+        # The bug issue #968 targets, reproduced at the pipeline level: a
+        # stage whose contract names are entirely stale/misspelled reports
+        # passed=True for that stage.
+        verifier = ContractVerifier()
+        df = pd.DataFrame({"a": [1]})
+        result = verifier.verify_pipeline(df, {"stage1": ["typo_contract_name"]})
+        assert result.passed
+        assert result.stages[0].passed
+        assert result.stages[0].results == []
+
+    def test_verify_pipeline_strict_mode_raises_on_unknown_contract_in_any_stage(self) -> None:
+        verifier = ContractVerifier()
+        schema = SchemaContract(name="schema")
+        verifier.add_contract(schema, "s")
+        df = pd.DataFrame({"a": [1]})
+        with pytest.raises(MissingContractError):
+            verifier.verify_pipeline(
+                df, {"stage1": ["s"], "stage2": ["typo_contract_name"]}, strict=True
+            )
 
 
 class TestVerifierResultTypes:

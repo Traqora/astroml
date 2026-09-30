@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Startup configuration dry-run validation.
 
 Validates all configuration sources without starting any services.
@@ -68,7 +69,7 @@ def validate_database_config(config_path: pathlib.Path | None = None) -> Validat
     except ValueError as e:
         result.errors.append(str(e))
         result.valid = False
-    except Exception as e:
+    except AstroMLError as e:
         result.errors.append(f"Unexpected error: {e}")
         result.valid = False
 

@@ -1,0 +1,21 @@
+# Tests already known to be flaky — issue #715.
+#
+# The suite is run repeatedly by .github/workflows/flaky-detection.yml with
+# --flaky-retries, and every test that needed a retry is reported.  A test
+# listed here is reported as a `known` flake; a test that is *not* listed and
+# needed a retry is reported as a `new` flake, and with --flaky-fail-on-new it
+# also fails the run.
+#
+# Format: one fnmatch pattern per line, `#` starts a comment.
+#
+#   tests/test_batch_scheduler.py                     every test in that module
+#   tests/test_batch_scheduler.py::TestFlush::test_*  one class's tests
+#
+# Add an entry only with the issue tracking it on the line above the pattern,
+# like this:
+#
+#   # #1234 — timing-dependent, fixed by the retry in PR #1250
+#   tests/test_stream.py::test_cursor_resume_after_disconnect
+#
+# This file is intentionally empty of entries: a known flake is a decision to
+# carry a defect, and each one should be a decision somebody made on purpose.

@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
@@ -85,6 +86,67 @@ def extract_json_block(text: str) -> Optional[Any]:
         except (json.JSONDecodeError, TypeError):
             continue
     return None
+
+
+def extract_json_blocks_parallel(
+    text: str,
+    *,
+    max_workers: Optional[int] = None,
+    threshold: int = 5,
+) -> List[Any]:
+    """Return all decodable JSON values embedded in *text* using parallel parsing.
+
+    Handles bare JSON, fenced ```json blocks, and JSON surrounded by prose.
+    Returns an empty list when nothing decodable is present.
+
+    Args:
+        text: Text containing JSON blocks.
+        max_workers: Maximum number of worker threads for parallel parsing.
+        threshold: Minimum number of candidates to enable parallel processing.
+
+    Returns:
+        List of decoded JSON values in the order they appear in the text.
+    """
+    if not text:
+        return []
+
+    candidates: List[str] = []
+    fenced = re.search(r"```(?:json)?\s*(.+?)```", text, re.DOTALL | re.IGNORECASE)
+    if fenced:
+        candidates.append(fenced.group(1).strip())
+    candidates.extend(_balanced_candidates(text))
+
+    if len(candidates) < threshold:
+        results = []
+        for candidate in candidates:
+            try:
+                results.append(json.loads(candidate))
+            except (json.JSONDecodeError, TypeError):
+                continue
+        return results
+
+    def try_parse(candidate: str) -> Optional[Any]:
+        """Try to parse a single JSON candidate."""
+        try:
+            return json.loads(candidate)
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(try_parse, candidate): idx
+            for idx, candidate in enumerate(candidates)
+        }
+        results_with_indices = []
+        for future in as_completed(futures):
+            idx = futures[future]
+            result = future.result()
+            if result is not None:
+                results_with_indices.append((idx, result))
+
+    # Sort by original index to maintain order
+    results_with_indices.sort(key=lambda x: x[0])
+    return [result for _, result in results_with_indices]
 
 
 def _join(lines: Sequence[str]) -> str:
@@ -363,6 +425,84 @@ class TaskPlanner:
                     ),
                 )
             )
+
+        if max_steps:
+            steps = steps[:max_steps]
+        return Plan(goal=goal, steps=steps, notes=notes, raw=text)
+
+    @classmethod
+    def parse_parallel(
+        cls,
+        text: str,
+        *,
+        goal: str = "",
+        max_steps: Optional[int] = None,
+        max_workers: Optional[int] = None,
+        threshold: int = 5,
+    ) -> Plan:
+        """Parse a plan out of model text with parallel step processing.
+
+        Uses ThreadPoolExecutor to parallelize step parsing when there are many steps.
+        Beneficial for complex plans with numerous steps.
+
+        Args:
+            text: Model text containing the plan.
+            goal: The original goal being planned.
+            max_steps: Maximum number of steps to include.
+            max_workers: Maximum number of worker threads.
+            threshold: Minimum number of steps to enable parallel processing.
+
+        Returns:
+            Parsed Plan object.
+        """
+        data = extract_json_block(text or "")
+        raw_steps: Sequence[Any] = []
+        notes = ""
+        if isinstance(data, Mapping):
+            raw_steps = data.get("steps") or data.get("plan") or []
+            notes = str(data.get("notes") or "")
+        elif isinstance(data, list):
+            raw_steps = data
+
+        if len(raw_steps) < threshold:
+            return cls.parse(text, goal=goal, max_steps=max_steps)
+
+        def parse_step(item: Any) -> Optional[PlanStep]:
+            """Parse a single step item."""
+            if isinstance(item, str):
+                if item.strip():
+                    return PlanStep(description=item.strip())
+                return None
+            if not isinstance(item, Mapping):
+                return None
+            description = (
+                item.get("description") or item.get("step") or item.get("task") or ""
+            )
+            tool = item.get("tool") or item.get("tool_name")
+            arguments = item.get("arguments") or {}
+            return PlanStep(
+                description=str(description).strip(),
+                tool=str(tool) if tool else None,
+                arguments=(
+                    dict(arguments) if isinstance(arguments, Mapping) else {}
+                ),
+            )
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(parse_step, item): idx
+                for idx, item in enumerate(raw_steps)
+            }
+            steps_with_indices = []
+            for future in as_completed(futures):
+                idx = futures[future]
+                step = future.result()
+                if step is not None:
+                    steps_with_indices.append((idx, step))
+
+        # Sort by original index to maintain order
+        steps_with_indices.sort(key=lambda x: x[0])
+        steps = [step for _, step in steps_with_indices]
 
         if max_steps:
             steps = steps[:max_steps]

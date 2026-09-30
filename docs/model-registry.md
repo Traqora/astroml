@@ -253,6 +253,195 @@ Retrieve the parent chain (lineage) for a model version, starting from the given
 
 ---
 
+The REST endpoints above are one way to manage models. AstroML also ships a
+command-line interface under the `models` subcommand so you can register,
+version, tag, activate and roll back models without writing HTTP calls.
+
+## Command-Line Interface (CLI)
+
+### Prerequisites
+
+The `models` commands talk directly to the AstroML database through the ORM, so
+they need a reachable database. Configure it either with `config/database.yaml`
+or by exporting `ASTROML_DATABASE_URL`:
+
+```bash
+export ASTROML_DATABASE_URL="postgresql+psycopg://user:pass@localhost:5432/astroml"
+```
+
+Every command is invoked as a module from the repository root:
+
+```bash
+python -m astroml.cli models --help
+```
+
+> Note on the `name`/`version` pair: the CLI identifies a model version by
+> `--model-name` + `--version` (a unique `(name, version)` pair), while the REST
+> API above uses the numeric `model_id`. The two address the same rows in the
+> `model_registry` table.
+
+### Register a model (with tags)
+
+Registering is also where you attach an owner and tags — there is no separate
+`tag` command; tags are set on `register` (and on `version`).
+
+```bash
+python -m astroml.cli models register \
+  --name fraud_detector \
+  --version v1.0.0 \
+  --path ./artifacts/fraud_detector_v1.pt \
+  --owner alice \
+  --tags fraud graph-learning stellar \
+  --metrics '{"auc": 0.90, "precision": 0.80, "recall": 0.78}'
+```
+
+`--status` defaults to `inactive`, so a freshly registered model is never live
+until you activate it. Omit `--metrics` to register with no metrics. Example
+output:
+
+```json
+{
+  "id": 1,
+  "name": "fraud_detector",
+  "version": "v1.0.0",
+  "path": "./artifacts/fraud_detector_v1.pt",
+  "owner": "alice",
+  "tags": ["fraud", "graph-learning", "stellar"],
+  "mlflow_run_id": null,
+  "status": "inactive",
+  "created_at": "2024-01-01T12:00:00"
+}
+```
+
+To associate a run with MLflow, pass `--mlflow-run-id <RUN_ID>` (and later pull
+its metadata with `load-metadata`, shown below).
+
+### Add a new version
+
+`version` adds another `(name, version)` row for an existing model, taking the
+same `--owner`, `--tags`, `--mlflow-run-id`, `--metrics` and `--status` flags:
+
+```bash
+python -m astroml.cli models version \
+  --model-name fraud_detector \
+  --version v1.1.0 \
+  --path ./artifacts/fraud_detector_v1.1.pt \
+  --tags fraud graph-learning stellar \
+  --metrics '{"auc": 0.92, "precision": 0.85, "recall": 0.83}'
+```
+
+If the `(name, version)` pair already exists the command prints
+`Error: Model 'fraud_detector' version 'v1.1.0' already exists` and exits `1`.
+
+### Activate a model version
+
+There is no `activate` verb on the CLI — activation is a status transition to
+`active`. Setting a version to `active` automatically flips every other version
+with the same name back to `inactive`, so only one version per model is live:
+
+```bash
+python -m astroml.cli models transition \
+  --model-name fraud_detector \
+  --version v1.1.0 \
+  --stage active
+```
+
+`--stage` accepts `inactive`, `active`, or `deprecated`. Example output:
+
+```json
+{
+  "id": 2,
+  "name": "fraud_detector",
+  "version": "v1.1.0",
+  "status": "active"
+}
+```
+
+### Roll back to an earlier version
+
+Rollback is the same mechanism: activate the older version. Because activating
+deactivates the others, re-activating `v1.0.0` restores it as the single live
+version:
+
+```bash
+python -m astroml.cli models transition \
+  --model-name fraud_detector \
+  --version v1.0.0 \
+  --stage active
+```
+
+### End-to-end example: register → tag → activate → roll back
+
+The sequence below mirrors the lifecycle described at the top of this page. Run
+it from the repository root after the database is configured:
+
+```bash
+# 1. Register v1.0.0 (inactive) and tag it
+python -m astroml.cli models register \
+  --name fraud_detector --version v1.0.0 \
+  --path ./artifacts/fraud_detector_v1.pt \
+  --owner alice --tags fraud graph-learning \
+  --metrics '{"auc": 0.90}'
+
+# 2. Train/publish an improvement as v1.1.0
+python -m astroml.cli models version \
+  --model-name fraud_detector --version v1.1.0 \
+  --path ./artifacts/fraud_detector_v1.1.pt \
+  --tags fraud graph-learning \
+  --metrics '{"auc": 0.94}'
+
+# 3. Promote v1.1.0 to production (deactivates v1.0.0)
+python -m astroml.cli models transition \
+  --model-name fraud_detector --version v1.1.0 --stage active
+
+# 4. v1.1.0 regressed in production — roll back by re-activating v1.0.0
+python -m astroml.cli models transition \
+  --model-name fraud_detector --version v1.0.0 --stage active
+
+# 5. Confirm only v1.0.0 is active now
+python -m astroml.cli models list --status active --name fraud_detector
+```
+
+### List and filter models
+
+```bash
+# All active models
+python -m astroml.cli models list --status active
+
+# Filter by owner, name, or tags (space-separated), with pagination
+python -m astroml.cli models list --owner alice --tags fraud --page 1 --page-size 20
+```
+
+Results are returned most-recent-first as JSON with a `total` count and a
+`data` array of model rows.
+
+### Compare two versions
+
+```bash
+python -m astroml.cli models compare \
+  --model-name fraud_detector \
+  --version1 v1.0.0 \
+  --version2 v1.1.0
+```
+
+The response includes both versions' metrics plus a `metrics_diff` object keyed
+by metric name, e.g. `{"auc": {"version1": 0.90, "version2": 0.94}}`.
+
+### Load MLflow run metadata
+
+If a version was registered with `--mlflow-run-id`, pull its tracked metadata:
+
+```bash
+python -m astroml.cli models load-metadata \
+  --model-name fraud_detector \
+  --version v1.1.0
+```
+
+This requires MLflow to be installed; otherwise the command prints
+`Error: MLflow not available: ...` and exits `1`.
+
+---
+
 ## Configuration
 
 ### MODEL_STORE_PATH
@@ -344,16 +533,19 @@ curl http://localhost:8000/api/v1/models/2/lineage
 
 The `model_registry` table stores all registered model versions:
 
-| Column       | Type      | Description                                |
-|--------------|-----------|--------------------------------------------|
-| `id`         | BigInt    | Primary key (auto-incrementing)            |
-| `name`       | String    | Model name                                 |
-| `version`    | String    | Model version                              |
-| `path`       | Text      | Path to model artifact                     |
-| `metrics`    | JSON/JSONB| Performance metrics (optional)             |
-| `status`     | String    | Status: `inactive`, `active`, `deprecated` |
-| `parent_id`  | BigInt    | Parent model version ID (optional)         |
-| `created_at` | DateTime  | Creation timestamp                         |
+| Column          | Type       | Description                                |
+|-----------------|------------|--------------------------------------------|
+| `id`            | BigInt     | Primary key (auto-incrementing)            |
+| `name`          | String     | Model name                                 |
+| `version`       | String     | Model version                              |
+| `path`          | Text       | Path to model artifact                     |
+| `owner`         | String     | Owner of the model (optional)              |
+| `tags`          | JSON/JSONB | List of model tags (optional)              |
+| `mlflow_run_id` | String     | Associated MLflow run id (optional)        |
+| `metrics`       | JSON/JSONB | Performance metrics (optional)             |
+| `status`        | String     | Status: `inactive`, `active`, `deprecated` |
+| `parent_id`     | BigInt     | Parent model version ID (optional)         |
+| `created_at`    | DateTime   | Creation timestamp                         |
 
 **Indexes:**
 - Unique index on `(name, version)`

@@ -29,6 +29,22 @@ The `.secrets.baseline` file stores known secrets that have been reviewed and wh
 
 Secrets scanning runs in CI via the pre-commit workflow (`.github/workflows/pre-commit.yml`). The CI job will fail if new secrets are detected that aren't in the baseline.
 
+#### The secrets gate (#720)
+
+`detect-secrets scan --baseline` alone cannot fail a build: it rewrites the
+baseline in place and exits 0. The CI gate (`astroml/ci/secrets_gate.py`,
+registered as the `secrets-gate` local hook in `.pre-commit-config.yaml`) is
+what enforces the policy. It fails the build when:
+
+1. a scan finds a secret that the baseline does not whitelist,
+2. a whitelisted baseline entry has no audit decision, or was audited as a
+   real secret (`is_secret: true` must never be committed),
+3. the scanner is missing or the baseline is unreadable (exit code 2 — a
+   broken gate never reads as a pass).
+
+Run it locally with `make secrets-scan` (or `python -m astroml.ci.secrets_gate
+--baseline .secrets.baseline`).
+
 ## Usage
 
 ### Manual Scanning
@@ -42,8 +58,13 @@ make secrets-scan
 Or directly:
 
 ```bash
-detect-secrets scan --baseline .secrets.baseline --all-files
+python -m astroml.ci.secrets_gate --baseline .secrets.baseline
 ```
+
+Use the gate rather than `detect-secrets scan --baseline .secrets.baseline
+--all-files` for checks: the raw command mutates the baseline file instead of
+failing when it finds something new. Only use it deliberately when adding
+whitelist entries (see Handling False Positives).
 
 ### Pre-Commit Hook
 
@@ -74,8 +95,10 @@ If a detected secret is a false positive:
    ```bash
    detect-secrets scan --baseline .secrets.baseline
    ```
-3. **Commit the baseline**: Commit the updated `.secrets.baseline` file
-4. **Document**: Add a comment in the code explaining why it's whitelisted
+3. **Audit the entry**: `detect-secrets audit .secrets.baseline` and mark it
+   `is_secret: false` — the CI gate (#720) fails on unaudited entries.
+4. **Commit the baseline**: Commit the updated `.secrets.baseline` file
+5. **Document**: Add a comment in the code explaining why it's whitelisted
 
 ### Example: Whitelisting a Test Key
 

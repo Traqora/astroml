@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Unit of Work pattern for transaction management (issue #571)."""
 
 from __future__ import annotations
@@ -73,7 +74,7 @@ def unit_of_work(session: Session) -> Iterator[UnitOfWork]:
     try:
         yield uow
         uow.commit()
-    except Exception:
+    except AstroMLError:
         uow.rollback()
         raise
     finally:

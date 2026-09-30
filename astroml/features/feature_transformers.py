@@ -70,7 +70,7 @@ class TransformationConfig:
 class LogTransformer(BaseEstimator, TransformerMixin):
     """Custom log transformer with handling of zeros and negative values."""
 
-    def __init__(self, offset: float = 1.0, handle_negative: str = "error"):
+    def __init__(self, offset -> Any: float = 1.0, handle_negative: str = "error"):
         """Initialize log transformer.
 
         Args:
@@ -165,7 +165,7 @@ class FeatureTransformer:
     to features with support for fitting, transforming, and persistence.
     """
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize feature transformer."""
         self.transformers: dict[str, BaseEstimator] = {}
         self.configs: dict[str, TransformationConfig] = {}

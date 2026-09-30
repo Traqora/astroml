@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Validation pipeline for comprehensive data quality checks (issue #303).
 
 Provides a pipeline architecture for running multiple validation stages:
@@ -94,7 +95,7 @@ class ValidationStageConfig:
 class ValidationPipeline:
     """Comprehensive validation pipeline for data quality checks."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize the validation pipeline."""
         self.stages: dict[ValidationStage, ValidationStageConfig] = {}
         self.metrics: dict[str, Any] = {
@@ -159,7 +160,7 @@ class ValidationPipeline:
                     if config.fail_on_error:
                         is_valid = False
 
-            except Exception as e:
+            except AstroMLError as e:
                 logger.error(f"Validation stage {stage.value} failed: {e}")
                 stage_results[stage.value] = ValidationResult(
                     is_valid=False,

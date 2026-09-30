@@ -24,7 +24,7 @@ class Localizer:
     Handles prompt templates, validation rules, and content formatting.
     """
 
-    def __init__(self, default_locale: LocaleConfig):
+    def __init__(self, default_locale -> Any: LocaleConfig):
         """Initialize localizer."""
         self.default_locale = default_locale
         self.locales: dict[str, LocaleConfig] = {}

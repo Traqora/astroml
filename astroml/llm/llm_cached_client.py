@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Cached LLM client wrapper.
 
 This wrapper is provider-agnostic. It expects an injected underlying client
@@ -82,7 +83,7 @@ class LLMCachedClient:
     def _incr(self, key: str, amount: int = 1) -> None:
         try:
             self._redis.incrby(key, amount)
-        except Exception:
+        except AstroMLError:
             pass
 
     def _observe_ms(self, key: str, value_ms: float) -> None:
@@ -92,7 +93,7 @@ class LLMCachedClient:
             pipe.incrbyfloat(self._metric_key(key), value_ms)
             pipe.incrby(self._metric_key(key) + ":n", 1)
             pipe.execute()
-        except Exception:
+        except AstroMLError:
             pass
 
     def complete(
@@ -132,7 +133,7 @@ class LLMCachedClient:
                 embedding_model=self._config.embedding_model,
                 ttl_seconds=self._config.ttl_seconds,
             )
-        except Exception as e:
+        except AstroMLError as e:
             logger.warning("Semantic cache store failed: %s", e)
 
         return response
@@ -150,7 +151,7 @@ def get_semantic_cache_metrics(
             if v is None:
                 return 0
             return int(v)
-        except Exception:
+        except AstroMLError:
             return 0
 
     hits = _get_int(f"{metrics_prefix}:hits")
@@ -160,7 +161,7 @@ def get_semantic_cache_metrics(
     try:
         sum_ms = float(redis_client.get(f"{metrics_prefix}:lookup_ms_sum") or 0.0)
         n = _get_int(f"{metrics_prefix}:lookup_ms_n")
-    except Exception:
+    except AstroMLError:
         sum_ms, n = 0.0, 0
 
     total = hits + misses

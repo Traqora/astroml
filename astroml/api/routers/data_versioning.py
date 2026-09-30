@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Data versioning API router for AstroML.
 
 Provides REST endpoints for dataset versioning, tagging, comparison,
@@ -104,7 +105,7 @@ async def add_dataset(request: AddDatasetRequest) -> DatasetVersionResponse:
             tags=request.tags,
         )
         return _ver_to_response(ver)
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error adding dataset")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -121,7 +122,7 @@ async def list_datasets(
     try:
         versions = _dvc.list_versions(name=name, tags=tag)
         return [_ver_to_response(v) for v in versions]
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error listing datasets")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -156,7 +157,7 @@ async def add_tags(
         return _ver_to_response(ver)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error adding tags")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -174,7 +175,7 @@ async def add_annotations(
         return _ver_to_response(ver)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error adding annotations")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -206,7 +207,7 @@ async def compare_versions(
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error comparing versions")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -249,7 +250,7 @@ async def get_snapshot(version_id: str) -> dict[str, Any]:
         return _dvc.snapshot(version_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error getting snapshot")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -266,7 +267,7 @@ async def export_dataset(version_id: str) -> dict[str, Any]:
         return {"data": data}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error exporting dataset")
         raise HTTPException(status_code=500, detail=str(e))
 

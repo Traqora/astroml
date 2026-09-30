@@ -79,6 +79,9 @@ KNOWN_DEV_PASSWORDS = {
     "postgres",
     "astroml_password",
     "p",  # classic ``scheme://user:p@host`` test fixture
+    "pw",  # api/tests/test_database_urls.py fixtures
+    "p%40ss",  # ``p@ss``, URL-encoded fixture in api/tests/test_database_urls.py
+    "dbpass",  # tests/backup/test_service_encryption.py fixture
 }
 
 # URI with an embedded password: scheme://user:password@host/...

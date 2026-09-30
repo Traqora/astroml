@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """
 Documentation quality validator.
 
@@ -105,7 +106,7 @@ class DocumentationValidator:
     - Consistency checks
     """
 
-    def __init__(self, base_url: str | None = None):
+    def __init__(self, base_url -> Any: str | None = None):
         """
         Initialize the validator.
 

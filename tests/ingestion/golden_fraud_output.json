@@ -1,0 +1,341 @@
+{
+  "summary": {
+    "original_transactions": 1,
+    "sybil_transactions": 12,
+    "wash_loop_transactions": 12,
+    "injected_transactions": 24,
+    "total_transactions": 25
+  },
+  "augmented": [
+    {
+      "source": "A",
+      "destination": "B",
+      "amount": 10.0,
+      "timestamp": "2024-01-01T00:00:00Z"
+    },
+    {
+      "synthetic_tx_id": 1,
+      "source": "sybil_controller_0",
+      "destination": "sybil_0_0",
+      "amount": 10.5577072,
+      "timestamp": "2024-01-01T00:00:01Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "sybil_cluster",
+      "fraud_metadata": {
+        "cluster": 0,
+        "controller": "sybil_controller_0",
+        "member": "sybil_0_0"
+      }
+    },
+    {
+      "synthetic_tx_id": 2,
+      "source": "sybil_0_0",
+      "destination": "sybil_controller_0",
+      "amount": 8.100043,
+      "timestamp": "2024-01-01T00:00:02Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "sybil_cluster",
+      "fraud_metadata": {
+        "cluster": 0,
+        "controller": "sybil_controller_0",
+        "member": "sybil_0_0"
+      }
+    },
+    {
+      "synthetic_tx_id": 3,
+      "source": "sybil_controller_0",
+      "destination": "sybil_0_1",
+      "amount": 9.1001173,
+      "timestamp": "2024-01-01T00:00:03Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "sybil_cluster",
+      "fraud_metadata": {
+        "cluster": 0,
+        "controller": "sybil_controller_0",
+        "member": "sybil_0_1"
+      }
+    },
+    {
+      "synthetic_tx_id": 4,
+      "source": "sybil_0_1",
+      "destination": "sybil_controller_0",
+      "amount": 8.892843,
+      "timestamp": "2024-01-01T00:00:04Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "sybil_cluster",
+      "fraud_metadata": {
+        "cluster": 0,
+        "controller": "sybil_controller_0",
+        "member": "sybil_0_1"
+      }
+    },
+    {
+      "synthetic_tx_id": 5,
+      "source": "sybil_controller_0",
+      "destination": "sybil_0_2",
+      "amount": 10.9458849,
+      "timestamp": "2024-01-01T00:00:05Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "sybil_cluster",
+      "fraud_metadata": {
+        "cluster": 0,
+        "controller": "sybil_controller_0",
+        "member": "sybil_0_2"
+      }
+    },
+    {
+      "synthetic_tx_id": 6,
+      "source": "sybil_0_2",
+      "destination": "sybil_controller_0",
+      "amount": 10.7067979,
+      "timestamp": "2024-01-01T00:00:06Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "sybil_cluster",
+      "fraud_metadata": {
+        "cluster": 0,
+        "controller": "sybil_controller_0",
+        "member": "sybil_0_2"
+      }
+    },
+    {
+      "synthetic_tx_id": 7,
+      "source": "sybil_controller_1",
+      "destination": "sybil_1_0",
+      "amount": 11.5687183,
+      "timestamp": "2024-01-01T00:00:07Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "sybil_cluster",
+      "fraud_metadata": {
+        "cluster": 1,
+        "controller": "sybil_controller_1",
+        "member": "sybil_1_0"
+      }
+    },
+    {
+      "synthetic_tx_id": 8,
+      "source": "sybil_1_0",
+      "destination": "sybil_controller_1",
+      "amount": 8.3477553,
+      "timestamp": "2024-01-01T00:00:08Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "sybil_cluster",
+      "fraud_metadata": {
+        "cluster": 1,
+        "controller": "sybil_controller_1",
+        "member": "sybil_1_0"
+      }
+    },
+    {
+      "synthetic_tx_id": 9,
+      "source": "sybil_controller_1",
+      "destination": "sybil_1_1",
+      "amount": 9.6876873,
+      "timestamp": "2024-01-01T00:00:09Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "sybil_cluster",
+      "fraud_metadata": {
+        "cluster": 1,
+        "controller": "sybil_controller_1",
+        "member": "sybil_1_1"
+      }
+    },
+    {
+      "synthetic_tx_id": 10,
+      "source": "sybil_1_1",
+      "destination": "sybil_controller_1",
+      "amount": 8.1191889,
+      "timestamp": "2024-01-01T00:00:10Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "sybil_cluster",
+      "fraud_metadata": {
+        "cluster": 1,
+        "controller": "sybil_controller_1",
+        "member": "sybil_1_1"
+      }
+    },
+    {
+      "synthetic_tx_id": 11,
+      "source": "sybil_controller_1",
+      "destination": "sybil_1_2",
+      "amount": 8.8745519,
+      "timestamp": "2024-01-01T00:00:11Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "sybil_cluster",
+      "fraud_metadata": {
+        "cluster": 1,
+        "controller": "sybil_controller_1",
+        "member": "sybil_1_2"
+      }
+    },
+    {
+      "synthetic_tx_id": 12,
+      "source": "sybil_1_2",
+      "destination": "sybil_controller_1",
+      "amount": 10.0214212,
+      "timestamp": "2024-01-01T00:00:12Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "sybil_cluster",
+      "fraud_metadata": {
+        "cluster": 1,
+        "controller": "sybil_controller_1",
+        "member": "sybil_1_2"
+      }
+    },
+    {
+      "synthetic_tx_id": 13,
+      "source": "wash_0_0",
+      "destination": "wash_0_1",
+      "amount": 48.5796079,
+      "timestamp": "2024-01-01T00:00:13Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "wash_trading_loop",
+      "fraud_metadata": {
+        "loop": 0,
+        "round": 0
+      }
+    },
+    {
+      "synthetic_tx_id": 14,
+      "source": "wash_0_1",
+      "destination": "wash_0_2",
+      "amount": 49.096513,
+      "timestamp": "2024-01-01T00:00:14Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "wash_trading_loop",
+      "fraud_metadata": {
+        "loop": 0,
+        "round": 0
+      }
+    },
+    {
+      "synthetic_tx_id": 15,
+      "source": "wash_0_2",
+      "destination": "wash_0_0",
+      "amount": 50.4496533,
+      "timestamp": "2024-01-01T00:00:15Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "wash_trading_loop",
+      "fraud_metadata": {
+        "loop": 0,
+        "round": 0
+      }
+    },
+    {
+      "synthetic_tx_id": 16,
+      "source": "wash_0_0",
+      "destination": "wash_0_1",
+      "amount": 50.1348244,
+      "timestamp": "2024-01-01T00:00:16Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "wash_trading_loop",
+      "fraud_metadata": {
+        "loop": 0,
+        "round": 1
+      }
+    },
+    {
+      "synthetic_tx_id": 17,
+      "source": "wash_0_1",
+      "destination": "wash_0_2",
+      "amount": 49.1613219,
+      "timestamp": "2024-01-01T00:00:17Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "wash_trading_loop",
+      "fraud_metadata": {
+        "loop": 0,
+        "round": 1
+      }
+    },
+    {
+      "synthetic_tx_id": 18,
+      "source": "wash_0_2",
+      "destination": "wash_0_0",
+      "amount": 50.2677971,
+      "timestamp": "2024-01-01T00:00:18Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "wash_trading_loop",
+      "fraud_metadata": {
+        "loop": 0,
+        "round": 1
+      }
+    },
+    {
+      "synthetic_tx_id": 19,
+      "source": "wash_1_0",
+      "destination": "wash_1_1",
+      "amount": 50.9282914,
+      "timestamp": "2024-01-01T00:00:19Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "wash_trading_loop",
+      "fraud_metadata": {
+        "loop": 1,
+        "round": 0
+      }
+    },
+    {
+      "synthetic_tx_id": 20,
+      "source": "wash_1_1",
+      "destination": "wash_1_2",
+      "amount": 48.5194963,
+      "timestamp": "2024-01-01T00:00:20Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "wash_trading_loop",
+      "fraud_metadata": {
+        "loop": 1,
+        "round": 0
+      }
+    },
+    {
+      "synthetic_tx_id": 21,
+      "source": "wash_1_2",
+      "destination": "wash_1_0",
+      "amount": 50.9174578,
+      "timestamp": "2024-01-01T00:00:21Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "wash_trading_loop",
+      "fraud_metadata": {
+        "loop": 1,
+        "round": 0
+      }
+    },
+    {
+      "synthetic_tx_id": 22,
+      "source": "wash_1_0",
+      "destination": "wash_1_1",
+      "amount": 50.5944182,
+      "timestamp": "2024-01-01T00:00:22Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "wash_trading_loop",
+      "fraud_metadata": {
+        "loop": 1,
+        "round": 1
+      }
+    },
+    {
+      "synthetic_tx_id": 23,
+      "source": "wash_1_1",
+      "destination": "wash_1_2",
+      "amount": 49.5207515,
+      "timestamp": "2024-01-01T00:00:23Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "wash_trading_loop",
+      "fraud_metadata": {
+        "loop": 1,
+        "round": 1
+      }
+    },
+    {
+      "synthetic_tx_id": 24,
+      "source": "wash_1_2",
+      "destination": "wash_1_0",
+      "amount": 48.9664385,
+      "timestamp": "2024-01-01T00:00:24Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "wash_trading_loop",
+      "fraud_metadata": {
+        "loop": 1,
+        "round": 1
+      }
+    }
+  ]
+}

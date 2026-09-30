@@ -34,8 +34,10 @@ from .compression import (
     ToolOutputCompressor,
     WhitespaceNormalizer,
     compress_text,
+    compress_text_batch,
     estimate_message_tokens,
     estimate_messages_tokens,
+    estimate_messages_tokens_parallel,
     estimate_tokens,
     extractive_summary,
     group_messages,
@@ -62,6 +64,16 @@ from .planner import (
     ReActParser,
     TaskPlanner,
     extract_json_block,
+    extract_json_blocks_parallel,
+)
+from .benchmark import (
+    BenchmarkResult,
+    BenchmarkSuite,
+    ComparisonResult,
+    benchmark,
+    benchmark_parallel_vs_sequential,
+    compare_benchmarks,
+    timer,
 )
 from .tools import (
     Tool,
@@ -120,6 +132,14 @@ __all__ = [
     "result_to_message",
     "tool",
     "tool_from_callable",
+    # benchmarking
+    "BenchmarkResult",
+    "BenchmarkSuite",
+    "ComparisonResult",
+    "benchmark",
+    "benchmark_parallel_vs_sequential",
+    "compare_benchmarks",
+    "timer",
     # memory and planning
     "ConversationMemory",
     "Memory",
@@ -129,6 +149,7 @@ __all__ = [
     "ReActParser",
     "TaskPlanner",
     "extract_json_block",
+    "extract_json_blocks_parallel",
     # prompt compression
     "CompressedPrompt",
     "CompressionConfig",
@@ -141,8 +162,10 @@ __all__ = [
     "ToolOutputCompressor",
     "WhitespaceNormalizer",
     "compress_text",
+    "compress_text_batch",
     "estimate_message_tokens",
     "estimate_messages_tokens",
+    "estimate_messages_tokens_parallel",
     "estimate_tokens",
     "extractive_summary",
     "group_messages",

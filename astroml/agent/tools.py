@@ -14,6 +14,7 @@ import logging
 import time
 import types as _pytypes
 from collections import abc as _abc
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import (
     Any,
@@ -435,4 +436,43 @@ class ToolRegistry:
         return await self.run(
             call.name, call.arguments, call_id=call.id, retries=retries
         )
+
+    async def run_calls_parallel(
+        self,
+        calls: Sequence[ToolCall],
+        *,
+        retries: int = 0,
+        max_workers: Optional[int] = None,
+    ) -> List[ToolResult]:
+        """Execute multiple tool calls in parallel.
+
+        Uses ThreadPoolExecutor to run independent tool calls concurrently.
+        Beneficial when tools are IO-bound (e.g., network requests, file I/O).
+
+        Args:
+            calls: Sequence of tool calls to execute.
+            retries: Retry attempts per tool call for retryable errors.
+            max_workers: Maximum number of worker threads. ``None`` uses CPU count.
+
+        Returns:
+            List of results in the same order as input calls.
+        """
+        if not calls:
+            return []
+        if len(calls) < 3:  # Threshold below which overhead outweighs benefits
+            return [
+                await self.run_call(call, retries=retries) for call in calls
+            ]
+
+        async def run_single(call: ToolCall) -> ToolResult:
+            return await self.run_call(call, retries=retries)
+
+        # Since we're already in an async context, we can use asyncio.gather
+        # for better performance than ThreadPoolExecutor for async tools
+        import asyncio
+
+        results = await asyncio.gather(
+            *[run_single(call) for call in calls], return_exceptions=False
+        )
+        return list(results)
 

@@ -284,6 +284,20 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Command line entry point: inject fraud patterns into a transactions file.
+
+    Reads ``--input``, writes the augmented dataset to ``--output`` and the
+    injection summary to ``--summary``, then prints the summary as JSON.
+
+    Args:
+        argv: Argument list, defaulting to ``sys.argv[1:]``. Passable so the
+            CLI is testable without touching process state.
+
+    Returns:
+        ``0`` on completion. Errors are signalled by the exception below, not
+            by a non-zero code — wrap the call site in
+            ``raise SystemExit(main())`` and let the traceback surface.
+    """
     parser = _build_parser()
     args = parser.parse_args(argv)
 

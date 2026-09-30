@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 from __future__ import annotations
 
 import logging
@@ -166,7 +167,7 @@ class SemanticContract:
                         "message": msg,
                     }
                 )
-            except Exception as e:
+            except AstroMLError as e:
                 rule_results.append(
                     {
                         "rule_name": rule_name,
@@ -305,7 +306,7 @@ class SemanticContract:
         try:
             local_vars: dict[str, Any] = {"df": df}
             result = eval(expr_str, _RESTRICTED_GLOBALS, local_vars)
-        except Exception as e:
+        except AstroMLError as e:
             return False, f"Expression evaluation failed: {e}"
 
         if isinstance(result, pd.Series):

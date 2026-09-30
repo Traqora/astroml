@@ -41,7 +41,7 @@ class ChartAnalyzer:
     Supports bar, line, pie, candlestick, heatmap, scatter, and histogram charts.
     """
 
-    def __init__(self, config: ChartConfig | None = None):
+    def __init__(self, config -> Any: ChartConfig | None = None):
         """Initialize chart analyzer."""
         self.config = config or ChartConfig()
         self._cache = {}

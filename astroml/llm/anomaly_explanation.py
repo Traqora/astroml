@@ -3,7 +3,7 @@ from typing import Any
 
 
 class AnomalyExplanationEngine:
-    def __init__(self, llm_provider):
+    def __init__(self, llm_provider) -> Any:
         self.llm = llm_provider
         self.prompt_template = """
         You are an AI financial anomaly investigator. Analyze the following anomaly details and baseline behavior.

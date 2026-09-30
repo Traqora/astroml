@@ -1,4 +1,4 @@
-"""FastAPI exception handlers that emit the shared API error envelope."""
+"""FastAPI exception handlers emitting RFC 7807 problem+json responses."""
 
 from __future__ import annotations
 
@@ -8,11 +8,19 @@ from fastapi import HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from api.schemas.errors import error_payload
+from api.schemas.errors import PROBLEM_CONTENT_TYPE, problem_detail
 
 
 def _http_error_code(status_code: int) -> str:
     return f"HTTP_{status_code}"
+
+
+def _problem_response(status_code: int, **kwargs: Any) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content=problem_detail(status=status_code, **kwargs),
+        media_type=PROBLEM_CONTENT_TYPE,
+    )
 
 
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
@@ -29,11 +37,17 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     else:
         message = str(detail or exc.status_code)
 
-    return JSONResponse(
-        status_code=exc.status_code,
-        content=error_payload(code=code, message=message, details=details),
-        headers=getattr(exc, "headers", None),
+    response = _problem_response(
+        exc.status_code,
+        code=code,
+        title=message,
+        detail=message,
+        instance=str(request.url.path),
+        details=details,
     )
+    for key, value in (getattr(exc, "headers", None) or {}).items():
+        response.headers[key] = value
+    return response
 
 
 async def request_validation_exception_handler(
@@ -49,22 +63,21 @@ async def request_validation_exception_handler(
         }
         for error in exc.errors()
     ]
-    return JSONResponse(
-        status_code=422,
-        content=error_payload(
-            code="VALIDATION_ERROR",
-            message="Request validation failed",
-            details=details,
-        ),
+    return _problem_response(
+        422,
+        code="VALIDATION_ERROR",
+        title="Request validation failed",
+        detail="Request validation failed",
+        instance=str(request.url.path),
+        details=details,
     )
 
 
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Avoid leaking internal exception details to API clients."""
-    return JSONResponse(
-        status_code=500,
-        content=error_payload(
-            code="INTERNAL_SERVER_ERROR",
-            message="Internal server error",
-        ),
+    return _problem_response(
+        500,
+        code="INTERNAL_SERVER_ERROR",
+        title="Internal server error",
+        instance=str(request.url.path),
     )

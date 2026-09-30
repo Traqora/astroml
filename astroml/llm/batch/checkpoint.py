@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class CheckpointManager:
     """Manages job progress checkpointing via in-memory dict."""
 
-    def __init__(self, job_id: str, initial_checkpoint: dict | None = None):
+    def __init__(self, job_id -> Any: str, initial_checkpoint: dict | None = None):
         self._job_id = job_id
         self._state: dict[str, Any] = initial_checkpoint or {}
         self._processed = 0

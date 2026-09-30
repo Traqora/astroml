@@ -12,7 +12,7 @@ class LocaleValidator:
     Ensures culturally appropriate and valid content.
     """
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize validator."""
         self.rules = self._setup_validation_rules()
 

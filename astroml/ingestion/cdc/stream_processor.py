@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Kafka stream processing for CDC events (issue #626).
 
 Processes CDC events from Kafka topics into the AstroML feature store

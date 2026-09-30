@@ -4,7 +4,7 @@ from typing import Any
 
 class VectorStore(ABC):
     @abstractmethod
-    def add_documents(self, collection_name: str, documents: list[dict[str, Any]]):
+    def add_documents(self, collection_name -> Any: str, documents: list[dict[str, Any]]):
         pass
 
     @abstractmethod
@@ -20,20 +20,20 @@ class VectorStore(ABC):
         pass
 
     @abstractmethod
-    def create_collection(self, collection_name: str, dimension: int):
+    def create_collection(self, collection_name -> Any: str, dimension: int):
         pass
 
 
 class MockVectorStore(VectorStore):
-    def __init__(self):
+    def __init__(self) -> Any:
         self.collections = {}
 
-    def create_collection(self, collection_name: str, dimension: int):
+    def create_collection(self, collection_name -> Any: str, dimension: int):
         if collection_name not in self.collections:
             self.collections[collection_name] = {"dimension": dimension, "data": []}
             # Indexes would be optimized here in a real implementation (e.g., HNSW)
 
-    def add_documents(self, collection_name: str, documents: list[dict[str, Any]]):
+    def add_documents(self, collection_name -> Any: str, documents: list[dict[str, Any]]):
         if collection_name not in self.collections:
             raise ValueError(f"Collection {collection_name} does not exist.")
         self.collections[collection_name]["data"].extend(documents)

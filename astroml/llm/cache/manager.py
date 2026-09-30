@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Cache orchestration with multi-level storage."""
 
 import logging
@@ -39,14 +40,14 @@ class CacheManager:
             try:
                 self.stores["redis"] = RedisStore()
                 logger.info("Redis hot cache enabled")
-            except Exception as e:
+            except AstroMLError as e:
                 logger.warning(f"Redis unavailable: {e}")
 
         if enable_sqlite:
             try:
                 self.stores["sqlite"] = SQLiteStore()
                 logger.info("SQLite warm cache enabled")
-            except Exception as e:
+            except AstroMLError as e:
                 logger.warning(f"SQLite unavailable: {e}")
 
         if enable_disk:

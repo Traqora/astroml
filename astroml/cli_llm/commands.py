@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """LLM CLI command implementations."""
 
 import sys
@@ -17,7 +18,7 @@ from .formatters import (
 from .interactive import run_chat
 
 
-def get_provider(provider_name: str = "", model: str = "", **kwargs: Any):
+def get_provider(provider_name -> Any: str = "", model: str = "", **kwargs: Any):
     """Create a provider from CLI args, config, and env."""
     cfg = load_cli_config()
     prov = provider_name or cfg.get("provider", "openai")
@@ -168,7 +169,7 @@ def cmd_generate(args) -> None:
             )
         else:
             print_llm_response(resp.text, resp.total_tokens, resp.cost, resp.latency, resp.model)
-    except Exception as e:
+    except AstroMLError as e:
         print_error(str(e))
 
 
@@ -199,7 +200,7 @@ def cmd_rag_query(args) -> None:
                 print_text("\nSources:", format="markdown")
                 for d in docs:
                     print_text(f"- {d.title} (score: {d.score:.3f})")
-    except Exception as e:
+    except AstroMLError as e:
         print_error(f"RAG query failed: {e}")
 
 
@@ -220,7 +221,7 @@ def cmd_embed(args) -> None:
             output_result(
                 f"Embedding ({len(vector)} dimensions): {str(vector[:5])}...", as_json=False
             )
-    except Exception as e:
+    except AstroMLError as e:
         print_error(str(e))
 
 
@@ -235,7 +236,7 @@ def cmd_prompts_list(args) -> None:
             return
         rows = [[name, ver or ""] for name, ver in templates.items()]
         print_table(rows, ["Name", "Version"], title="Prompt Templates")
-    except Exception as e:
+    except AstroMLError as e:
         print_error(str(e))
 
 
@@ -251,7 +252,7 @@ def cmd_prompts_render(args) -> None:
         registry = PromptRegistry()
         rendered = registry.render(args.name, variables)
         output_result(rendered)
-    except Exception as e:
+    except AstroMLError as e:
         print_error(str(e))
 
 
@@ -270,7 +271,7 @@ def cmd_prompts_test(args) -> None:
         print_text(f"[dim]Rendered prompt:[/dim]\n{rendered}\n")
         resp = provider.generate_detailed(rendered)
         print_llm_response(resp.text, resp.total_tokens, resp.cost, resp.latency, resp.model)
-    except Exception as e:
+    except AstroMLError as e:
         print_error(str(e))
 
 
@@ -282,7 +283,7 @@ def cmd_eval_run(args) -> None:
         runner = BenchmarkRunner()
         results = runner.run(args.benchmark, provider)
         print_json(results)
-    except Exception as e:
+    except AstroMLError as e:
         print_error(str(e))
 
 
@@ -299,7 +300,7 @@ def cmd_eval_results(args) -> None:
             [r.get("benchmark", ""), str(r.get("score", "")), r.get("date", "")] for r in history
         ]
         print_table(rows, ["Benchmark", "Score", "Date"], title="Evaluation History")
-    except Exception as e:
+    except AstroMLError as e:
         print_error(str(e))
 
 
@@ -325,7 +326,7 @@ def cmd_cost(args) -> None:
 
         summary = get_cost_summary()
         print_json(summary)
-    except Exception as e:
+    except AstroMLError as e:
         print_error(f"Cost tracking not available: {e}")
 
 
@@ -336,7 +337,7 @@ def cmd_cache(args) -> None:
         cache = CacheManager()
         stats = cache.get_stats()
         print_json(stats)
-    except Exception as e:
+    except AstroMLError as e:
         print_error(f"Cache not available: {e}")
 
 

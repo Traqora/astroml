@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Alerting mechanisms for data quality degradation and threshold breaches.
 
 Provides rule-based alerting, severity classification, degradation detection,
@@ -111,7 +112,7 @@ class CallbackAlertChannel(AlertChannel):
     def dispatch(self, alert: QualityAlert) -> None:
         try:
             self.callback(alert)
-        except Exception as e:
+        except AstroMLError as e:
             logger.error("Failed to execute alert callback: %s", e)
 
 
@@ -323,7 +324,7 @@ class AlertManager:
         for ch in self._channels:
             try:
                 ch.dispatch(alert)
-            except Exception as e:
+            except AstroMLError as e:
                 logger.error("Failed to dispatch alert to channel %s: %s", ch, e)
 
     def resolve_alert(self, alert_id: str, resolved_by: str = "system") -> bool:

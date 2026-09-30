@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """FastAPI router for automated model selection and architecture search."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """Rate limiter and cost budget manager for LLM requests."""
 
 import logging
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 class ProviderRateLimiter:
     """Tracks rate limits for requests per minute and tokens per minute."""
 
-    def __init__(self, requests_per_minute: int, tokens_per_minute: int):
+    def __init__(self, requests_per_minute -> Any: int, tokens_per_minute: int):
         self.requests_per_minute = requests_per_minute
         self.tokens_per_minute = tokens_per_minute
         self.request_history: list[float] = []
@@ -56,7 +57,7 @@ class ProviderRateLimiter:
 class CostBudgetManager:
     """Tracks daily and monthly cost budgets, triggering alerts at 80% and 100%."""
 
-    def __init__(self, daily_limit: float, monthly_limit: float):
+    def __init__(self, daily_limit -> Any: float, monthly_limit: float):
         self.daily_limit = daily_limit
         self.monthly_limit = monthly_limit
         self.daily_spend = 0.0

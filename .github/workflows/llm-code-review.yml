@@ -29,6 +29,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          # Same import chain as llm-docs.yml: `astroml.llm` needs the ML stack
+          # and `api.models.orm`, and `pip install -e .` installs neither because
+          # pyproject.toml has no base dependencies. Two commands, not one: the
+          # combined graph trips pip's `error: resolution-too-deep`.
+          pip install -r requirements-cpu.txt
+          pip install -r requirements-api.txt
           pip install -e .
 
       - name: Get changed files

@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Model registry for managing ML models and their versions.
 
 Enhanced with:
@@ -67,7 +68,7 @@ class InvalidStatusTransitionError(ValueError):
 class SemanticVersion:
     """Semantic version parser and comparator."""
 
-    def __init__(self, version: str):
+    def __init__(self, version -> Any: str):
         self.version = version
         self.major, self.minor, self.patch = self._parse(version)
 
@@ -113,7 +114,7 @@ class ModelRegistry:
     with helper methods for common registry operations.
     """
 
-    def __init__(self, session: Session | None = None):
+    def __init__(self, session -> Any: Session | None = None):
         """Initialize the registry.
 
         Args:
@@ -571,7 +572,7 @@ class ModelRegistry:
             target.lineage = _append_lineage(target.lineage, {**record, "role": "activated"})
 
             self.session.commit()
-        except Exception:
+        except AstroMLError:
             self.session.rollback()
             raise
 

@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Cache backends for pipeline caching — local filesystem, Redis, and S3.
 
 Issue #636: Multi-backend cache support for pipeline caching system.
@@ -479,7 +480,7 @@ class S3Backend(CacheBackend):
         except self._client.exceptions.NoSuchKey:
             self._stats.misses += 1
             return None
-        except Exception as e:
+        except AstroMLError as e:
             logger.warning(f"S3Backend GET error for key {key}: {e}")
             self._stats.errors += 1
             return None
@@ -506,7 +507,7 @@ class S3Backend(CacheBackend):
             self._stats.puts += 1
             self._stats.total_bytes_stored += len(serialized)
             return True
-        except Exception as e:
+        except AstroMLError as e:
             logger.warning(f"S3Backend PUT error for key {key}: {e}")
             self._stats.errors += 1
             return False
@@ -520,7 +521,7 @@ class S3Backend(CacheBackend):
             return True
         except self._client.exceptions.NoSuchKey:
             return False
-        except Exception as e:
+        except AstroMLError as e:
             logger.warning(f"S3Backend DELETE error: {e}")
             self._stats.errors += 1
             return False
@@ -536,7 +537,7 @@ class S3Backend(CacheBackend):
             return True
         except self._client.exceptions.NoSuchKey:
             return False
-        except Exception:
+        except AstroMLError:
             self._stats.errors += 1
             return False
 
@@ -556,7 +557,7 @@ class S3Backend(CacheBackend):
                     )
             self._stats = BackendStats()
             return True
-        except Exception as e:
+        except AstroMLError as e:
             logger.warning(f"S3Backend CLEAR error: {e}")
             self._stats.errors += 1
             return False

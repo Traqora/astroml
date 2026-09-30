@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """Calibration curve visualization and analysis for fraud scores.
 
 This module provides tools to assess the reliability of fraud detection
@@ -20,7 +21,7 @@ sns.set_palette("husl")
 class CalibrationAnalyzer:
     """Comprehensive calibration analysis for fraud detection models."""
 
-    def __init__(self, n_bins: int = 10, strategy: str = "uniform"):
+    def __init__(self, n_bins -> Any: int = 10, strategy: str = "uniform"):
         """
         Initialize calibration analyzer.
 

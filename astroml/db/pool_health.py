@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Connection pool health inspection (Issue #550).
 
 SQLAlchemy's ``QueuePool`` exposes counters but no policy: this module turns
@@ -94,7 +95,7 @@ def _int_attr(pool: Pool | Any, name: str) -> int:
         return 0
     try:
         value = getter() if callable(getter) else getter
-    except Exception:  # noqa: BLE001 - counters must never break a probe
+    except AstroMLError:  # noqa: BLE001 - counters must never break a probe
         return 0
     try:
         return int(value)

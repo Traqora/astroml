@@ -23,7 +23,7 @@ class YAMLAnalyzer:
     related to security, correctness, and best practices.
     """
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize the YAML analyzer."""
         self.patterns = self._init_patterns()
 

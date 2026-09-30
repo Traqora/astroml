@@ -41,7 +41,7 @@ class GoldenDatasetGenerator:
     and quality assessment capabilities.
     """
 
-    def __init__(self, session: Session | None = None):
+    def __init__(self, session -> Any: Session | None = None):
         """Initialize the golden dataset generator.
 
         Args:

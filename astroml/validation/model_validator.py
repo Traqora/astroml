@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Automated model validation suite and CI/CD deployment gating.
 
 Combines performance validation, fairness & bias detection, adversarial robustness
@@ -192,7 +193,7 @@ class ModelValidator:
                 }
                 if not fairness_passed:
                     blocking_reasons.append("Fairness gate failed: significant bias detected across protected classes.")
-            except Exception as e:
+            except AstroMLError as e:
                 warnings.append(f"Fairness evaluation warning: {e}")
                 gate_decisions["fairness"] = True
         else:

@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Core batch processing engine for LLM backfill jobs."""
 
 import asyncio
@@ -68,7 +69,7 @@ class BatchProcessor:
                     self._checkpoint.record_success()
                     batch_results.append({"item": item, "status": "completed", "result": outcome})
             self._strategy.on_success()
-        except Exception as e:
+        except AstroMLError as e:
             logger.error("Batch failed: %s", e)
             self._strategy.on_failure(e)
             raise

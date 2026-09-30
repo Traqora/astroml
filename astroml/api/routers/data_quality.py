@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """FastAPI router for data quality monitoring and reporting endpoints."""
 
 from __future__ import annotations
@@ -90,7 +91,7 @@ async def check_data_quality(payload: CheckRequest) -> dict[str, Any]:
                 for c in report.check_results
             ],
         }
-    except Exception as e:
+    except AstroMLError as e:
         logger.error("Data quality check failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -110,7 +111,7 @@ async def monitor_batch(payload: MonitorBatchRequest) -> dict[str, Any]:
             "active_alerts_count": len(active_alerts),
             "created_at": report.created_at,
         }
-    except Exception as e:
+    except AstroMLError as e:
         logger.error("Monitoring batch processing failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 

@@ -18,7 +18,7 @@ class TransactionGraph:
     corresponding to transaction amounts. Supports multiple assets.
     """
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize an empty transaction graph."""
         self.nodes = set()
         self.edges = defaultdict(lambda: defaultdict(list))

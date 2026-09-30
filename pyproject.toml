@@ -65,11 +65,18 @@ force-single-line = false
 precision = 2
 show_missing = true
 skip_covered = false
+# Issue #716 — hard coverage floor for the astroml package. `pytest
+# --cov=astroml` (see .github/workflows/pytest.yml) fails the run when total
+# coverage drops below this, so a PR that adds untested code cannot go green.
+# Kept in sync with the codecov patch target (70%) in codecov.yml.
+fail_under = 70
 exclude_lines = [
     "pragma: no cover",
     "raise NotImplementedError",
     "if TYPE_CHECKING:",
     "if __name__ == .__main__.:",
+    "except ImportError:",
+    "raise AssertionError",
 ]
 
 [tool.mypy]

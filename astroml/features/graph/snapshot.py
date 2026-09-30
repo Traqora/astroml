@@ -1,3 +1,30 @@
+"""Time-windowed graph snapshot construction — issue #732.
+
+Ordering contract
+-----------------
+A snapshot is consumed by a temporal model as a *sequence*, so every edge list
+this module produces is ordered by time, and the order is reproducible: the
+same rows always come back in the same sequence, whichever plan the database
+happened to pick.
+
+Inside the database that order is the blockchain's own total order —
+``(timestamp, ledger_sequence, operation_id, hop_index, id)``.  A timestamp
+alone is not enough to sort by: a Stellar ledger closes all of its operations
+in the same second, so a large group of rows shares a timestamp, and leaving
+those ties unordered made two runs over unchanged data disagree on the order of
+the edges inside the window.  ``ledger_sequence`` — recovered from the
+operation's toid, see :mod:`astroml.ingestion.parsers` — is the tiebreaker that
+matches how the chain itself ordered the activity; ``operation_id`` and
+``hop_index`` order the several rows written for one operation, and ``id``
+settles what remains for rows recorded before the natural key existed.
+
+For edge lists built in memory, the same contract is enforced on the
+``presorted`` argument of :func:`window_snapshot`.  That argument is a promise
+from the caller, and a broken promise silently returned the wrong window
+because the binary search ran over an unsorted array; it now raises
+:class:`SnapshotOrderingError`.
+"""
+
 from __future__ import annotations
 
 import bisect
@@ -8,6 +35,7 @@ from collections.abc import Generator, Iterator, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from itertools import islice
 from typing import Any
 
 from ...cache import cached_graph_snapshot
@@ -172,14 +200,61 @@ class Edge:
         )
 
 
+class SnapshotOrderingError(ValueError):
+    """Raised when a snapshot's edges are not in non-decreasing time order.
+
+    Subclasses :class:`ValueError` so callers that already guard
+    :func:`window_snapshot` against bad arguments keep catching it.
+    """
+
+
+def _first_inversion(edges: Sequence[Edge]) -> int:
+    """Index of the first edge that goes backwards in time, or ``-1``.
+
+    ``zip`` + ``islice`` walks the sequence without slicing it, so checking a
+    large edge list does not allocate a second copy of it.
+    """
+    for i, (current, following) in enumerate(zip(edges, islice(edges, 1, None))):
+        if current.timestamp > following.timestamp:
+            return i
+    return -1
+
+
+def validate_temporal_order(edges: Sequence[Edge], *, context: str = "edges") -> None:
+    """Raise :class:`SnapshotOrderingError` unless ``edges`` is time-ordered.
+
+    An edge list is time-ordered when each edge's timestamp is greater than or
+    equal to the previous one — ties are allowed, and are expected: every
+    operation a ledger closes carries that ledger's timestamp.
+
+    Args:
+        edges: The edges to check, in the order a model would consume them.
+        context: What is being checked, used in the error message.
+
+    Raises:
+        SnapshotOrderingError: The first edge that moves backwards in time.
+    """
+    index = _first_inversion(edges)
+    if index < 0:
+        return
+    current, following = edges[index], edges[index + 1]
+    raise SnapshotOrderingError(
+        f"{context} are not ordered by timestamp: index {index} is at "
+        f"{current.timestamp}, index {index + 1} is at {following.timestamp}"
+    )
+
+
 def _ensure_sorted_by_ts(edges: Sequence[Edge]) -> list[Edge]:
-    if len(edges) <= 1:
-        return list(edges)
-    # Fast path: check if already non-decreasing by timestamp
-    is_sorted = all(edges[i].timestamp <= edges[i + 1].timestamp for i in range(len(edges) - 1))
-    if is_sorted:
-        return list(edges)
-    return sorted(edges, key=lambda e: e.timestamp)
+    """Return ``edges`` in the canonical temporal order — issue #732.
+
+    Sorted by ``(timestamp, src, dst)`` and not by timestamp alone: several
+    operations share a ledger's timestamp, and sorting on the timestamp alone
+    left the order within each group of ties up to the caller's input order, so
+    the same set of edges could produce two different sequences.  Adding the
+    endpoints makes the result a property of the edges rather than of how they
+    arrived.
+    """
+    return sorted(edges, key=lambda e: (e.timestamp, e.src, e.dst))
 
 
 @cached_graph_snapshot(ttl_seconds=1800)
@@ -194,6 +269,15 @@ def window_snapshot(
     - edges: sequence of Edge
     - start_ts/end_ts: inclusive window bounds (epoch seconds)
     - presorted: if True, assume edges are sorted by timestamp ascending; otherwise we will sort once.
+      This is a promise, not a hint — edges that break it are rejected (see Raises)
+      rather than silently windowed at the wrong offsets. Pass ``presorted=False``
+      if the edges may arrive in any order; the result is then canonicalised by
+      ``(timestamp, src, dst)`` so it does not depend on the input order either.
+
+    Raises:
+        ValueError: ``start_ts > end_ts``.
+        SnapshotOrderingError: ``presorted=True`` and the edges are not in
+            non-decreasing timestamp order.
 
     Efficiency:
       Uses binary search to find left/right indices and then slices, O(log N + K).
@@ -207,6 +291,11 @@ def window_snapshot(
     # is the concern in the first place.
     if presorted:
         sorted_edges = edges if isinstance(edges, list) else list(edges)
+        # The scan below allocates nothing and is linear like the timestamp
+        # array built a few lines down, so checking costs about what the array
+        # already costs — while an unchecked violation would return a window
+        # that is quietly wrong, since bisect only works on sorted input.
+        validate_temporal_order(sorted_edges, context="edges passed with presorted=True")
     else:
         sorted_edges = _ensure_sorted_by_ts(edges)
 
@@ -302,6 +391,52 @@ def _parse_window_size(window: str) -> timedelta:
     raise _unknown_window_unit_error(window, unit)
 
 
+def _snapshot_ordering() -> tuple:
+    """The total order every DB-backed snapshot query sorts by — issue #732.
+
+    ``timestamp`` on its own is not a total order, so ``ORDER BY timestamp``
+    lets the database return tied rows in whatever order its plan produced —
+    which changes with the plan, the statistics, or the SQLite/Postgres
+    version, and made two runs over unchanged data build different sequences
+    out of the same window.
+
+    These columns are the blockchain's own ordering of the activity:
+
+    * ``timestamp`` — the closing time of the ledger the operation is in.
+    * ``ledger_sequence`` — a ledger closes every operation it contains in the
+      same second, so the ledger is what actually separates those ties.
+    * ``operation_id`` / ``hop_index`` — order the rows written for a single
+      operation (a path payment decomposes into one row per hop).
+    * ``id`` — the insertion order, which is all that remains for rows recorded
+      before the natural key existed and which therefore have neither of the
+      two columns above.
+
+    Returned as a tuple of columns for ``Query.order_by(*_snapshot_ordering())``.
+    """
+    from astroml.db.schema import NormalizedTransaction
+
+    return (
+        NormalizedTransaction.timestamp,
+        NormalizedTransaction.ledger_sequence,
+        NormalizedTransaction.operation_id,
+        NormalizedTransaction.hop_index,
+        NormalizedTransaction.id,
+    )
+
+
+def validate_snapshot_window(window: SnapshotWindow) -> None:
+    """Raise :class:`SnapshotOrderingError` unless a window is time-ordered.
+
+    The DB-backed builders guarantee this by construction; the check exists so
+    a caller — or a test — can assert it on a window it was handed, and so the
+    ordering a temporal model consumes is stated in one place.
+
+    Raises:
+        SnapshotOrderingError: The window's edges move backwards in time.
+    """
+    validate_temporal_order(window.edges, context=f"snapshot window {window.index}")
+
+
 @dataclass(frozen=True)
 class SnapshotMeta:
     """Window metadata without the edge payload — issue #199.
@@ -341,6 +476,13 @@ def iter_db_snapshot_edges(
 
     Use this in place of :func:`iter_db_snapshots` whenever a window may
     plausibly contain enough edges to risk OOM on the training machine.
+
+    Ordering — issue #732:
+        Each edge iterator yields the window's rows in the blockchain's total
+        order (see :func:`_snapshot_ordering`), so the sequence is
+        reproducible across runs. Because the iterator is streamed it is not
+        validated; a caller that buffers it can check the materialised list
+        with :func:`validate_temporal_order`.
     """
     from sqlalchemy import func as sqlfunc
     from sqlalchemy import select
@@ -387,7 +529,9 @@ def iter_db_snapshot_edges(
                 NormalizedTransaction.receiver.isnot(None),
                 NormalizedTransaction.sender != NormalizedTransaction.receiver,
             )
-            .order_by(NormalizedTransaction.timestamp)
+            # Ordered by the total order of the chain, not by timestamp alone,
+            # so a window's edge sequence is reproducible — issue #732.
+            .order_by(*_snapshot_ordering())
             .execution_options(yield_per=chunk_size, stream_results=True)
         )
 
@@ -557,7 +701,10 @@ def iter_db_snapshots(
             windows in parallel when using the default session factory.
 
     Yields:
-        :class:`SnapshotWindow` instances in chronological order.
+        :class:`SnapshotWindow` instances in chronological order, each one's
+        edges also in chronological (blockchain) order — issue #732. Windows
+        are yielded in increasing ``index`` order, and each window is validated
+        before it is yielded.
     """
     from sqlalchemy import func as sqlfunc
     from sqlalchemy import select
@@ -647,7 +794,9 @@ def iter_db_snapshots(
                 NormalizedTransaction.receiver.isnot(None),
                 NormalizedTransaction.sender != NormalizedTransaction.receiver,
             )
-            .order_by(NormalizedTransaction.timestamp)
+            # Issue #732 — same total order as the streaming and parallel
+            # builders, so all three produce the same sequence for a window.
+            .order_by(*_snapshot_ordering())
         )
 
         edges: list[Edge] = []
@@ -667,13 +816,15 @@ def iter_db_snapshots(
 
         del result  # Issue #546 — drop cursor buffers before the next window.
 
-        yield SnapshotWindow(
+        window = SnapshotWindow(
             index=index,
             start=window_start,
             end=window_end,
             edges=edges,
             nodes=nodes,
         )
+        validate_snapshot_window(window)
+        yield window
 
         window_start += step_delta
         index += 1

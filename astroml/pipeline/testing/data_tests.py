@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Data quality assertions and testing framework for pipeline data.
 
 Issue #638 Step 1 & 6: Implements data quality assertion library,
@@ -289,7 +290,7 @@ class DataAssertion:
                 f"assert_column_distribution_change({column})", passed, severity, msg,
                 {"ks_statistic": float(ks_stat), "p_value": float(p_value), "threshold": max_ks_statistic},
             )
-        except Exception as e:
+        except AstroMLError as e:
             return self._record(f"assert_column_distribution_change({column})", False, severity, str(e))
 
     def clear(self) -> None:
@@ -339,7 +340,7 @@ class DataTestSuite:
             start = time.monotonic()
             try:
                 result = test_fn(data)
-            except Exception as e:
+            except AstroMLError as e:
                 result = DataTestResult(
                     test_name=test_fn.__name__ if hasattr(test_fn, "__name__") else str(test_fn),
                     passed=False,
@@ -452,7 +453,7 @@ class DataDiffReport:
 
                 if drift > max_mean_drift:
                     report.significant_change = True
-            except Exception:
+            except AstroMLError:
                 pass
 
         return report
@@ -598,7 +599,7 @@ class RegressionTest:
                 message="" if passed else "Output differs from baseline",
             )
 
-        except Exception as e:
+        except AstroMLError as e:
             return DataTestResult(
                 test_name=f"regression:{self.name}",
                 passed=False,

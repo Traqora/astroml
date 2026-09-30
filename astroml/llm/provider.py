@@ -1,10 +1,11 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 
 
 class StreamingResponse:
-    def __init__(self, async_generator: AsyncGenerator[str, None]):
+    def __init__(self, async_generator -> Any: AsyncGenerator[str, None]):
         self.generator = async_generator
 
     async def get_chunks(self) -> AsyncGenerator[str, None]:

@@ -8,7 +8,7 @@ from .definitions import BaseTool
 class ToolRegistry:
     """Registry for discovering and managing AstroML tools."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         self._tools: dict[str, BaseTool] = {}
 
     def register(self, tool: BaseTool) -> None:

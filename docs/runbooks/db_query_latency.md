@@ -112,6 +112,9 @@ ANALYZE <table>;
 VACUUM ANALYZE <table>;
 ```
 
+See [pg_vacuum_tuning.md](./pg_vacuum_tuning.md) for autovacuum threshold
+tuning on high-write tables, so this becomes less likely to recur.
+
 ## Prevention
 
 - Regular index maintenance

@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Feature caching and storage optimization for the Feature Store.
 
 This module provides advanced caching mechanisms, storage optimization,
@@ -125,7 +126,7 @@ class CacheEntry:
 class MemoryCache:
     """In-memory cache implementation."""
 
-    def __init__(self, config: CacheConfig):
+    def __init__(self, config -> Any: CacheConfig):
         """Initialize memory cache.
 
         Args:
@@ -217,7 +218,7 @@ class MemoryCache:
 class RedisCache:
     """Redis-based distributed cache implementation."""
 
-    def __init__(self, config: CacheConfig):
+    def __init__(self, config -> Any: CacheConfig):
         """Initialize Redis cache.
 
         Args:
@@ -244,7 +245,7 @@ class RedisCache:
             data = self.redis_client.get(self._make_key(key))
             if data:
                 return pickle.loads(data)
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Redis get error: {e}")
         return None
 
@@ -264,7 +265,7 @@ class RedisCache:
                 self.redis_client.setex(redis_key, ttl_seconds, data)
             else:
                 self.redis_client.set(redis_key, data)
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Redis put error: {e}")
 
     def remove(self, key: str) -> bool:
@@ -279,7 +280,7 @@ class RedisCache:
         try:
             result = self.redis_client.delete(self._make_key(key))
             return result > 0
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Redis remove error: {e}")
             return False
 
@@ -290,7 +291,7 @@ class RedisCache:
             keys = self.redis_client.keys(pattern)
             if keys:
                 self.redis_client.delete(*keys)
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Redis clear error: {e}")
 
     def size(self) -> int:
@@ -299,7 +300,7 @@ class RedisCache:
             pattern = f"{self._prefix}*"
             keys = self.redis_client.keys(pattern)
             return len(keys)
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Redis size error: {e}")
             return 0
 
@@ -307,7 +308,7 @@ class RedisCache:
 class DiskCache:
     """Disk-based cache implementation."""
 
-    def __init__(self, config: CacheConfig):
+    def __init__(self, config -> Any: CacheConfig):
         """Initialize disk cache.
 
         Args:
@@ -393,7 +394,7 @@ class DiskCache:
                         conn.execute("DELETE FROM cache_entries WHERE key = ?", (key,))
                         conn.commit()
 
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Disk cache get error: {e}")
 
         return None
@@ -435,7 +436,7 @@ class DiskCache:
                 )
                 conn.commit()
 
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Disk cache put error: {e}")
 
     def remove(self, key: str) -> bool:
@@ -465,7 +466,7 @@ class DiskCache:
 
                     return True
 
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Disk cache remove error: {e}")
 
         return False
@@ -482,7 +483,7 @@ class DiskCache:
                 conn.execute("DELETE FROM cache_entries")
                 conn.commit()
 
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Disk cache clear error: {e}")
 
     def size(self) -> int:
@@ -491,7 +492,7 @@ class DiskCache:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.execute("SELECT COUNT(*) FROM cache_entries")
                 return cursor.fetchone()[0]
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Disk cache size error: {e}")
             return 0
 
@@ -528,7 +529,7 @@ class DiskCache:
 
             return removed_count
 
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Disk cache cleanup error: {e}")
             return 0
 
@@ -536,7 +537,7 @@ class DiskCache:
 class FeatureCache:
     """Unified feature cache interface."""
 
-    def __init__(self, config: CacheConfig):
+    def __init__(self, config -> Any: CacheConfig):
         """Initialize feature cache.
 
         Args:
@@ -699,7 +700,7 @@ class FeatureCache:
 class FeatureStorageOptimizer:
     """Optimizes feature storage for efficient access."""
 
-    def __init__(self, storage_config: StorageConfig):
+    def __init__(self, storage_config -> Any: StorageConfig):
         """Initialize storage optimizer.
 
         Args:
@@ -829,7 +830,7 @@ def cached_feature(
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args, **kwargs) -> Any:
             # Generate cache key
             if key_func:
                 cache_key = key_func(*args, **kwargs)

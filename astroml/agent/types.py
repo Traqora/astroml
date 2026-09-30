@@ -437,6 +437,13 @@ class AgentConfig:
     #: Render that catalogue one line per tool instead of one block per tool.
     #: Same information, fewer prompt tokens.
     compact_tool_catalogue: bool = False
+    #: Enable parallel execution of multiple tool calls in a single step.
+    parallel_tool_execution: bool = True
+    #: Minimum number of tool calls required to enable parallel execution.
+    parallel_tool_threshold: int = 2
+    #: Maximum number of worker threads for parallel tool execution.
+    #: ``None`` uses the CPU count.
+    max_parallel_workers: Optional[int] = None
 
     def __post_init__(self) -> None:
         if self.max_steps < 1:
@@ -449,6 +456,10 @@ class AgentConfig:
             raise ValueError("max_tokens must be >= 1 when provided")
         if self.mode not in VALID_MODES:
             raise ValueError(f"mode must be one of {VALID_MODES}, got {self.mode!r}")
+        if self.parallel_tool_threshold < 1:
+            raise ValueError("parallel_tool_threshold must be >= 1")
+        if self.max_parallel_workers is not None and self.max_parallel_workers < 1:
+            raise ValueError("max_parallel_workers must be >= 1 when provided")
 
 
 

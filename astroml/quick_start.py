@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Quick start module for AstroML.
 
 Provides a single entry point to wire sample data through the complete
@@ -197,7 +198,7 @@ def build_sample_graph(
     try:
         stats = validate_graph(edges, node_index)
         logger.info(f"Graph validation: {stats}")
-    except Exception as e:
+    except AstroMLError as e:
         logger.warning(f"Graph validation warning: {e}")
 
     return edges, node_index
@@ -316,6 +317,7 @@ def run_quickstart() -> int:
     logger.info("AstroML Quick Start: Ingestion → Graph → Train Pipeline")
     logger.info("=" * 80)
 
+    session = None
     try:
         # Set random seeds
         set_random_seeds(QuickStartConfig.RANDOM_SEED)
@@ -362,11 +364,12 @@ def run_quickstart() -> int:
 
         return 0
 
-    except Exception as e:
+    except AstroMLError as e:
         logger.error(f"Quick start failed: {e}", exc_info=True)
         return 1
     finally:
-        session.close()
+        if session is not None:
+            session.close()
 
 
 if __name__ == "__main__":

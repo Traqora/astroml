@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Data contract API endpoints for AstroML.
 
 Provides endpoints to validate data against contracts, infer contracts from data,
@@ -17,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from astroml.pipeline.contracts.quality_contract import QualityContract
 from astroml.pipeline.contracts.schema_contract import SchemaContract
 from astroml.pipeline.contracts.semantic_contract import SemanticContract
-from astroml.pipeline.contracts.verifier import ContractVerifier
+from astroml.pipeline.contracts.verifier import ContractVerifier, MissingContractError
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,12 @@ class PipelineVerifyRequest(BaseModel):
 
     data: list[dict[str, Any]]
     stages: dict[str, PipelineStageSpec]
+    strict: bool = False
+    """If True, a stage referencing an unregistered contract name returns
+    HTTP 422 instead of silently verifying nothing for that name. A CI
+    caller using this endpoint as a build gate should set this to True: a
+    misspelled or stale contract name would otherwise make the gate report
+    `passed: true` for a stage that validated zero contracts."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -143,7 +150,7 @@ async def validate_data(body: ValidateRequest) -> ValidateResponse:
 
     try:
         df = pd.DataFrame(body.data)
-    except Exception as e:
+    except AstroMLError as e:
         raise HTTPException(status_code=400, detail=f"Invalid data format: {e}")
 
     if body.schema_def is not None:
@@ -196,7 +203,7 @@ async def infer_contract(body: ValidateRequest) -> InferResponse:
 
     try:
         df = pd.DataFrame(body.data)
-    except Exception as e:
+    except AstroMLError as e:
         raise HTTPException(status_code=400, detail=f"Invalid data format: {e}")
 
     contract = SchemaContract.from_dataframe(df, name="inferred")
@@ -237,7 +244,7 @@ async def verify_pipeline(body: PipelineVerifyRequest) -> PipelineVerifyResponse
 
     try:
         df = pd.DataFrame(body.data)
-    except Exception as e:
+    except AstroMLError as e:
         raise HTTPException(status_code=400, detail=f"Invalid data format: {e}")
 
     # Build pipeline_stages format for the verifier
@@ -245,7 +252,10 @@ async def verify_pipeline(body: PipelineVerifyRequest) -> PipelineVerifyResponse
     for stage_name, stage_spec in body.stages.items():
         pipeline_stages[stage_name] = stage_spec.contracts
 
-    result = _verifier.verify_pipeline(df, pipeline_stages)
+    try:
+        result = _verifier.verify_pipeline(df, pipeline_stages, strict=body.strict)
+    except MissingContractError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     stages_dict: dict[str, dict[str, Any]] = {}
     for stage in result.stages:
@@ -300,6 +310,6 @@ def _safe_serialize(value: Any) -> Any:
     try:
         if hasattr(value, "__dataclass_fields__"):
             return _serialize_result(value)
-    except Exception:
+    except AstroMLError:
         pass
     return str(value)

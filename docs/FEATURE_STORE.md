@@ -392,46 +392,59 @@ time_features = FeatureEngineering.create_time_features(
 
 ## Caching
 
-### Memory Caching
+### Built-in value cache
+
+`FeatureStore` ships with an in-process LRU + TTL cache (backed by
+`cachetools.TTLCache`) — you do **not** pass a cache object into the
+constructor. Instead configure the built-in cache through the constructor
+keyword arguments:
 
 ```python
-from astroml.features.feature_cache import create_feature_cache
+from astroml.features import create_feature_store
 
-# Create LRU cache
+store = create_feature_store(
+    "./my_feature_store",
+    cache_ttl_seconds=900,   # entries considered stale after 15 minutes
+    cache_maxsize=128,       # max number of cached feature frames (LRU cap)
+    max_cache_size_mb=500,   # soft memory cap in MB
+)
+```
+
+`create_feature_store(storage_path, **kwargs)` is a thin factory over
+`FeatureStore(storage_path=..., **kwargs)`; both accept the same cache
+keywords above plus `max_workers`, `chunk_size` and `enable_parallel`.
+
+The cache is used transparently by `get_feature` / `get_features_for_entities`
+and is invalidated automatically whenever `store_feature` rewrites a feature.
+
+### Standalone FeatureCache (optional)
+
+For caching outside a store, the `astroml.features.feature_cache` module
+exposes a standalone, pluggable cache with `LRU`, `TTL`, `LFU`, `DISK` and
+`REDIS` strategies:
+
+```python
+import pandas as pd
+from astroml.features import create_feature_cache, CacheStrategy
+
 cache = create_feature_cache(
-    strategy=CacheStrategy.LRU,
+    strategy=CacheStrategy.TTL,
     max_size=1000,
+    ttl_seconds=3600,
 )
 
-# Cache will be used automatically by the feature store
-store = FeatureStore(cache=cache)
+df = pd.DataFrame({"account_balance": [12.5]}, index=["a1"])
+cache.put("account_balance", df)                    # store a feature frame
+value = cache.get("account_balance")                # read it back (DataFrame or None)
+cache.remove("account_balance")                     # delete a single key
+removed = cache.cleanup_expired()                    # drop all expired entries
+cache.clear()                                        # wipe everything
+print(cache.get_stats())                             # {'hits':.., 'misses':.., 'hit_rate':.., 'size':..}
 ```
 
-### Disk Caching
+This `FeatureCache` is independent of `FeatureStore`'s built-in cache and is
+useful for ad-hoc caching of expensive computations.
 
-```python
-# Create disk cache for large features
-cache = create_feature_cache(
-    strategy=CacheStrategy.DISK,
-    disk_path="./feature_cache",
-    max_size=10000,
-)
-
-store = FeatureStore(cache=cache)
-```
-
-### Redis Caching
-
-```python
-# Create Redis cache for distributed environments
-cache = create_feature_cache(
-    strategy=CacheStrategy.REDIS,
-    redis_url="redis://localhost:6379",
-    ttl_seconds=3600,  # 1 hour TTL
-)
-
-store = FeatureStore(cache=cache)
-```
 
 ## Feature Versioning
 
@@ -560,16 +573,22 @@ numeric_features = store.list_features(feature_type=FeatureType.NUMERIC)
 ### Cache Statistics
 
 ```python
-# Get cache statistics
-stats = store.cache.get_stats()
+# Get cache statistics (built-in store cache)
+stats = store.get_cache_stats()
 print(f"Cache hit rate: {stats['hit_rate']:.2%}")
-print(f"Cache size: {stats['size']}")
-print(f"Hits: {stats['hits']}")
-print(f"Misses: {stats['misses']}")
+print(f"Cached features: {stats['cached_features']}")
+print(f"Cache size (MB): {stats['cache_size_mb']:.2f} / {stats['max_cache_size_mb']}")
+print(f"Hits/Misses/Evictions: {stats['hits']}/{stats['misses']}/{stats['evictions']}")
 
 # Clear cache if needed
 store.clear_cache()
 ```
+
+`get_cache_stats()` returns the keys: `cached_features`, `cache_size_mb`,
+`max_cache_size_mb`, `cache_utilization_pct`, `cache_maxsize`,
+`cache_ttl_seconds`, `metadata_cached`, `hits`, `misses`, `evictions`,
+`hit_rate` and `miss_rate`. (Note: it is `store.get_cache_stats()` — there is no
+`store.cache` attribute on `FeatureStore`.)
 
 ### Error Handling
 
@@ -781,6 +800,176 @@ with timer("Feature Retrieval"):
     stored_result = store.get_feature("feature_name")
 ```
 
+## End-to-End Usage Guide
+
+This section walks through the full lifecycle with the **actual**
+`FeatureStore` API: writing features, reading feature sets, serving from the
+online/offline stores, purging stale data, and building a leak-free training
+dataset. A companion runnable notebook lives at
+[`notebooks/feature_store_walkthrough.ipynb`](../notebooks/feature_store_walkthrough.ipynb).
+
+### 1. Write features
+
+Register a feature computer, then compute and store it in one call:
+
+```python
+import pandas as pd
+from astroml.features import create_feature_store
+from astroml.features.feature_store import FeatureType
+
+store = create_feature_store("./feature_store")
+
+def balance_computer(data, entity_col, timestamp_col, **kwargs):
+    sent = data.groupby("src")["amount"].sum()
+    received = data.groupby("dst")["amount"].sum()
+    accounts = sorted(set(sent.index) | set(received.index))
+    values = [received.get(a, 0.0) - sent.get(a, 0.0) for a in accounts]
+    return pd.DataFrame({"account_balance": values}, index=accounts)
+
+store.register_feature(
+    name="account_balance",
+    computer=balance_computer,
+    description="Net inflow minus outflow per account",
+    feature_type=FeatureType.NUMERIC,
+    tags=["balance", "financial"],
+    owner="data_team",
+)
+
+# compute_feature() runs the computer; store_feature() persists + validates.
+# compute_and_store() does both and returns the values.
+feature_values = store.compute_and_store(
+    feature_name="account_balance",
+    data=data,               # transactions DataFrame with src/dst/amount
+    entity_col="entity_id",
+    timestamp_col="timestamp",
+)
+```
+
+`store_feature(feature_name, values, metadata=None, validate_schema=True,
+dry_run=False, auto_register=True)` returns a `ValidationResult`. Pass
+`dry_run=True` to validate a candidate DataFrame against
+`FEATURE_VALUE_SCHEMA` without persisting it.
+
+### 2. Read feature sets
+
+```python
+feature_set = store.create_feature_set(
+    name="risk_features",
+    feature_names=["account_balance"],   # each must already be registered
+    description="Features for risk assessment",
+    entity_type="account",
+)
+
+# Retrieve several features for a set of entities as one DataFrame
+entities = data["entity_id"].unique()[:5].tolist()
+matrix = store.get_features_for_entities(
+    feature_names=["account_balance"],
+    entity_ids=entities,
+    parallel=True,
+)
+
+# Single-feature reads support point-in-time via get_feature()
+as_of = store.get_feature("account_balance", entity_ids=entities)
+
+# Discover what exists
+for fd in store.list_features(tags=["financial"]):
+    print(fd.name, fd.feature_type.value, fd.owner)
+```
+
+`create_feature_set` raises `ValueError` if any listed feature has not been
+registered/computed yet.
+
+### 3. Online vs. offline serving
+
+Beyond the SQLite-backed value store, `FeatureStore` wraps two additional
+backends (both default to in-memory unless configured):
+
+- **Offline store** — Parquet batches used for training and backfills.
+- **Online store** — low-latency key/value reads used for real-time scoring.
+
+```python
+# 3a. Write the feature to offline Parquet storage.
+#     write_offline_features() defaults to a *tz-aware* now() when the frame has
+#     no 'timestamp' column. Attach an explicit (tz-naive) compute timestamp so
+#     it matches the naive timestamps used by get_historical_features below.
+offline_df = feature_values.reset_index().rename(columns={"index": "entity_id"})
+offline_df["timestamp"] = pd.Timestamp("2024-01-31")
+written = store.write_offline_features("account_balance", offline_df)
+
+# 3b. Materialize offline rows into the online store for serving.
+served = store.materialize_to_online(["account_balance"])
+
+# 3c. Low-latency online read for a batch of entities.
+online = store.get_online_features(entities, ["account_balance"])
+# -> {"a1": {"account_balance": ...}, "a2": {...}, ...}
+```
+
+You can also write online features directly with
+`store.write_online_features(features, entity_col="entity_id",
+timestamp_col=None, ttl_seconds=None)`; passing `ttl_seconds` gives each entry
+an expiry so stale rows drop out automatically.
+
+### 4. Caching and purging
+
+There is **no `FeatureStore.purge()` / `delete_feature()`** method. Choose the
+purge mechanism that matches the layer you want to clear:
+
+| What to purge | How |
+|---------------|-----|
+| Built-in in-process value cache | `store.clear_cache()` (also resets hit/miss/eviction metrics) |
+| Cache for one batch window | `with store.batch_mode(): ...` (clears before *and* after) |
+| Online-store entries (real-time serving) | `store.online_store.delete_online_features(entity_keys, feature_names=None)` |
+| Standalone `FeatureCache` entries | `cache.remove(feature_name, entity_ids=...)`, `cache.cleanup_expired()`, `cache.clear()` |
+
+```python
+# Inspect, then clear the built-in cache.
+print(store.get_cache_stats()["cached_features"])
+store.clear_cache()
+
+# Remove online entries for specific entities (feature_names=None drops the whole key).
+deleted = store.online_store.delete_online_features(entities, feature_names=["account_balance"])
+print("online entries deleted:", deleted)
+```
+
+`get_feature_statistics(feature_name, start_time=None, end_time=None)` returns a
+statistical summary of the offline data, useful for drift monitoring before you
+decide what to purge.
+
+### 5. Integration with training (point-in-time correct)
+
+The store's role in training is to produce **leak-free** feature matrices: for
+every `(entity, event_timestamp)` row in your labelled dataset, retrieve the
+most recent feature value computed *at or before* that timestamp. This is what
+`get_historical_features` does — an as-of join against the offline store:
+
+```python
+# entity_df holds one row per training example with its label-time timestamp.
+entity_df = pd.DataFrame({
+    "entity_id": entities,
+    "timestamp": pd.to_datetime(["2024-02-01"] * len(entities)),
+})
+
+training_matrix = store.get_historical_features(
+    entity_df=entity_df,
+    feature_names=["account_balance"],
+    entity_col="entity_id",
+    timestamp_col="timestamp",
+    # lookback_seconds=86400,   # optional: ignore feature rows older than this
+)
+# -> columns: entity_id, timestamp, account_balance  (NaN where no prior value existed)
+```
+
+`training_matrix` is ready to feed a model (e.g. `X = training_matrix[feature_names]`).
+
+> **Current state / caveat.** As of this writing, the AstroML training pipeline
+> (`astroml/training/`) does **not** yet consume `FeatureStore` automatically —
+> it builds features inline. `get_historical_features` is the integration seam:
+> call it yourself to assemble a training matrix and pass the result into the
+> trainer. This guide documents the API that exists, not an auto-wiring that
+> does not.
+
+---
+
 ## API Reference
 
 ### Core Classes
@@ -804,3 +993,74 @@ with timer("Feature Retrieval"):
 - **StorageFormat**: Storage formats
 
 For detailed API documentation, see the inline documentation in the source code.
+
+## Declarative Feature Builders (YAML) — Issues #742 / #743 / #744
+
+### YAML-configurable builders (#742)
+
+Feature builders can be declared in YAML (see
+[`configs/feature_builders.yaml`](../configs/feature_builders.yaml)) so new
+features are added **without writing code**. Each definition specifies the
+feature name, description, computation primitive, inputs, trailing window,
+output column, and metadata. Built-in primitives: `count`, `sum`, `mean`,
+`max`, `min`, `std`, `unique_count`, `ratio`; custom primitives can be
+supplied at registration time.
+
+```python
+from astroml.features.yaml_builders import (
+    load_feature_builder_specs,
+    register_feature_builder_specs,
+)
+from astroml.features.feature_registry import create_feature_registry
+
+specs = load_feature_builder_specs("configs/feature_builders.yaml")
+registry = create_feature_registry()
+definitions = register_feature_builder_specs(registry, specs)
+```
+
+### Caching expensive features (#743)
+
+`CachedFeatureBuilder` caches computations keyed by
+`(feature, window, data_version, definition_hash, entity)`. A cache hit
+returns instantly; a miss evaluates the primitive and stores the result with a
+configurable TTL. Changing the YAML definition (window/params) changes the
+definition hash, producing a new cache key — stale entries are never read and
+simply expire. Bump `data_version` when the underlying data changes to force a
+full recompute.
+
+```python
+from astroml.features.cached_builders import CachedFeatureBuilder
+from astroml.features.feature_cache import CacheConfig, FeatureCache
+from astroml.features.yaml_builders import FEATURE_PRIMITIVES
+
+builder = CachedFeatureBuilder(
+    cache=FeatureCache(CacheConfig(max_size=10_000, ttl_seconds=3600)),
+    data_version="2026-09-24",
+    primitives=FEATURE_PRIMITIVES,
+)
+
+result = builder.compute(specs[0], rows, entity_id="account_123")
+print(result.value, "cache_hit:", result.cache_hit)
+
+# Force a fresh value (e.g. after backfilling data)
+result = builder.recompute(specs[0], rows, entity_id="account_123")
+```
+
+### Feature importance and selection (#744)
+
+Permutation importance measures how much a scorer degrades when a single
+feature's column is shuffled; it works with any fitted predictor exposing a
+`predict(X) -> array` callable. `select_features` then applies transparent
+filters (variance / missing-rate / correlation, matching the thresholds in
+`configs/feature_engineering.yaml`) and optional importance-based cuts.
+
+```python
+from astroml.features.importance import compute_permutation_importance, select_features
+
+report = compute_permutation_importance(model.predict, X, y, n_repeats=5)
+print(report.top_k(10))
+
+selection = select_features(X, y, predict=model.predict, top_k=30)
+X_selected = selection.transform(X)
+print("dropped:", selection.dropped)
+```

@@ -10,7 +10,7 @@ from typing import Any
 class EvalDataset:
     """Manages test prompt-response pairs for evaluation."""
 
-    def __init__(self, name: str):
+    def __init__(self, name -> Any: str):
         self.name = name
         self.items: list[dict[str, Any]] = []
 

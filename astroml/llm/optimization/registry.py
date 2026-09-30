@@ -48,7 +48,7 @@ class OptimizedModelRegistry:
     Stores model metadata, quality metrics, and deployment compatibility.
     """
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize registry."""
         self._models: dict[str, OptimizedModelEntry] = {}
 

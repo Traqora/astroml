@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Dask-based parallel graph building for large-scale graphs.
 
 This module provides distributed graph building using Dask for graphs
@@ -57,7 +58,7 @@ class DaskGraphBuilder:
         self.memory_limit = memory_limit
         self.client: Client | None = None
 
-    def __enter__(self):
+    def __enter__(self) -> Any:
         """Start Dask cluster."""
         cluster = LocalCluster(
             n_workers=self.n_workers,
@@ -69,7 +70,7 @@ class DaskGraphBuilder:
         logger.info(f"Started Dask cluster: {self.client.dashboard_link}")
         return self
 
-    def __exit__(self, exc_type, _exc_val, _exc_tb):
+    def __exit__(self, exc_type, _exc_val, _exc_tb) -> Any:
         """Stop Dask cluster."""
         if self.client:
             self.client.close()
@@ -111,7 +112,7 @@ class DaskGraphBuilder:
         required_cols = [source_col, target_col] + edge_attrs
 
         # Extract edge tuples
-        def extract_edges(partition):
+        def extract_edges(partition) -> Any:
             """Extract edge tuples from partition."""
             result = []
             for _, row in partition.iterrows():
@@ -172,7 +173,7 @@ class DaskGraphBuilder:
             nodes[i: i + partition_nodes] for i in range(0, n_nodes, partition_nodes)
         ]
 
-        def compute_partition_features(node_list):
+        def compute_partition_features(node_list) -> Any:
             """Compute features for a partition of nodes."""
             features = {}
             for node in node_list:
@@ -180,7 +181,7 @@ class DaskGraphBuilder:
                 for feat_name, feat_func in feature_funcs.items():
                     try:
                         node_features[feat_name] = feat_func(G, node)
-                    except Exception as e:
+                    except AstroMLError as e:
                         logger.warning(f"Error computing {feat_name} for {node}: {e}")
                         node_features[feat_name] = None
                 features[node] = node_features

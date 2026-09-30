@@ -91,13 +91,22 @@ jobs:
 
       - name: Audit requirements.txt
         run: |
-          pip-audit -r requirements.txt --desc on --format columns --severity-filter critical,high
+          # `--severity-filter` is not a pip-audit flag (checked against 2.10.1:
+          # it accepts -r/--requirement, --desc, --format, --output and
+          # --ignore-vuln). argparse therefore bound "critical,high" to the
+          # positional `project_path` and aborted with
+          # "argument project_path: not allowed with argument -r/--requirement"
+          # before auditing anything. pip-audit cannot express a severity
+          # threshold on the CLI, so this gates on every advisory; narrowing it
+          # to critical/high needs either --ignore-vuln entries or a bump of the
+          # offending pins.
+          pip-audit -r requirements.txt --desc on --format columns
         continue-on-error: false
 
       - name: Audit requirements-minimal.txt (if present)
         run: |
           if [ -f requirements-minimal.txt ]; then
-            pip-audit -r requirements-minimal.txt --desc on --format columns --severity-filter critical,high
+            pip-audit -r requirements-minimal.txt --desc on --format columns
           fi
         continue-on-error: true
 

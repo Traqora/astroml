@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Local model provider (Llama, Mistral) with HuggingFace Hub and mock fallbacks."""
 
 import logging
@@ -10,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class LocalProvider(LLMProvider):
-    def __init__(self, api_key: str = "", model: str = "meta-llama/Llama-2-7b-chat-hf"):
+    def __init__(self, api_key -> Any: str = "", model: str = "meta-llama/Llama-2-7b-chat-hf"):
         super().__init__(api_key, model)
 
     def _generate_raw(self, prompt: str, **kwargs: Any) -> str:
@@ -21,7 +22,7 @@ class LocalProvider(LLMProvider):
                 model=kwargs.pop("model", self.model), token=self.api_key or None
             )
             text = client.text_generation(prompt, **kwargs)
-        except Exception as e:
+        except AstroMLError as e:
             logger.warning(
                 f"Failed to use HuggingFace Hub for local model: {e}. Falling back to mock generation."
             )
@@ -48,7 +49,7 @@ class LocalProvider(LLMProvider):
             )
             for token in client.text_generation(prompt, stream=True, **kwargs):
                 yield token
-        except Exception:
+        except AstroMLError:
             yield f"Mock stream from local model {self.model}: {prompt[:30]}"
 
     def embed(self, text: str, **kwargs: Any) -> list[float]:
@@ -60,7 +61,7 @@ class LocalProvider(LLMProvider):
             if isinstance(embedding, list):
                 return [float(x) for x in embedding]
             return [0.0] * 384
-        except Exception:
+        except AstroMLError:
             return [0.0] * 384
 
     def count_tokens(self, text: str) -> int:

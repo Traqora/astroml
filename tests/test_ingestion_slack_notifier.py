@@ -39,6 +39,26 @@ def test_slack_webhook_posted_on_failure(store):
     assert "2 processed" in text
 
 
+def test_fetch_failure_is_recorded_and_notified(store):
+    """Non-AstroML callback failures follow ``ingest``'s result contract."""
+    notifier = MagicMock()
+    service = IngestionService(state_store=store, notifier=notifier)
+
+    def fetch(ledger_id):
+        if ledger_id == 3:
+            raise ConnectionError("Horizon unavailable")
+        return {"ledger": ledger_id}
+
+    result = service.ingest(start_ledger=1, end_ledger=5, fetch_fn=fetch)
+
+    assert result.attempted == [1, 2]
+    assert result.processed == [1, 2]
+    assert result.errors == ["Horizon unavailable"]
+    notifier.assert_called_once()
+    assert "Horizon unavailable" in notifier.call_args.args[0]
+    assert "2 processed" in notifier.call_args.args[0]
+
+
 def test_no_notification_on_success(store):
     notifier = MagicMock()
     service = IngestionService(state_store=store, notifier=notifier)

@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Fraud Detection API endpoints for AstroML.
 
 Provides real-time fraud scoring, paginated alert listing, and

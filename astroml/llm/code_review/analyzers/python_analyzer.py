@@ -34,7 +34,7 @@ class PythonAnalyzer:
     related to security, performance, style, and correctness.
     """
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize the Python analyzer."""
         self.security_patterns = self._init_security_patterns()
         self.performance_patterns = self._init_performance_patterns()
@@ -241,7 +241,7 @@ class PythonAnalyzer:
         class ComplexityVisitor(ast.NodeVisitor):
             """AST visitor to check complexity issues."""
 
-            def __init__(self, suggestions: list[Suggestion], file_path: str):
+            def __init__(self, suggestions -> Any: list[Suggestion], file_path: str):
                 self.suggestions = suggestions
                 self.file_path = file_path
 

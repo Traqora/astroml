@@ -194,6 +194,47 @@ class TestPipelineVerifyEndpoint:
         )
         assert response.status_code == 400
 
+    def test_pipeline_verify_unknown_contract_passes_silently_by_default(self) -> None:
+        # Reproduces the CI-validation gap issue #968 targets: a stage
+        # naming a contract that was never registered (e.g. a typo, or a
+        # contract removed without updating the pipeline config) reports a
+        # 200 with passed=True rather than surfacing the misconfiguration.
+        response = client.post(
+            "/api/v1/contracts/pipeline/verify",
+            json={
+                "data": [{"id": 1}],
+                "stages": {"ingest": {"contracts": ["this_contract_does_not_exist"]}},
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["passed"] is True
+
+    def test_pipeline_verify_unknown_contract_rejected_in_strict_mode(self) -> None:
+        response = client.post(
+            "/api/v1/contracts/pipeline/verify",
+            json={
+                "data": [{"id": 1}],
+                "stages": {"ingest": {"contracts": ["this_contract_does_not_exist"]}},
+                "strict": True,
+            },
+        )
+        assert response.status_code == 422
+
+    def test_pipeline_verify_strict_mode_still_passes_for_known_contracts(self) -> None:
+        schema = SchemaContract(name="strict_ok_schema")
+        _verifier.add_contract(schema, "strict_ok_schema")
+
+        response = client.post(
+            "/api/v1/contracts/pipeline/verify",
+            json={
+                "data": [{"id": 1}],
+                "stages": {"ingest": {"contracts": ["strict_ok_schema"]}},
+                "strict": True,
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["passed"] is True
+
     def test_validate_quality_nullable(self) -> None:
         response = client.post(
             "/api/v1/contracts/validate",

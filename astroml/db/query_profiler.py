@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Database query profiling and slow query detection.
 
 This module provides SQLAlchemy query profiling capabilities including:
@@ -144,7 +145,7 @@ class QueryProfiler:
                 profile.explain_plan = explain_result
 
                 SLOW_QUERY_LOGGER.warning(f"EXPLAIN ANALYZE for slow query:\n{explain_result}")
-            except Exception as e:
+            except AstroMLError as e:
                 SLOW_QUERY_LOGGER.error(f"Failed to run EXPLAIN ANALYZE: {e}")
 
     def _run_explain_analyze(
@@ -166,7 +167,7 @@ class QueryProfiler:
             result = conn.execute(explain_statement, parameters)
             rows = result.fetchall()
             return "\n".join(str(row[0]) for row in rows)
-        except Exception as e:
+        except AstroMLError as e:
             # Fallback to EXPLAIN if ANALYZE fails
             logger.debug(f"EXPLAIN ANALYZE failed, trying EXPLAIN: {e}")
             explain_statement = f"EXPLAIN {statement}"
@@ -259,7 +260,7 @@ def configure_query_logging(
             from astroml.db.session import get_engine
 
             _global_profiler.enable(get_engine())
-        except Exception as e:
+        except AstroMLError as e:
             logger.warning(f"Could not enable profiling on existing engine: {e}")
 
 
@@ -273,7 +274,7 @@ def get_query_profiler() -> QueryProfiler | None:
 
 
 @contextmanager
-def profile_query_context(engine: Engine | None = None):
+def profile_query_context(engine -> Any: Engine | None = None):
     """Context manager for profiling a block of queries.
 
     Args:
@@ -299,14 +300,14 @@ def profile_query_context(engine: Engine | None = None):
             from astroml.db.session import get_engine
 
             engine = get_engine()
-        except Exception as e:
+        except AstroMLError as e:
             logger.warning(f"Could not get engine: {e}")
             yield profiler
             return
 
     try:
         profiler.enable(engine)
-    except Exception as e:
+    except AstroMLError as e:
         logger.warning(f"Could not enable profiler: {e}")
 
     try:
@@ -316,7 +317,7 @@ def profile_query_context(engine: Engine | None = None):
         try:
             event.remove(engine, "before_cursor_execute")
             event.remove(engine, "after_cursor_execute")
-        except Exception:
+        except AstroMLError:
             pass
 
 

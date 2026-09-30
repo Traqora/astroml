@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Feature computation functions for LLM-generated features.
 
 Provides the actual computation logic that calls LLM providers
@@ -29,7 +30,7 @@ def compute_embeddings(
         router = build_default_router()
         embeddings = router.embed(texts, provider=provider, model=model)
         return embeddings
-    except Exception as e:
+    except AstroMLError as e:
         logger.error(f"Embedding computation failed: {e}")
         raise
 
@@ -50,7 +51,7 @@ def compute_fraud_scores(
             response = provider.generate_detailed(prompt, model=model)
             score = _parse_score(response.text)
             scores.append(score)
-        except Exception as e:
+        except AstroMLError as e:
             logger.warning(f"Fraud scoring failed for {row.get(entity_col)}: {e}")
             scores.append(0.5)
 
@@ -73,7 +74,7 @@ def compute_confidence_scores(
             response = provider.generate_detailed(prompt, model=model)
             score = _parse_score(response.text)
             confidence.append(score)
-        except Exception as e:
+        except AstroMLError as e:
             logger.warning(f"Confidence scoring failed for {row.get(entity_col)}: {e}")
             confidence.append(0.0)
 
@@ -98,7 +99,7 @@ def compute_uncertainty(
                 response = provider.generate_detailed(prompt, model=model)
                 score = _parse_score(response.text)
                 samples.append(score)
-            except Exception:
+            except AstroMLError:
                 continue
 
         if samples:

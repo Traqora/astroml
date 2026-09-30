@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """Tests for calibration curve visualization and analysis."""
 
 from __future__ import annotations
@@ -15,17 +16,17 @@ class TestCalibrationAnalyzer:
     """Test suite for CalibrationAnalyzer class."""
 
     @pytest.fixture
-    def analyzer(self):
+    def analyzer(self) -> Any:
         """Create a calibration analyzer instance."""
         return CalibrationAnalyzer(n_bins=10, strategy="uniform")
 
     @pytest.fixture
-    def sample_data(self):
+    def sample_data(self) -> Any:
         """Create sample fraud detection data."""
         return create_sample_fraud_data(n_samples=1000, fraud_rate=0.2)
 
     @pytest.fixture
-    def perfect_data(self):
+    def perfect_data(self) -> Any:
         """Create perfectly calibrated data."""
         np.random.seed(42)
         n_samples = 1000
@@ -34,7 +35,7 @@ class TestCalibrationAnalyzer:
         y_prob = np.clip(y_prob, 0.01, 0.99)
         return y_true, y_prob
 
-    def test_initialization(self):
+    def test_initialization(self) -> Any:
         """Test analyzer initialization."""
         analyzer = CalibrationAnalyzer(n_bins=15, strategy="quantile")
         assert analyzer.n_bins == 15
@@ -42,7 +43,7 @@ class TestCalibrationAnalyzer:
         assert analyzer.calibration_data == {}
         assert analyzer.metrics == {}
 
-    def test_compute_calibration_curve_basic(self, analyzer, sample_data):
+    def test_compute_calibration_curve_basic(self, analyzer, sample_data) -> Any:
         """Test basic calibration curve computation."""
         y_true, y_prob = sample_data
 
@@ -57,7 +58,7 @@ class TestCalibrationAnalyzer:
         assert "fraction_of_positives" in analyzer.calibration_data
         assert "mean_predicted_probability" in analyzer.calibration_data
 
-    def test_compute_calibration_curve_length_mismatch(self, analyzer):
+    def test_compute_calibration_curve_length_mismatch(self, analyzer) -> Any:
         """Test error handling for mismatched input lengths."""
         y_true = np.array([0, 1, 0])
         y_prob = np.array([0.1, 0.8])  # Different length
@@ -65,7 +66,7 @@ class TestCalibrationAnalyzer:
         with pytest.raises(ValueError, match="y_true and y_prob must have the same length"):
             analyzer.compute_calibration_curve(y_true, y_prob)
 
-    def test_compute_calibration_curve_invalid_probabilities(self, analyzer):
+    def test_compute_calibration_curve_invalid_probabilities(self, analyzer) -> Any:
         """Test error handling for invalid probabilities."""
         y_true = np.array([0, 1, 0])
         y_prob = np.array([0.1, 1.5, -0.1])  # Invalid probabilities
@@ -73,7 +74,7 @@ class TestCalibrationAnalyzer:
         with pytest.raises(ValueError, match="y_prob must be between 0 and 1"):
             analyzer.compute_calibration_curve(y_true, y_prob)
 
-    def test_compute_calibration_metrics(self, analyzer, sample_data):
+    def test_compute_calibration_metrics(self, analyzer, sample_data) -> Any:
         """Test calibration metrics computation."""
         y_true, y_prob = sample_data
 
@@ -103,7 +104,7 @@ class TestCalibrationAnalyzer:
         assert metrics["ace"] >= 0
         assert metrics["sharpness"] >= 0
 
-    def test_compute_ece(self, analyzer, sample_data):
+    def test_compute_ece(self, analyzer, sample_data) -> Any:
         """Test Expected Calibration Error computation."""
         y_true, y_prob = sample_data
 
@@ -116,7 +117,7 @@ class TestCalibrationAnalyzer:
         assert isinstance(ece, (int, float))
         assert 0 <= ece <= 1
 
-    def test_compute_mce(self, analyzer, sample_data):
+    def test_compute_mce(self, analyzer, sample_data) -> Any:
         """Test Maximum Calibration Error computation."""
         y_true, y_prob = sample_data
 
@@ -126,7 +127,7 @@ class TestCalibrationAnalyzer:
         assert isinstance(mce, (int, float))
         assert 0 <= mce <= 1
 
-    def test_compute_ace(self, analyzer, sample_data):
+    def test_compute_ace(self, analyzer, sample_data) -> Any:
         """Test Adaptive Calibration Error computation."""
         y_true, y_prob = sample_data
 
@@ -135,7 +136,7 @@ class TestCalibrationAnalyzer:
         assert isinstance(ace, (int, float))
         assert 0 <= ace <= 1
 
-    def test_compute_confidence_metrics(self, analyzer, sample_data):
+    def test_compute_confidence_metrics(self, analyzer, sample_data) -> Any:
         """Test overconfidence and underconfidence metrics."""
         y_true, y_prob = sample_data
 
@@ -147,7 +148,7 @@ class TestCalibrationAnalyzer:
         # Either overconfidence or underconfidence should be zero (or both)
         assert overconf == 0 or underconf == 0
 
-    def test_plot_calibration_curve(self, analyzer, sample_data):
+    def test_plot_calibration_curve(self, analyzer, sample_data) -> Any:
         """Test calibration curve plotting."""
         y_true, y_prob = sample_data
 
@@ -160,7 +161,7 @@ class TestCalibrationAnalyzer:
         # Check that metrics were computed
         assert analyzer.metrics != {}
 
-    def test_plot_multiple_models(self, analyzer):
+    def test_plot_multiple_models(self, analyzer) -> Any:
         """Test multi-model calibration comparison."""
         # Create data for multiple models
         models_data = {
@@ -175,7 +176,7 @@ class TestCalibrationAnalyzer:
         assert isinstance(fig, plt.Figure)
         assert len(fig.axes) == 4
 
-    def test_generate_calibration_report(self, analyzer, sample_data):
+    def test_generate_calibration_report(self, analyzer, sample_data) -> Any:
         """Test calibration report generation."""
         y_true, y_prob = sample_data
 
@@ -188,7 +189,7 @@ class TestCalibrationAnalyzer:
         assert "Expected Calibration Error" in report
         assert "Recommendations" in report
 
-    def test_bin_mask_uniform(self, analyzer):
+    def test_bin_mask_uniform(self, analyzer) -> Any:
         """Test bin mask generation for uniform strategy."""
         y_prob = np.array([0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95])
 
@@ -202,7 +203,7 @@ class TestCalibrationAnalyzer:
         expected = y_prob >= 0.9
         np.testing.assert_array_equal(mask, expected)
 
-    def test_bin_mask_quantile(self):
+    def test_bin_mask_quantile(self) -> Any:
         """Test bin mask generation for quantile strategy."""
         analyzer = CalibrationAnalyzer(n_bins=5, strategy="quantile")
         y_prob = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
@@ -211,7 +212,7 @@ class TestCalibrationAnalyzer:
         mask = analyzer._get_bin_mask(y_prob, 0)
         assert np.sum(mask) == 2  # First two samples in first quantile
 
-    def test_perfect_calibration(self, analyzer, perfect_data):
+    def test_perfect_calibration(self, analyzer, perfect_data) -> Any:
         """Test metrics on perfectly calibrated data."""
         y_true, y_prob = perfect_data
 
@@ -222,7 +223,7 @@ class TestCalibrationAnalyzer:
         assert metrics["ece"] < 0.1
         assert metrics["mce"] < 0.2
 
-    def test_edge_cases(self, analyzer):
+    def test_edge_cases(self, analyzer) -> Any:
         """Test edge cases and boundary conditions."""
         # All same prediction
         y_true = np.array([0, 1, 0, 1])
@@ -250,7 +251,7 @@ class TestCalibrationAnalyzer:
 class TestCreateSampleFraudData:
     """Test suite for sample data generation."""
 
-    def test_basic_generation(self):
+    def test_basic_generation(self) -> Any:
         """Test basic sample data generation."""
         y_true, y_prob = create_sample_fraud_data(n_samples=100, fraud_rate=0.2)
 
@@ -259,14 +260,14 @@ class TestCreateSampleFraudData:
         assert all(0 <= p <= 1 for p in y_prob)
         assert abs(np.mean(y_true) - 0.2) < 0.05  # Within expected range
 
-    def test_different_parameters(self):
+    def test_different_parameters(self) -> Any:
         """Test with different parameters."""
         y_true, y_prob = create_sample_fraud_data(n_samples=50, fraud_rate=0.5)
 
         assert len(y_true) == 50
         assert abs(np.mean(y_true) - 0.5) < 0.1
 
-    def test_reproducibility(self):
+    def test_reproducibility(self) -> Any:
         """Test that data generation is reproducible."""
         y_true1, y_prob1 = create_sample_fraud_data()
         y_true2, y_prob2 = create_sample_fraud_data()
@@ -278,7 +279,7 @@ class TestCreateSampleFraudData:
 class TestIntegration:
     """Integration tests for the calibration module."""
 
-    def test_full_workflow(self):
+    def test_full_workflow(self) -> Any:
         """Test complete calibration analysis workflow."""
         # Create sample data
         y_true, y_prob = create_sample_fraud_data(n_samples=1000)
@@ -306,7 +307,7 @@ class TestIntegration:
         assert len(report) > 100
         assert "Integration Test" in report
 
-    def test_multiple_models_comparison(self):
+    def test_multiple_models_comparison(self) -> Any:
         """Test multi-model comparison workflow."""
         # Generate different quality models
         models_data = {

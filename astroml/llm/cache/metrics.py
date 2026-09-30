@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class CacheMetrics:
     """Tracks cache performance metrics and cost savings."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize metrics tracker."""
         self.hits_by_tier = defaultdict(int)  # tier_name -> count
         self.hits_by_type = defaultdict(int)  # "exact" or "semantic" -> count

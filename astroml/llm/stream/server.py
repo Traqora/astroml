@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 import asyncio
 from collections.abc import AsyncGenerator
 
@@ -6,7 +7,7 @@ from .reconnect import get_reconnection_manager
 
 
 class StreamingServer:
-    def __init__(self):
+    def __init__(self) -> Any:
         pass
 
     async def stream_tokens(

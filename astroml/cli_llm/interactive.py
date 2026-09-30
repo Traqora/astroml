@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Interactive chat mode with streaming support."""
 
 from typing import Any
@@ -53,7 +54,7 @@ def run_chat(
                 for chunk in provider.stream(prompt_text, model=model or None, **kwargs):
                     collected += chunk
                     live.update(Text(collected + "▌"))
-            except Exception as e:
+            except AstroMLError as e:
                 live.update(Text(f"[Error: {e}]", style="red"))
                 break
 

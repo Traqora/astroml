@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Module for downloading historical Stellar ledger data."""
 
 from __future__ import annotations
@@ -67,6 +68,7 @@ class StellarLedgerDownloader:
         end_ledger: int,
         output_dir: str = "data/ledgers",
         format: str = "json",
+        partition_size: int | None = None,
     ) -> None:
         """Download a range of ledgers and save them to disk.
 
@@ -75,6 +77,7 @@ class StellarLedgerDownloader:
             end_ledger: Ending ledger sequence (inclusive).
             output_dir: Directory to save the ledger data.
             format: Output format ("json" or "xdr"). Currently only "json" is fully supported via Horizon.
+            partition_size: Optional number of ledgers per partition directory.
         """
         if format not in ("json", "xdr"):
             raise ValueError(f"Unsupported format: {format}")
@@ -101,14 +104,21 @@ class StellarLedgerDownloader:
                 if seq > end_ledger:
                     break
 
+                if partition_size and partition_size > 0:
+                    partition_dir = path / str((seq // partition_size) * partition_size)
+                    partition_dir.mkdir(parents=True, exist_ok=True)
+                    out_path = partition_dir
+                else:
+                    out_path = path
+
                 if format == "json":
-                    file_path = path / f"ledger_{seq}.json"
+                    file_path = out_path / f"ledger_{seq}.json"
                     file_path.write_text(json.dumps(record, indent=2))
                 elif format == "xdr":
                     # Horizon provides header_xdr and other XDR fields in the JSON response
                     # For a pure XDR download, we'd typically use ledger archives,
                     # but here we save what Horizon provides.
-                    file_path = path / f"ledger_{seq}.xdr"
+                    file_path = out_path / f"ledger_{seq}.xdr"
                     file_path.write_text(record.get("header_xdr", ""))
 
                 cursor = record["paging_token"]
@@ -125,8 +135,13 @@ class StellarLedgerDownloader:
         )
 
 
-async def main():
-    """Simple CLI for the downloader."""
+async def main() -> None:
+    """Command line entry point for the downloader.
+
+    Parses ``--start``/``--end``/``--output``/``--format``, applies the central
+    logging configuration, and runs the download to completion. Intended to be
+    invoked via :func:`asyncio.run` from ``__main__``.
+    """
     import argparse  # noqa: E402
     import sys  # noqa: E402
 
@@ -135,6 +150,7 @@ async def main():
     parser.add_argument("--end", type=int, required=True, help="End ledger sequence")
     parser.add_argument("--output", default="data/ledgers", help="Output directory")
     parser.add_argument("--format", choices=["json", "xdr"], default="json", help="Output format")
+    parser.add_argument("--partition-size", type=int, default=None, help="Number of ledgers per partition directory")
 
     args = parser.parse_args()
 
@@ -146,7 +162,9 @@ async def main():
 
     async with StellarLedgerDownloader() as downloader:
         try:
-            await downloader.download_range(args.start, args.end, args.output, args.format)
+            await downloader.download_range(
+                args.start, args.end, args.output, args.format, args.partition_size
+            )
         except Exception as e:
             logger.error("Download failed: %s", e)
             sys.exit(1)

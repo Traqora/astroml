@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Model invariant definitions and property-based test runner for ML models.
 
 Implements Procedure steps 1 and 3:

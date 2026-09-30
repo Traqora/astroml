@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Cross-validation framework and evaluation engine for AstroML.
 
 Provides comprehensive metric computation, time-series leakage detection,
@@ -99,12 +100,12 @@ def _compute_metrics(
                 metrics["roc_auc"] = float(
                     roc_auc_score(y_true, prob_col, multi_class="ovr" if not is_binary else "raise")
                 )
-            except Exception:
+            except AstroMLError:
                 pass
         if "log_loss" in requested:
             try:
                 metrics["log_loss"] = float(log_loss(y_true, y_prob))
-            except Exception:
+            except AstroMLError:
                 pass
 
     return metrics

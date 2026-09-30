@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 from __future__ import annotations
 
 import logging

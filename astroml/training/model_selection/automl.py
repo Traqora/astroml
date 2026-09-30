@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """AutoML model selection pipeline.
 
 Searches a pool of candidate models under computational budget
@@ -131,7 +132,7 @@ class AutoMLPipeline:
                 )[0]
                 results.append(result)
                 searched += 1
-            except Exception:
+            except AstroMLError:
                 continue
 
         ranked = benchmark.compare(results)

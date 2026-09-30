@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Tool execution engine with timeout, retry, and output limits."""
 
 import asyncio
@@ -86,7 +87,7 @@ class ToolExecutor:
                 continue
             except ValidationError:
                 raise
-            except Exception as e:
+            except AstroMLError as e:
                 last_error = ToolExecutionError(f"Tool '{tool_name}' failed: {e}")
                 logger.warning("Tool %s failed (attempt %d): %s", tool_name, attempt + 1, e)
                 if attempt < MAX_RETRIES:

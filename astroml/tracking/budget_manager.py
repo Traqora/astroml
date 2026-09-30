@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Budget definition, enforcement and alerting for ML spend.
 
 Resolves part of #647.
@@ -368,7 +369,7 @@ class BudgetManager:
         for callback in subscribers:
             try:
                 callback(alert)
-            except Exception:  # pragma: no cover - defensive
+            except AstroMLError:  # pragma: no cover - defensive
                 logger.exception("budget alert subscriber failed")
 
 

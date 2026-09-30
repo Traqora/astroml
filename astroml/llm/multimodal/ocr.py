@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """
 Optical Character Recognition (OCR) for document and image text extraction.
 
@@ -27,7 +28,7 @@ class OCRConfig:
     preprocess: bool = True
     use_cache: bool = True
 
-    def __post_init__(self):
+    def __post_init__(self) -> Any:
         if self.languages is None:
             self.languages = ["eng"]
 
@@ -35,7 +36,7 @@ class OCRConfig:
 class OCRResult:
     """Result from OCR processing."""
 
-    def __init__(self, text: str, confidence: float, layout: dict | None = None):
+    def __init__(self, text -> Any: str, confidence: float, layout: dict | None = None):
         """
         Initialize OCR result.
 
@@ -64,7 +65,7 @@ class OCRProcessor:
     Targets >95% text extraction accuracy for common document types.
     """
 
-    def __init__(self, config: OCRConfig | None = None):
+    def __init__(self, config -> Any: OCRConfig | None = None):
         """Initialize OCR processor."""
         self.config = config or OCRConfig()
         self._cache = {}

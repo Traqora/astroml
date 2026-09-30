@@ -82,9 +82,7 @@ class TestBruteForceProtector:
         assert removed == 1
 
     def test_window_resets_count(self):
-        protector = BruteForceProtector(
-            max_failed_attempts=3, window_seconds=0, lockout_seconds=60
-        )
+        protector = BruteForceProtector(max_failed_attempts=3, window_seconds=0, lockout_seconds=60)
         protector.record_failure("user1")
         protector.record_failure("user1")
         time.sleep(0.01)
@@ -184,7 +182,7 @@ class TestSecurityHeadersMiddleware:
         from starlette.requests import Request
         from starlette.responses import PlainTextResponse
 
-        middleware = SecurityHeadersMiddleware()
+        middleware = SecurityHeadersMiddleware(None)
 
         async def call_next(request: Request):
             return PlainTextResponse("ok")
@@ -197,7 +195,7 @@ class TestSecurityHeadersMiddleware:
             "query_string": b"",
         }
         request = Request(scope)
-        response = await middleware(request, call_next)
+        response = await middleware.dispatch(request, call_next)
 
         assert response.headers["X-Content-Type-Options"] == "nosniff"
         assert response.headers["X-Frame-Options"] == "DENY"
@@ -213,9 +211,7 @@ class TestPublicRateLimitMiddleware:
         from starlette.requests import Request
         from starlette.responses import PlainTextResponse
 
-        middleware = PublicRateLimitMiddleware(
-            None, requests_per_minute=1, burst_size=1
-        )
+        middleware = PublicRateLimitMiddleware(None, requests_per_minute=1, burst_size=1)
 
         async def call_next(request: Request):
             return PlainTextResponse("ok")
@@ -229,7 +225,7 @@ class TestPublicRateLimitMiddleware:
             "client": ("127.0.0.1", 8000),
         }
         request = Request(scope)
-        response = await middleware(request, call_next)
+        response = await middleware.dispatch(request, call_next)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
@@ -237,9 +233,7 @@ class TestPublicRateLimitMiddleware:
         from starlette.requests import Request
         from starlette.responses import PlainTextResponse
 
-        middleware = PublicRateLimitMiddleware(
-            None, requests_per_minute=2, burst_size=2
-        )
+        middleware = PublicRateLimitMiddleware(None, requests_per_minute=2, burst_size=2)
 
         async def call_next(request: Request):
             return PlainTextResponse("ok")
@@ -254,9 +248,9 @@ class TestPublicRateLimitMiddleware:
         }
         request = Request(scope)
 
-        response1 = await middleware(request, call_next)
-        response2 = await middleware(request, call_next)
-        response3 = await middleware(request, call_next)
+        response1 = await middleware.dispatch(request, call_next)
+        response2 = await middleware.dispatch(request, call_next)
+        response3 = await middleware.dispatch(request, call_next)
 
         assert response1.status_code == 200
         assert response2.status_code == 200
@@ -268,9 +262,7 @@ class TestPublicRateLimitMiddleware:
         from starlette.requests import Request
         from starlette.responses import PlainTextResponse
 
-        middleware = PublicRateLimitMiddleware(
-            None, requests_per_minute=1, burst_size=1
-        )
+        middleware = PublicRateLimitMiddleware(None, requests_per_minute=1, burst_size=1)
 
         async def call_next(request: Request):
             return PlainTextResponse("ok")
@@ -286,5 +278,29 @@ class TestPublicRateLimitMiddleware:
         request = Request(scope)
 
         for _ in range(10):
-            response = await middleware(request, call_next)
+            response = await middleware.dispatch(request, call_next)
             assert response.status_code == 200
+
+
+class TestMiddlewareStackBuilds:
+    def test_starlette_can_construct_and_run_both(self):
+        """Regression: Starlette builds the stack lazily, on the first request,
+        as ``cls(app, **options)``. A middleware it cannot construct therefore
+        surfaces as a 500 on every route rather than an import or startup error,
+        so only an end-to-end request catches it. Mirrors the ``add_middleware``
+        calls in ``api/app.py``.
+        """
+        from fastapi.testclient import TestClient
+        from starlette.applications import Starlette
+        from starlette.responses import PlainTextResponse
+        from starlette.routing import Route
+
+        app = Starlette(routes=[Route("/probe", lambda r: PlainTextResponse("ok"))])
+        app.add_middleware(SecurityHeadersMiddleware)
+        app.add_middleware(PublicRateLimitMiddleware, requests_per_minute=30, burst_size=10)
+
+        response = TestClient(app).get("/probe")
+
+        assert response.status_code == 200
+        assert response.headers["X-Content-Type-Options"] == "nosniff"
+        assert response.headers["X-Frame-Options"] == "DENY"

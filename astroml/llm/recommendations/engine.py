@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Recommendation engine for LLM-based recommendations (issue #474)."""
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 class RecommendationEngine:
     """Orchestrates recommendation generation and ranking."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize recommendation engine."""
         self.profiler = UserProfiler()
         self.ranker = RecommendationRanker()
@@ -68,7 +69,7 @@ class RecommendationEngine:
             try:
                 recommendations = generator.generate(context)
                 all_recommendations.extend(recommendations)
-            except Exception as e:
+            except AstroMLError as e:
                 logger.error(f"Generator error: {e}")
 
         # Deduplicate

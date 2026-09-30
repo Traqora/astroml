@@ -31,6 +31,7 @@ import json
 import math
 import re
 from abc import ABC, abstractmethod
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field, replace
 from typing import (
     Any,
@@ -98,6 +99,38 @@ def estimate_messages_tokens(
     return sum(
         estimate_message_tokens(message, estimator=estimator) for message in messages
     )
+
+
+def estimate_messages_tokens_parallel(
+    messages: Sequence[Message],
+    *,
+    estimator: Callable[[str], int] = estimate_tokens,
+    max_workers: Optional[int] = None,
+) -> int:
+    """Approximate the tokens a whole prompt costs using parallel processing.
+
+    Uses ThreadPoolExecutor to parallelize token estimation across messages.
+    Beneficial for large message counts where estimation becomes CPU-bound.
+
+    Args:
+        messages: Sequence of messages to estimate.
+        estimator: Token estimation function.
+        max_workers: Maximum number of worker threads. Defaults to CPU count.
+
+    Returns:
+        Total estimated tokens for all messages.
+    """
+    if not messages:
+        return 0
+    if len(messages) < 10:  # Threshold below which overhead outweighs benefits
+        return estimate_messages_tokens(messages, estimator=estimator)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [
+            executor.submit(estimate_message_tokens, message, estimator=estimator)
+            for message in messages
+        ]
+        return sum(future.result() for future in as_completed(futures))
 
 
 def truncate_text(
@@ -225,6 +258,63 @@ def compress_text(
     return truncate_text(text, limit, estimator=estimator)
 
 
+def compress_text_batch(
+    texts: Sequence[str],
+    *,
+    limit: int,
+    json_max_items: int = 20,
+    json_max_string: int = 200,
+    estimator: Callable[[str], int] = estimate_tokens,
+    max_workers: Optional[int] = None,
+) -> List[str]:
+    """Compress multiple texts in parallel.
+
+    Uses ThreadPoolExecutor to parallelize text compression across multiple
+    observations. Beneficial for batch processing of tool outputs.
+
+    Args:
+        texts: Sequence of texts to compress.
+        limit: Token limit for each text.
+        json_max_items: Items kept from long JSON arrays.
+        json_max_string: Characters kept from long JSON strings.
+        estimator: Token estimation function.
+        max_workers: Maximum number of worker threads.
+
+    Returns:
+        List of compressed texts in the same order as input.
+    """
+    if not texts:
+        return []
+    if len(texts) < 5:  # Threshold below which overhead outweighs benefits
+        return [
+            compress_text(
+                text,
+                limit=limit,
+                json_max_items=json_max_items,
+                json_max_string=json_max_string,
+                estimator=estimator,
+            )
+            for text in texts
+        ]
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(
+                compress_text,
+                text,
+                limit=limit,
+                json_max_items=json_max_items,
+                json_max_string=json_max_string,
+                estimator=estimator,
+            ): idx
+            for idx, text in enumerate(texts)
+        }
+        results = [None] * len(texts)
+        for future in as_completed(futures):
+            results[futures[future]] = future.result()
+        return results
+
+
 _TRAILING_WHITESPACE = re.compile(r"[ \t]+\n")
 _BLANK_LINES = re.compile(r"\n{3,}")
 
@@ -281,6 +371,11 @@ class CompressionConfig:
         summary_max_items: Digest lines kept by :func:`extractive_summary`.
         min_savings_tokens: Return the original prompt unchanged unless
             compression saves at least this many tokens.
+        parallel_threshold: Minimum number of messages required to enable
+            parallel processing. Below this threshold, sequential processing
+            is used to avoid overhead.
+        max_workers: Maximum number of worker threads for parallel operations.
+            ``None`` uses the CPU count.
     """
 
     max_prompt_tokens: Optional[int] = None
@@ -294,6 +389,8 @@ class CompressionConfig:
     summarize_older: bool = True
     summary_max_items: int = 12
     min_savings_tokens: int = 0
+    parallel_threshold: int = 10
+    max_workers: Optional[int] = None
 
     def __post_init__(self) -> None:
         if self.max_prompt_tokens is not None and self.max_prompt_tokens < 1:
@@ -321,6 +418,10 @@ class CompressionConfig:
             raise ValueError("summary_max_items must be >= 1")
         if self.min_savings_tokens < 0:
             raise ValueError("min_savings_tokens must be >= 0")
+        if self.parallel_threshold < 0:
+            raise ValueError("parallel_threshold must be >= 0")
+        if self.max_workers is not None and self.max_workers < 1:
+            raise ValueError("max_workers must be >= 1 when provided")
 
     @property
     def prompt_budget(self) -> Optional[int]:
@@ -807,6 +908,12 @@ class PromptCompressor:
 
     def estimate(self, messages: Sequence[Message]) -> int:
         """Estimated tokens of *messages* under the configured estimator."""
+        if len(messages) >= self.config.parallel_threshold:
+            return estimate_messages_tokens_parallel(
+                messages,
+                estimator=self.estimator,
+                max_workers=self.config.max_workers,
+            )
         return estimate_messages_tokens(messages, estimator=self.estimator)
 
     def summarizer(
@@ -950,8 +1057,10 @@ __all__ = [
     "ToolOutputCompressor",
     "WhitespaceNormalizer",
     "compress_text",
+    "compress_text_batch",
     "estimate_message_tokens",
     "estimate_messages_tokens",
+    "estimate_messages_tokens_parallel",
     "estimate_tokens",
     "extractive_summary",
     "group_messages",

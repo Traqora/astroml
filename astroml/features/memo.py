@@ -90,6 +90,20 @@ def extract_memo_features(
 
     Raises:
         KeyError: If memo_col not in df.
+
+    Examples:
+        >>> import pandas as pd
+        >>> df = pd.DataFrame({"memo": [
+        ...     {"type": "text", "value": "hi"},
+        ...     {"type": "id", "value": "7"},
+        ... ]})
+        >>> out = extract_memo_features(df)
+        >>> [c for c in out.columns if c.startswith("memo_")]
+        ['memo_type', 'memo_value', 'memo_length', 'memo_is_malformed']
+        >>> out["memo_type"].tolist()
+        ['text', 'id']
+        >>> out["memo_length"].tolist()
+        [2, 0]
     """
     if memo_col not in df:
         raise KeyError(f"DataFrame must contain '{memo_col}' column")

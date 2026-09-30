@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """FastAPI router for automated data profiling and exploratory analysis."""
 
 from __future__ import annotations

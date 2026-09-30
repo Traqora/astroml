@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Auto-scaling controller for model serving infrastructure.
 
 Issue #639 Step 1 & 5: Implements metrics-based autoscaling and
@@ -271,7 +272,7 @@ class Autoscaler:
         if self._metrics_provider:
             try:
                 metrics = self._metrics_provider()
-            except Exception as e:
+            except AstroMLError as e:
                 logger.warning(f"Metrics provider failed: {e}")
                 metrics = {}
         else:
@@ -362,7 +363,7 @@ class Autoscaler:
                 success = self._scale_callback(new_replicas)
                 if not success:
                     logger.error(f"Scale callback failed for {new_replicas} replicas")
-            except Exception as e:
+            except AstroMLError as e:
                 logger.error(f"Scale callback error: {e}")
 
         logger.info(

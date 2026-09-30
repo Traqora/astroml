@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """
 Multimodal prompt templates for vision and document analysis tasks.
 
@@ -98,7 +99,7 @@ Keep summary concise but comprehensive.""",
 Output as clean, readable text.""",
     }
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize prompt builder."""
         pass
 

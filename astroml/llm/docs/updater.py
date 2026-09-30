@@ -1,3 +1,5 @@
+from typing import Any, Dict, List, Optional, Union, Callable
+from astroml.utils.exceptions import AstroMLError
 """
 Documentation updater for maintaining sync with code.
 
@@ -88,7 +90,7 @@ class DocumentationUpdater:
     - Handles merge conflicts
     """
 
-    def __init__(self, metadata_dir: str = ".doc_metadata"):
+    def __init__(self, metadata_dir -> Any: str = ".doc_metadata"):
         """
         Initialize the documentation updater.
 
@@ -170,7 +172,7 @@ class DocumentationUpdater:
             result.updated_files.append(doc_path)
             result.changes_made = f"Updated documentation from {len(source_paths)} source file(s)"
 
-        except Exception as e:
+        except AstroMLError as e:
             result.success = False
             result.errors.append(str(e))
 
@@ -204,7 +206,7 @@ class DocumentationUpdater:
                 if metadata.hash != current_hash:
                     outdated.append(metadata.file_path)
 
-            except Exception as e:
+            except AstroMLError as e:
                 print(f"Error checking metadata {metadata_file}: {e}")
 
         return outdated
@@ -264,7 +266,7 @@ class DocumentationUpdater:
         try:
             with open(metadata_file) as f:
                 return DocMetadata.from_dict(json.load(f))
-        except Exception:
+        except AstroMLError:
             return None
 
     def _save_metadata(self, metadata: DocMetadata) -> None:

@@ -44,7 +44,7 @@ This guide provides comprehensive instructions for setting up, developing, train
 ### 1. Clone and Setup
 
 ```bash
-git clone https://github.com/Menjay7/astroml.git
+git clone https://github.com/Traqora/astroml.git
 cd astroml
 
 cp .env.example .env
@@ -643,8 +643,8 @@ done
 ## Support
 
 For issues or questions:
-- GitHub Issues: https://github.com/jaynomyaro/astroml/issues
-- Documentation: https://github.com/jaynomyaro/astroml/docs
+- GitHub Issues: https://github.com/Traqora/astroml/issues
+- Documentation: https://github.com/Traqora/astroml/docs
 - Docker Documentation: https://docs.docker.com
 
 docker run --rm \

@@ -11,9 +11,15 @@ import numpy as np
 
 
 class TemporalDecayWeighter:
-    """Apply exponential decay to transaction weights based on recency."""
+    """Apply exponential decay to transaction weights based on recency.
 
-    def __init__(self, lambda_param: float = 0.01):
+    Examples:
+        >>> weighter = TemporalDecayWeighter(lambda_param=0.1)
+        >>> round(weighter.compute_decay_factor(10.0), 4)
+        0.3679
+    """
+
+    def __init__(self, lambda_param -> Any: float = 0.01):
         """Initialize temporal decay weighter.
 
         Args:
@@ -32,6 +38,15 @@ class TemporalDecayWeighter:
 
         Returns:
             Decay factor in (0, 1]
+
+        Examples:
+            >>> weighter = TemporalDecayWeighter(lambda_param=0.1)
+            >>> weighter.compute_decay_factor(0.0)
+            1.0
+            >>> round(weighter.compute_decay_factor(10.0), 4)
+            0.3679
+            >>> weighter.compute_decay_factor(-3.0)  # future events are not decayed
+            1.0
         """
         if time_delta < 0:
             return 1.0
@@ -52,6 +67,12 @@ class TemporalDecayWeighter:
 
         Returns:
             List of decay weights corresponding to transactions
+
+        Examples:
+            >>> weighter = TemporalDecayWeighter(lambda_param=0.1)
+            >>> txns = [{"timestamp": 100.0}, {"timestamp": 90.0}]
+            >>> [round(w, 4) for w in weighter.weight_transactions(txns, 100.0)]
+            [1.0, 0.3679]
         """
         weights = []
         for txn in transactions:
@@ -70,6 +91,11 @@ class TemporalDecayWeighter:
 
         Returns:
             Decayed amount
+
+        Examples:
+            >>> weighter = TemporalDecayWeighter(lambda_param=0.1)
+            >>> round(weighter.apply_decay_to_amount(200.0, 10.0), 4)
+            73.5759
         """
         decay_factor = self.compute_decay_factor(time_delta)
         return amount * decay_factor
@@ -93,6 +119,15 @@ class TemporalDecayWeighter:
 
         Returns:
             Aggregated decayed amount
+
+        Examples:
+            >>> weighter = TemporalDecayWeighter(lambda_param=0.1)
+            >>> txns = [
+            ...     {"amount": 100.0, "timestamp": 100.0},
+            ...     {"amount": 100.0, "timestamp": 90.0},
+            ... ]
+            >>> round(weighter.aggregate_with_decay(txns, 100.0), 4)
+            136.7879
         """
         if not transactions:
             return 0.0
@@ -137,6 +172,12 @@ def compute_decay_weights(
 
     Returns:
         NumPy array of decay factors
+
+    Examples:
+        >>> txns = [{"timestamp": 100.0}, {"timestamp": 90.0}]
+        >>> weights = compute_decay_weights(txns, current_time=100.0, lambda_param=0.1)
+        >>> [round(float(w), 4) for w in weights]
+        [1.0, 0.3679]
     """
     weighter = TemporalDecayWeighter(lambda_param)
     weights = weighter.weight_transactions(transactions, current_time, timestamp_key)

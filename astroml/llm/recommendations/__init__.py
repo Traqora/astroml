@@ -12,7 +12,7 @@ Components:
 
 from __future__ import annotations
 
-from .engine import RecommendationEngine
+from .engine import RecommendationEngine, recommendation_engine
 from .generators import (
     FeatureRecommendationGenerator,
     InsightGenerator,
@@ -20,13 +20,16 @@ from .generators import (
     QuerySuggestionGenerator,
     RecommendationGenerator,
 )
-from .profiler import UserProfile, UserProfiler
+from .profiler import ActivityType, UserProfile, UserProfiler, UserRole
 from .ranker import RecommendationRanker
 
 __all__ = [
     "RecommendationEngine",
+    "recommendation_engine",
     "UserProfile",
     "UserProfiler",
+    "UserRole",
+    "ActivityType",
     "RecommendationRanker",
     "RecommendationGenerator",
     "FeatureRecommendationGenerator",

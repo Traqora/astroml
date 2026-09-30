@@ -1,14 +1,15 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 import time
 
 
 class EvictionPolicy:
-    def __init__(self, max_size: int = 100, strategy: str = "LRU"):
+    def __init__(self, max_size -> Any: int = 100, strategy: str = "LRU"):
         self.max_size = max_size
         self.strategy = strategy.upper()  # "LRU" or "LFU"
         # Key -> last_accessed or access_count
         self.meta: dict[str, float] = {}
 
-    def record_access(self, key: str):
+    def record_access(self, key -> Any: str):
         if self.strategy == "LRU":
             self.meta[key] = time.time()
         elif self.strategy == "LFU":
@@ -30,6 +31,6 @@ class EvictionPolicy:
 
         return target_key
 
-    def evict_key(self, key: str):
+    def evict_key(self, key -> Any: str):
         if key in self.meta:
             del self.meta[key]

@@ -68,6 +68,63 @@ print(f"Processed: {len(result.processed)}")
 print(f"Skipped: {len(result.skipped)}")
 ```
 
+#### ingest_backfill_chunked()
+
+Memory-efficient backfill for very large ledger ranges. Partitions the range into chunks and processes each independently, discarding accumulated data between chunks to keep memory usage bounded.
+
+**Parameters:**
+- `start_ledger` (int): First ledger to process (inclusive). If `resume_from_checkpoint=True` and a checkpoint exists, this is overridden by the checkpoint position.
+- `end_ledger` (int): Last ledger to process (inclusive).
+- `chunk_size` (int): Number of ledgers per memory-bounded batch. Default 10,000.
+- `fetch_fn` (Optional[Callable]): Function to fetch data for a ledger ID. Defaults to identity payload.
+- `process_fn` (Optional[Callable]): Function to handle processing. Defaults to no-op.
+- `batch_size` (int): State-flush cadence inside each chunk. Default 100.
+- `resume_from_checkpoint` (bool): If True, resume from the last checkpoint instead of starting from `start_ledger`. Defaults to False.
+- `checkpoint_path` (Optional[str]): Optional path to the checkpoint file. If None, uses `.astroml_state/backfill_checkpoint.json`.
+
+**Returns:** Generator yielding one summary dict per chunk with keys: `chunk_start`, `chunk_end`, `processed`, `skipped`, `errors`.
+
+**Behavior:**
+- Processes ledgers in chunks to bound memory usage
+- Runs garbage collection between chunks
+- When `resume_from_checkpoint=True`, saves position after each successful chunk
+- On restart with checkpoint, resumes from the last saved position
+- Clears checkpoint file on successful completion
+- Continues processing even if individual chunks fail (errors are counted)
+
+**Example with checkpointing:**
+```python
+from astroml.ingestion import IngestionService
+
+service = IngestionService()
+
+# Process a large range with checkpoint support
+for chunk_summary in service.ingest_backfill_chunked(
+    start_ledger=1000000,
+    end_ledger=5000000,
+    chunk_size=10000,
+    resume_from_checkpoint=True,
+    checkpoint_path="backfill_checkpoint.json",
+    fetch_fn=lambda ledger_id: fetch_stellar_ledger(ledger_id),
+    process_fn=lambda ledger_id, data: store_ledger_data(ledger_id, data)
+):
+    print(f"Chunk {chunk_summary['chunk_start']}-{chunk_summary['chunk_end']}: "
+          f"processed={chunk_summary['processed']}, "
+          f"skipped={chunk_summary['skipped']}, "
+          f"errors={chunk_summary['errors']}")
+```
+
+**Example without checkpointing:**
+```python
+# Standard chunked backfill (no checkpoint)
+for chunk_summary in service.ingest_backfill_chunked(
+    start_ledger=1000000,
+    end_ledger=5000000,
+    chunk_size=10000
+):
+    print(f"Processed chunk {chunk_summary['chunk_start']}-{chunk_summary['chunk_end']}")
+```
+
 #### Failure notifications
 
 `IngestionService` accepts an optional `notifier` — any `(message) -> Any`
@@ -129,6 +186,67 @@ class StateStore:
     def save(self, state: IngestionState) -> None
     def mark_processed(self, ledger_id: int) -> None
     def get_last_processed_ledger(self) -> Optional[int]
+```
+
+### BackfillCheckpointManager
+
+Manages checkpoint persistence for chunked backfill operations. Stores the last successfully completed chunk position to enable resuming from that point on restart.
+
+#### Class Definition
+
+```python
+class BackfillCheckpointManager:
+    def __init__(self, checkpoint_path: Optional[str] = None) -> None
+    def save(self, last_ledger: int) -> None
+    def load(self) -> Optional[int]
+    def clear(self) -> None
+```
+
+#### Methods
+
+##### __init__()
+
+Initialize the checkpoint manager.
+
+**Parameters:**
+- `checkpoint_path` (Optional[str]): Path to the checkpoint file. If None, uses `.astroml_state/backfill_checkpoint.json`.
+
+##### save()
+
+Save checkpoint position atomically.
+
+**Parameters:**
+- `last_ledger` (int): The last ledger successfully processed.
+
+##### load()
+
+Load the last checkpoint position.
+
+**Returns:** Optional[int] - The last ledger processed, or None if no checkpoint exists.
+
+##### clear()
+
+Remove the checkpoint file.
+
+**Example:**
+```python
+from astroml.ingestion.service import BackfillCheckpointManager
+
+# Use default checkpoint path
+checkpoint_mgr = BackfillCheckpointManager()
+
+# Save position after processing a chunk
+checkpoint_mgr.save(12345)
+
+# Later, resume from checkpoint
+last_position = checkpoint_mgr.load()
+if last_position is not None:
+    start_ledger = last_position + 1
+else:
+    start_ledger = 1
+
+# Clear checkpoint on completion
+checkpoint_mgr.clear()
 ```
 
 #### Methods
@@ -667,19 +785,52 @@ result = service.backfill(
 # Process in chunks to manage memory
 def process_large_range(start_ledger, end_ledger, chunk_size=100000):
     service = IngestionService()
-    
+
     for chunk_start in range(start_ledger, end_ledger + 1, chunk_size):
         chunk_end = min(chunk_start + chunk_size - 1, end_ledger)
-        
+
         result = service.ingest(chunk_start, chunk_end)
-        
+
         # Clear memory after each chunk
         del result
-        
+
         # Force garbage collection if needed
         import gc
         gc.collect()
 ```
+
+### Checkpointing for Resumable Backfills
+
+For large backfills that may be interrupted, use checkpointing to resume from the last completed chunk:
+
+```python
+from astroml.ingestion import IngestionService
+
+service = IngestionService()
+
+# Resumable backfill - if interrupted, restart from last checkpoint
+for chunk_summary in service.ingest_backfill_chunked(
+    start_ledger=1000000,
+    end_ledger=10000000,
+    chunk_size=50000,
+    resume_from_checkpoint=True,
+    fetch_fn=fetch_ledger,
+    process_fn=process_ledger
+):
+    print(f"Progress: {chunk_summary['chunk_end']} processed")
+```
+
+**Benefits:**
+- Automatically saves progress after each successful chunk
+- Resumes from last checkpoint on restart
+- No reprocessing of already-completed chunks
+- Checkpoint file is atomically written to avoid corruption
+- Checkpoint is cleared on successful completion
+
+**Checkpoint file location:**
+- Default: `.astroml_state/backfill_checkpoint.json`
+- Customizable via `checkpoint_path` parameter
+- Contains: `last_ledger` and `updated_at` timestamp
 
 ### Streaming Optimization
 

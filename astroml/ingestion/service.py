@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Ingestion service for processing Stellar network ledgers.
 
 This module provides the core ingestion service for processing Stellar ledger data
@@ -196,7 +195,10 @@ class IngestionService(Ingestor):
         callers that rely on the full id lists.
 
         Returns:
-            IngestionResult with timestamps and error tracking (issue #573)
+            IngestionResult with timestamps and error tracking (issue #573).
+            Failures raised by either caller-provided callback are captured in
+            ``errors`` and reported through ``notifier`` when configured;
+            already completed ledgers remain listed in ``processed``.
 
         Args:
             start_ledger: Starting ledger id (inclusive). If None, resume from
@@ -227,10 +229,14 @@ class IngestionService(Ingestor):
                     processed.append(ledger_id)
                 else:
                     skipped.append(ledger_id)
-        except AstroMLError as e:
-            errors.append(str(e))
-            logger.error(f"Ingestion error: {e}")
-            self._notify_failure(e, attempted, processed)
+        except Exception as exc:
+            # ``fetch_fn`` and ``process_fn`` are caller-provided callbacks,
+            # so failures are not limited to AstroML's exception hierarchy.
+            # Preserve ``ingest``'s result-returning contract for all callback
+            # failures and make sure its notifier sees the same failure.
+            errors.append(str(exc))
+            logger.error("Ingestion error: %s", exc)
+            self._notify_failure(exc, attempted, processed)
 
         end_time = datetime.utcnow()
 

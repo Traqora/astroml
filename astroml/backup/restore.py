@@ -274,7 +274,7 @@ class RestoreService:
 
         base_allowed = Path(self.config.model_artifacts_dir).resolve()
         target_path = (Path(target_dir or self.config.model_artifacts_dir)).resolve()
-        if not str(target_path).startswith(str(base_allowed)):
+        if target_path != base_allowed and base_allowed not in target_path.parents:
             logger.error(f"Invalid target directory: {target_dir}")
             return False
         target_path.mkdir(parents=True, exist_ok=True)
@@ -295,7 +295,10 @@ class RestoreService:
                         member_path = (target_path / member.name).resolve()
                         if member_path != target_path and target_path not in member_path.parents:
                             raise ValueError(f"Invalid archive member path: {member.name}")
-                    tar.extractall(path=target_path)
+                    # Defence in depth: the "data" filter (PEP 706) additionally
+                    # rejects symlink/hardlink members and special files that
+                    # could write outside target_path despite the checks above.
+                    tar.extractall(path=target_path, filter="data")
 
             logger.info(f"Model artifacts restored successfully from backup: {backup_id}")
             return True

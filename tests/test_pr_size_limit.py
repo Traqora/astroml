@@ -82,7 +82,12 @@ class TestPullRequestStats:
 class TestExemptions:
     @pytest.mark.parametrize(
         "title",
-        ["[large PR] migrate schema", "chore: vendor deps [LARGE PR]"],
+        [
+            "[large PR] migrate schema",
+            "chore: vendor deps [LARGE PR]",
+            "feat(llm): autonomous agents [Large Pr] - batch 1",
+            "[large pr]: initial framework baseline",
+        ],
     )
     def test_title_exemption_is_case_insensitive(self, title: str) -> None:
         assert is_exempt(title) is True
@@ -90,11 +95,17 @@ class TestExemptions:
     def test_title_without_token_is_not_exempt(self) -> None:
         assert is_exempt("feat: a large pull request") is False
 
+    def test_empty_title_is_not_exempt(self) -> None:
+        assert is_exempt("") is False
+
     def test_large_refactor_label_detected(self) -> None:
         assert has_large_refactor_label([" Refactor:Large "]) is True
 
     def test_missing_large_refactor_label(self) -> None:
         assert has_large_refactor_label(["bug", "api"]) is False
+
+    def test_empty_labels_not_detected(self) -> None:
+        assert has_large_refactor_label([]) is False
 
 
 class TestThresholds:

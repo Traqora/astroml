@@ -34,6 +34,14 @@ Use built-in parameterized generics where possible (`dict[str, Any]`, `list[str]
   enforce the repository's docstring coverage floor before submitting.
 - Keep functions small and testable.
 
+## Pull Request Size & Exemption Policy
+
+Pull requests should be kept reviewable: **≤ 1000 lines changed** and **≤ 10 files changed**. An automated soft check evaluates each PR and posts a warning comment if exceeded (CI is not failed).
+
+- **Large refactors**: Planned mechanical refactors may use the `refactor:large` label to raise the file limit to 50 files.
+- **Title exemption**: In cases where a cohesive subsystem, third-party vendoring, or database baseline cannot be split without breaking atomic changes, authors may include `[large PR]` in the PR title along with an architectural justification in the description.
+- See full details in [docs/PR_SIZE_LIMITS.md](docs/PR_SIZE_LIMITS.md).
+
 ## Contributor Roadmap
 
 New contributor? Start with [docs/contributor-roadmap.md](docs/contributor-roadmap.md):

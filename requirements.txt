@@ -31,6 +31,7 @@ hydra-core>=1.3.0
 omegaconf>=2.3.0
 
 # ── Security ────────────────────────────────────────────────────────────────
+# astroml.backup.encryption (#958) — Fernet encryption-at-rest for backup archives.
 cryptography>=42.0.0
 
 # ── Networking / ingestion ─────────────────────────────────────────────────

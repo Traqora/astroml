@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Backup service for database and model artifacts (issue #304)."""
 
 from __future__ import annotations
@@ -9,14 +8,13 @@ import json
 import logging
 import os
 import subprocess
-import tarfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from .encryption import encrypt_backup_file
+from .encryption import encrypt_file, is_encryption_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +63,11 @@ class BackupConfig:
     # Model artifacts
     model_artifacts_dir: str = "/tmp/model_artifacts"
 
+    # Encryption at rest (#958). A Fernet key from
+    # ``astroml.backup.encryption.generate_encryption_key``. Backups are
+    # written as plaintext when this is None/empty (existing behavior).
+    encryption_key: str | None = None
+
 
 @dataclass
 class BackupMetadata:
@@ -99,7 +102,7 @@ class BackupMetadata:
 class BackupService:
     """Service for creating and managing backups."""
 
-    def __init__(self, config -> Any: BackupConfig):
+    def __init__(self, config: BackupConfig):
         """Initialize backup service.
 
         Args:
@@ -183,15 +186,22 @@ class BackupService:
             else:
                 raise ValueError(f"Unsupported database URL format: {db_url}")
 
-            # Encrypt at rest (issue #965): the gzip step above is
-            # compression only, not confidentiality. This dump can contain
-            # PII and credentials embedded in seed/config data, so the
-            # plaintext .sql.gz is never the file that gets persisted,
-            # uploaded, or checksummed below.
-            backup_file = encrypt_backup_file(backup_file)
-
-            # Calculate checksum
+            # Calculate checksum over the plaintext archive, and verify
+            # against the plaintext too, before any encryption is applied —
+            # both operate on the actual pg_dump/gzip output.
             checksum = self._calculate_checksum(backup_file)
+            is_verified = False
+            if self.config.verify_after_backup:
+                from .verification import BackupVerifier
+
+                verifier = BackupVerifier(self.config)
+                is_verified = verifier.verify_backup(backup_file, checksum)
+
+            is_encrypted = False
+            if is_encryption_enabled(self.config) and self.config.encryption_key:
+                backup_file = encrypt_file(backup_file, self.config.encryption_key)
+                is_encrypted = True
+
             size_bytes = backup_file.stat().st_size
 
             # Save metadata
@@ -203,9 +213,9 @@ class BackupService:
                 checksum=checksum,
                 storage_path=str(backup_file),
                 storage_backend=StorageBackend.LOCAL,
-                is_verified=False,
+                is_verified=is_verified,
                 description=description,
-                is_encrypted=True,
+                is_encrypted=is_encrypted,
             )
 
             self._save_metadata(metadata)
@@ -214,21 +224,13 @@ class BackupService:
             if self.config.storage_backend != StorageBackend.LOCAL:
                 self._upload_to_storage(backup_file, backup_id)
 
-            # Verify backup if enabled
-            if self.config.verify_after_backup:
-                from .verification import BackupVerifier
-
-                verifier = BackupVerifier(self.config)
-                metadata.is_verified = verifier.verify_backup(backup_file, checksum)
-                self._save_metadata(metadata)
-
             logger.info(f"Database backup created successfully: {backup_id}")
             return metadata
 
         except subprocess.CalledProcessError as e:
             logger.error(f"pg_dump failed: {e.stderr}")
             raise RuntimeError(f"Database backup failed: {e.stderr}")
-        except AstroMLError as e:
+        except Exception as e:
             logger.error(f"Backup creation failed: {e}")
             raise
 
@@ -254,16 +256,21 @@ class BackupService:
             with tarfile.open(backup_file, "w:gz") as tar:
                 pass
         else:
+            import tarfile
+
             with tarfile.open(backup_file, "w:gz") as tar:
                 for item in artifacts_dir.iterdir():
                     tar.add(item, arcname=item.name)
 
-        # Encrypt at rest (issue #965): model artifacts can embed
-        # proprietary weights or, via training config, credentials.
-        backup_file = encrypt_backup_file(backup_file)
-
-        # Calculate checksum
+        # Calculate checksum over the plaintext archive, before any
+        # encryption is applied.
         checksum = self._calculate_checksum(backup_file)
+
+        is_encrypted = False
+        if is_encryption_enabled(self.config) and self.config.encryption_key:
+            backup_file = encrypt_file(backup_file, self.config.encryption_key)
+            is_encrypted = True
+
         size_bytes = backup_file.stat().st_size
 
         # Save metadata
@@ -277,7 +284,7 @@ class BackupService:
             storage_backend=StorageBackend.LOCAL,
             is_verified=False,
             description=description,
-            is_encrypted=True,
+            is_encrypted=is_encrypted,
         )
 
         self._save_metadata(metadata)
@@ -462,5 +469,5 @@ class BackupService:
 
         except ImportError:
             logger.warning("google-cloud-storage not installed, skipping GCS upload")
-        except AstroMLError as e:
+        except Exception as e:
             logger.error(f"GCS upload failed: {e}")

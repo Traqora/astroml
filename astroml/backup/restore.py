@@ -1,26 +1,92 @@
-from typing import Any, Dict, List, Optional, Union, Callable
-from astroml.utils.exceptions import AstroMLError
 """Restore service for database and model artifacts (issue #304)."""
 
 from __future__ import annotations
 
+import contextlib
 import gzip
 import logging
 import os
 import subprocess
 import tarfile
+import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
-from .encryption import decrypt_backup_file
+from .encryption import ENCRYPTED_SUFFIX, BackupEncryptionError, is_encryption_enabled
 from .service import BackupConfig, BackupType
 
 logger = logging.getLogger(__name__)
 
 
+@contextlib.contextmanager
+def _plaintext_backup_file(
+    config: BackupConfig, backup_file: Path, *, is_encrypted: bool
+) -> Iterator[Path]:
+    """Yield a plaintext path for ``backup_file``, decrypting to a temp copy if needed.
+
+    Leaves the on-disk encrypted backup untouched (restores may run more than
+    once against the same archive) and always cleans up the temporary
+    plaintext copy, including when the caller raises.
+
+    Args:
+        config: Backup configuration; must have ``encryption_key`` set when
+            ``is_encrypted`` is True.
+        backup_file: Path to the (possibly encrypted) backup archive.
+        is_encrypted: Whether ``backup_file`` is Fernet-encrypted.
+
+    Yields:
+        A path to a plaintext archive: ``backup_file`` itself when not
+        encrypted, otherwise a temporary decrypted copy.
+
+    Raises:
+        BackupEncryptionError: If the backup is encrypted but no key is
+            configured, or decryption fails (wrong key / tampered archive).
+    """
+    if not is_encrypted:
+        yield backup_file
+        return
+
+    if not is_encryption_enabled(config) or not config.encryption_key:
+        raise BackupEncryptionError(
+            f"Backup {backup_file} is encrypted but no `encryption_key` is "
+            "configured on BackupConfig; cannot restore it."
+        )
+
+    from cryptography.fernet import Fernet, InvalidToken
+
+    try:
+        fernet = Fernet(config.encryption_key.encode("utf-8"))
+    except (ValueError, TypeError) as e:
+        raise BackupEncryptionError(f"Invalid backup encryption key: {e}") from e
+
+    plaintext_name = (
+        backup_file.name[: -len(ENCRYPTED_SUFFIX)]
+        if backup_file.name.endswith(ENCRYPTED_SUFFIX)
+        else backup_file.name
+    )
+    plaintext_suffix = "".join(Path(plaintext_name).suffixes) or ".tmp"
+
+    tmp = tempfile.NamedTemporaryFile(suffix=plaintext_suffix, delete=False)
+    tmp_path = Path(tmp.name)
+    tmp.close()
+    try:
+        ciphertext = backup_file.read_bytes()
+        try:
+            plaintext = fernet.decrypt(ciphertext)
+        except InvalidToken as e:
+            raise BackupEncryptionError(
+                f"Failed to decrypt {backup_file}: invalid key or corrupted/tampered backup"
+            ) from e
+        tmp_path.write_bytes(plaintext)
+        yield tmp_path
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
 class RestoreService:
     """Service for restoring from backups."""
 
-    def __init__(self, config -> Any: BackupConfig):
+    def __init__(self, config: BackupConfig):
         """Initialize restore service.
 
         Args:
@@ -61,11 +127,21 @@ class RestoreService:
 
         logger.info(f"Restoring database from backup: {backup_id}")
 
-        plaintext_file: Path | None = None
-        if data.get("is_encrypted"):
-            plaintext_file = decrypt_backup_file(backup_file)
-            backup_file = plaintext_file
+        try:
+            with _plaintext_backup_file(
+                self.config, backup_file, is_encrypted=data.get("is_encrypted", False)
+            ) as plaintext_file:
+                return self._restore_database_from_plaintext(
+                    plaintext_file, drop_existing, backup_id
+                )
+        except BackupEncryptionError as e:
+            logger.error(f"Database restore failed: {e}")
+            return False
 
+    def _restore_database_from_plaintext(
+        self, backup_file: Path, drop_existing: bool, backup_id: str
+    ) -> bool:
+        """Run the actual psql restore against a plaintext ``.sql.gz`` file."""
         try:
             # Extract database connection info
             db_url = self.config.database_url
@@ -162,15 +238,9 @@ class RestoreService:
         except subprocess.CalledProcessError as e:
             logger.error(f"Database restore command failed: {e}")
             return False
-        except AstroMLError as e:
+        except Exception as e:
             logger.error(f"Database restore failed: {e}")
             return False
-        finally:
-            # The decrypted copy is transient: it must not outlive this
-            # restore attempt regardless of outcome, or the encryption
-            # this module exists to provide is undone by a leftover file.
-            if plaintext_file is not None:
-                plaintext_file.unlink(missing_ok=True)
 
     def restore_model_artifacts(self, backup_id: str, target_dir: str | None = None) -> bool:
         """Restore model artifacts from a backup.
@@ -204,36 +274,41 @@ class RestoreService:
 
         base_allowed = Path(self.config.model_artifacts_dir).resolve()
         target_path = (Path(target_dir or self.config.model_artifacts_dir)).resolve()
-        if not str(target_path).startswith(str(base_allowed)):
+        if target_path != base_allowed and base_allowed not in target_path.parents:
             logger.error(f"Invalid target directory: {target_dir}")
             return False
         target_path.mkdir(parents=True, exist_ok=True)
 
         logger.info(f"Restoring model artifacts from backup: {backup_id}")
 
-        plaintext_file: Path | None = None
-        if data.get("is_encrypted"):
-            plaintext_file = decrypt_backup_file(backup_file)
-            backup_file = plaintext_file
-
         try:
-            # Extract tar.gz archive
-            with tarfile.open(backup_file, "r:gz") as tar:
-                for member in tar.getmembers():
-                    member_path = Path(member.name).resolve()
-                    if not str(member_path).startswith(str(target_path)):
-                        raise ValueError(f"Invalid archive member path: {member.name}")
-                tar.extractall(path=target_path)
+            with _plaintext_backup_file(
+                self.config, backup_file, is_encrypted=data.get("is_encrypted", False)
+            ) as plaintext_file:
+                # Extract tar.gz archive, guarding against path traversal:
+                # reject absolute member names and any member whose resolved
+                # path would land outside target_path (e.g. via `../`).
+                with tarfile.open(plaintext_file, "r:gz") as tar:
+                    for member in tar.getmembers():
+                        if os.path.isabs(member.name) or ".." in Path(member.name).parts:
+                            raise ValueError(f"Invalid archive member path: {member.name}")
+                        member_path = (target_path / member.name).resolve()
+                        if member_path != target_path and target_path not in member_path.parents:
+                            raise ValueError(f"Invalid archive member path: {member.name}")
+                    # Defence in depth: the "data" filter (PEP 706) additionally
+                    # rejects symlink/hardlink members and special files that
+                    # could write outside target_path despite the checks above.
+                    tar.extractall(path=target_path, filter="data")
 
             logger.info(f"Model artifacts restored successfully from backup: {backup_id}")
             return True
 
-        except AstroMLError as e:
+        except BackupEncryptionError as e:
             logger.error(f"Model artifacts restore failed: {e}")
             return False
-        finally:
-            if plaintext_file is not None:
-                plaintext_file.unlink(missing_ok=True)
+        except Exception as e:
+            logger.error(f"Model artifacts restore failed: {e}")
+            return False
 
     def restore_full(self, backup_id: str, drop_existing_db: bool = False) -> bool:
         """Restore full backup (database + model artifacts).
@@ -332,6 +407,6 @@ class RestoreService:
         except ImportError:
             logger.warning("google-cloud-storage not installed")
             return False
-        except AstroMLError as e:
+        except Exception as e:
             logger.error(f"GCS download failed: {e}")
             return False

@@ -1,136 +1,172 @@
-"""Encryption at rest for backup files (issue #965).
+"""Backup encryption at rest (issue #958).
 
-Database dumps and model artifact archives can contain PII, credentials
-embedded in seed data, and proprietary model weights. Before this module,
-`BackupService` wrote them to disk (and to S3/GCS) gzip-compressed only,
-which is not encryption: anyone with filesystem or bucket read access could
-read a backup's contents directly.
+Local and cloud-uploaded backup archives (``.sql.gz`` / ``.tar.gz``) are
+written to disk with no confidentiality protection: a compromised backup
+host, misconfigured S3/GCS bucket, or leaked local-disk snapshot exposes raw
+database dumps (which can contain PII per issue #960) and model artifacts in
+plaintext. This module adds opt-in, authenticated symmetric encryption for
+backup archives using :mod:`cryptography`'s Fernet (AES-128-CBC with an
+HMAC-SHA256 integrity tag), so a corrupted or tampered ciphertext fails
+loudly instead of silently decrypting to garbage.
 
-Backups use `cryptography`'s `Fernet` (AES-128-CBC with an HMAC-SHA256
-authentication tag) rather than the `python-jose` JWE helper already used
-for API keys in `astroml/llm/secrets.py`: JWE's compact serialization is
-built for small tokens, not multi-gigabyte database dumps, and `python-jose`
-is not declared in any requirements file in this repo (a pre-existing gap,
-left as-is here since fixing it is outside this issue's scope). Fernet
-encrypts/decrypts a file's bytes directly with no size-related overhead
-beyond a small fixed header per token.
+Encryption is off by default (``BackupConfig.encryption_key is None``) to
+preserve existing behavior for callers who haven't configured a key;
+:func:`astroml.backup.service.BackupService` and
+:func:`astroml.backup.restore.RestoreService` both consult
+:func:`is_encryption_enabled` before touching ciphertext.
 """
 
 from __future__ import annotations
 
-import base64
-import hashlib
-import logging
-import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from cryptography.fernet import Fernet, InvalidToken
+if TYPE_CHECKING:
+    from cryptography.fernet import Fernet
 
-logger = logging.getLogger(__name__)
+    from .service import BackupConfig
 
+#: Suffix appended to an encrypted backup file's name, after its existing
+#: ``.sql.gz`` / ``.tar.gz`` extension (e.g. ``db_20260925.sql.gz.enc``).
 ENCRYPTED_SUFFIX = ".enc"
 
 
 class BackupEncryptionError(RuntimeError):
-    """Raised when a backup cannot be encrypted or decrypted."""
+    """Raised when a backup cannot be encrypted or decrypted.
 
-
-def get_backup_encryption_key() -> bytes:
-    """Derive the Fernet key used for backup encryption.
-
-    Reads `BACKUP_ENCRYPTION_KEY` (or falls back to `SECRET_KEY`, matching
-    the fallback chain `astroml/llm/secrets.py` already uses for API key
-    encryption). The raw secret is hashed to 32 bytes and base64url-encoded,
-    since Fernet requires a 32-byte urlsafe-base64 key rather than an
-    arbitrary-length passphrase.
+    Wraps the underlying :mod:`cryptography` failure (or a missing/invalid
+    key) so callers can catch one exception type regardless of cause.
     """
-    secret = (
-        os.getenv("BACKUP_ENCRYPTION_KEY")
-        or os.getenv("SECRET_KEY")
-        or "change-me-in-production-default-secret-key"
-    )
-    digest = hashlib.sha256(secret.encode("utf-8")).digest()
-    return base64.urlsafe_b64encode(digest)
 
 
-def encrypt_backup_file(source_path: Path, *, delete_source: bool = True) -> Path:
-    """Encrypt `source_path` in place, returning the path to the `.enc` file.
+def is_encryption_enabled(config: BackupConfig) -> bool:
+    """Return True when ``config`` has a usable encryption key configured."""
+    return bool(config.encryption_key)
 
-    The plaintext (here, already gzip- or tar.gz-compressed) file is read
-    fully into memory, encrypted, and written to `source_path` with
-    `ENCRYPTED_SUFFIX` appended. Reading the whole file is acceptable for
-    backup archive sizes this service targets; a true streaming AEAD would
-    be needed before this scales to multi-gigabyte dumps without matching
-    memory headroom, which is out of scope for this fix.
+
+def _get_fernet(key: str) -> Fernet:
+    """Build a ``Fernet`` cipher from a base64 urlsafe key string.
 
     Args:
-        source_path: Path to the plaintext backup file.
-        delete_source: Remove the plaintext file after a successful
-            encrypted write, so the unencrypted bytes never persist on
-            disk. Defaults to True; tests that need to inspect both forms
-            can pass False.
+        key: A Fernet key, as produced by
+            :func:`generate_encryption_key`.
 
     Returns:
-        Path to the encrypted file (`source_path` with `.enc` appended).
+        A configured ``Fernet`` instance.
+
+    Raises:
+        BackupEncryptionError: If ``cryptography`` is not installed or the
+            key is malformed.
     """
-    key = get_backup_encryption_key()
-    fernet = Fernet(key)
+    try:
+        from cryptography.fernet import Fernet, InvalidToken  # noqa: F401
+    except ImportError as e:  # pragma: no cover - exercised via lint/env, not unit tests
+        raise BackupEncryptionError(
+            "Backup encryption requires the 'cryptography' package. "
+            "Install it (`pip install cryptography`) or unset "
+            "BackupConfig.encryption_key to disable encryption."
+        ) from e
 
-    plaintext = source_path.read_bytes()
-    token = fernet.encrypt(plaintext)
+    try:
+        return Fernet(key.encode("utf-8") if isinstance(key, str) else key)
+    except (ValueError, TypeError) as e:
+        raise BackupEncryptionError(f"Invalid backup encryption key: {e}") from e
 
-    encrypted_path = source_path.with_name(source_path.name + ENCRYPTED_SUFFIX)
-    encrypted_path.write_bytes(token)
 
-    if delete_source:
-        source_path.unlink()
+def generate_encryption_key() -> str:
+    """Generate a new, random Fernet key suitable for ``BackupConfig.encryption_key``.
 
-    logger.info(f"Encrypted backup file: {encrypted_path.name}")
+    Returns:
+        A base64 urlsafe-encoded 32-byte key, as a ``str``.
+
+    Raises:
+        BackupEncryptionError: If ``cryptography`` is not installed.
+    """
+    try:
+        from cryptography.fernet import Fernet
+    except ImportError as e:  # pragma: no cover - exercised via lint/env, not unit tests
+        raise BackupEncryptionError(
+            "Backup encryption requires the 'cryptography' package. "
+            "Install it (`pip install cryptography`)."
+        ) from e
+    return Fernet.generate_key().decode("utf-8")
+
+
+def encrypt_file(source: Path, key: str) -> Path:
+    """Encrypt ``source`` in place, replacing it with a ``.enc`` sibling.
+
+    Args:
+        source: Path to the plaintext backup archive.
+        key: Fernet key from :func:`generate_encryption_key`.
+
+    Returns:
+        Path to the encrypted file (``source`` with :data:`ENCRYPTED_SUFFIX`
+        appended). The original plaintext file is removed.
+
+    Raises:
+        BackupEncryptionError: If encryption fails for any reason (missing
+            dependency, bad key, I/O error).
+    """
+    fernet = _get_fernet(key)
+    encrypted_path = source.with_name(source.name + ENCRYPTED_SUFFIX)
+
+    try:
+        plaintext = source.read_bytes()
+        ciphertext = fernet.encrypt(plaintext)
+        encrypted_path.write_bytes(ciphertext)
+    except OSError as e:
+        raise BackupEncryptionError(f"Failed to encrypt {source}: {e}") from e
+
+    source.unlink()
     return encrypted_path
 
 
-def decrypt_backup_file(encrypted_path: Path, *, delete_source: bool = False) -> Path:
-    """Decrypt `encrypted_path`, returning the path to the plaintext file.
-
-    The plaintext is written alongside the encrypted file with
-    `ENCRYPTED_SUFFIX` stripped from the name, so callers that expect a
-    `.sql.gz` or `.tar.gz` path (e.g. to pass to `gzip.open`/`tarfile.open`)
-    get exactly that back.
+def decrypt_file(source: Path, key: str) -> Path:
+    """Decrypt ``source`` in place, replacing it with the plaintext original.
 
     Args:
-        encrypted_path: Path to the `.enc` backup file.
-        delete_source: Remove the encrypted file after a successful
-            decrypt. Defaults to False, since restore call sites generally
-            want to keep the encrypted backup intact on disk/in cloud
-            storage and only produce a transient plaintext copy.
+        source: Path to an encrypted backup archive (ending in
+            :data:`ENCRYPTED_SUFFIX`).
+        key: Fernet key that was used to encrypt the file.
 
     Returns:
-        Path to the decrypted plaintext file.
+        Path to the decrypted plaintext file (``source`` with
+        :data:`ENCRYPTED_SUFFIX` stripped). The encrypted file is removed.
 
     Raises:
-        BackupEncryptionError: If the file cannot be decrypted, e.g. the
-            encryption key is wrong or the file was corrupted or tampered
-            with (Fernet's HMAC tag fails to verify).
+        BackupEncryptionError: If decryption fails — wrong key, corrupted or
+            tampered ciphertext, missing dependency, or I/O error.
     """
-    key = get_backup_encryption_key()
-    fernet = Fernet(key)
+    from cryptography.fernet import InvalidToken
 
-    token = encrypted_path.read_bytes()
-    try:
-        plaintext = fernet.decrypt(token)
-    except InvalidToken as exc:
-        raise BackupEncryptionError(
-            f"Failed to decrypt backup {encrypted_path.name}: wrong key or corrupted/tampered file"
-        ) from exc
+    fernet = _get_fernet(key)
 
-    if not encrypted_path.name.endswith(ENCRYPTED_SUFFIX):
+    if source.suffix != ENCRYPTED_SUFFIX:
         raise BackupEncryptionError(
-            f"Expected an encrypted backup path ending in {ENCRYPTED_SUFFIX!r}, got {encrypted_path.name!r}"
+            f"Expected a '{ENCRYPTED_SUFFIX}' encrypted backup file, got: {source}"
         )
-    plaintext_path = encrypted_path.with_name(encrypted_path.name[: -len(ENCRYPTED_SUFFIX)])
-    plaintext_path.write_bytes(plaintext)
+    plaintext_path = source.with_name(source.name[: -len(ENCRYPTED_SUFFIX)])
 
-    if delete_source:
-        encrypted_path.unlink()
+    try:
+        ciphertext = source.read_bytes()
+        plaintext = fernet.decrypt(ciphertext)
+        plaintext_path.write_bytes(plaintext)
+    except InvalidToken as e:
+        raise BackupEncryptionError(
+            f"Failed to decrypt {source}: invalid key or corrupted/tampered backup"
+        ) from e
+    except OSError as e:
+        raise BackupEncryptionError(f"Failed to decrypt {source}: {e}") from e
 
+    source.unlink()
     return plaintext_path
+
+
+__all__ = [
+    "ENCRYPTED_SUFFIX",
+    "BackupEncryptionError",
+    "is_encryption_enabled",
+    "generate_encryption_key",
+    "encrypt_file",
+    "decrypt_file",
+]

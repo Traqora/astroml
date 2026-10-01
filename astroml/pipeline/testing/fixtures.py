@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Pipeline test fixtures and runner for data pipeline testing.
 
 Issue #638 Step 4 & 5: Implements reusable test fixtures for pipeline stages
@@ -266,7 +267,7 @@ class PipelineTestRunner:
             for hook in self._hooks["before_run"]:
                 try:
                     hook(fixture, None)
-                except Exception:
+                except AstroMLError:
                     pass
 
             start = time.monotonic()
@@ -299,7 +300,7 @@ class PipelineTestRunner:
                     },
                 )
 
-            except Exception as e:
+            except AstroMLError as e:
                 elapsed = (time.monotonic() - start) * 1000
                 run = PipelineTestRun(
                     fixture_name=fixture.name,
@@ -314,7 +315,7 @@ class PipelineTestRunner:
             for hook in self._hooks["after_run"]:
                 try:
                     hook(fixture, run)
-                except Exception:
+                except AstroMLError:
                     pass
 
             # Pass/fail hooks
@@ -322,13 +323,13 @@ class PipelineTestRunner:
                 for hook in self._hooks["on_pass"]:
                     try:
                         hook(fixture, run)
-                    except Exception:
+                    except AstroMLError:
                         pass
             else:
                 for hook in self._hooks["on_fail"]:
                     try:
                         hook(fixture, run)
-                    except Exception:
+                    except AstroMLError:
                         pass
 
         self._runs.extend(runs)

@@ -193,3 +193,37 @@ def test_ingest_stream_flushes_partial_batch_on_early_stop(
     assert save_calls == [5]
     reloaded = service.state.load()
     assert reloaded.processed_ledgers == {1, 2, 3, 4, 5}
+
+
+def test_get_status_reports_last_processed_and_count(service: IngestionService) -> None:
+    """`get_status()` has no direct regression test elsewhere (issue #974)."""
+    list(service.ingest_stream(start_ledger=1, end_ledger=3))
+
+    status = service.get_status()
+
+    assert status["last_processed_ledger"] == 3
+    assert status["processed_ledger_count"] == 3
+
+
+def test_get_status_before_any_ingestion(service: IngestionService) -> None:
+    status = service.get_status()
+
+    assert status["last_processed_ledger"] is None
+    assert status["processed_ledger_count"] == 0
+
+
+def test_get_status_state_store_path_reflects_state_store_shape(
+    service: IngestionService,
+) -> None:
+    """`get_status()` only reports a real path for state stores exposing `state_file`.
+
+    `StateStore` (the default state backend) exposes its file location as
+    `.path`, not `.state_file`, so `get_status()`'s `hasattr(..., "state_file")`
+    check never matches it and `state_store_path` always falls back to
+    ``"memory"`` — a subtlety worth pinning down so a future rename of either
+    attribute is caught here rather than silently changing the reported value.
+    """
+    status = service.get_status()
+
+    assert not hasattr(service.state, "state_file")
+    assert status["state_store_path"] == "memory"

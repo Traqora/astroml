@@ -171,5 +171,5 @@ To change notification channels:
 ## Related Documentation
 
 - [CI/CD Pipeline](../.github/workflows/ci.yml)
-- [Test Documentation](../tests/README.md)
+- [Test Documentation](SMOKE_TESTS.md)
 - [Dependency Management](../requirements.txt)

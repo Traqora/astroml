@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Structured logging for LLM operations — JSON logs with PII redaction.
 
 Resolves #456: Structured log emission with user context, prompt/response
@@ -154,5 +155,5 @@ class LLMStructuredLogger:
     def _emit(self, record: dict[str, Any]) -> None:
         try:
             print(json.dumps(record), file=self._stream, flush=True)
-        except Exception:  # noqa: BLE001
+        except AstroMLError:  # noqa: BLE001
             logger.warning("LLMStructuredLogger failed to emit record")

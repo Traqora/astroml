@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Data quality checks for completeness, consistency, accuracy, and timeliness.
 
 Provides modular check suites and validator classes to inspect tabular and
@@ -316,7 +317,7 @@ class ConsistencyChecker:
                 try:
                     if not rule_fn(rec):
                         violation_count += 1
-                except Exception:
+                except AstroMLError:
                     violation_count += 1
 
             rule_score = 1.0 - (violation_count / total_records)
@@ -398,7 +399,7 @@ class AccuracyChecker:
                     "iqr": iqr,
                 },
             )
-        except Exception as e:
+        except AstroMLError as e:
             return CheckResult(
                 check_name=f"outlier_iqr_{field_name}",
                 dimension=MetricDimension.ACCURACY,
@@ -489,7 +490,7 @@ class TimelinessChecker:
                         if not dt.tzinfo:
                             dt = dt.replace(tzinfo=timezone.utc)
                         parsed_timestamps.append(dt)
-                    except Exception:
+                    except AstroMLError:
                         pass
                 elif isinstance(val, datetime):
                     dt = val if val.tzinfo else val.replace(tzinfo=timezone.utc)
@@ -545,7 +546,7 @@ class TemporalValidator:
                 if isinstance(ts_str, str):
                     try:
                         ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-                    except Exception:
+                    except AstroMLError:
                         return ValidationResult(
                             is_valid=False,
                             error_type="INVALID_TIMESTAMP_FORMAT",
@@ -578,7 +579,7 @@ class TemporalValidator:
                     )
 
             return ValidationResult(is_valid=True, message="Timestamps are properly ordered")
-        except Exception as e:
+        except AstroMLError as e:
             return ValidationResult(
                 is_valid=False,
                 error_type="TIMESTAMP_VALIDATION_ERROR",
@@ -606,7 +607,7 @@ class TemporalValidator:
                         ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
                         if ts.tzinfo:
                             ts = ts.replace(tzinfo=None)
-                    except Exception:
+                    except AstroMLError:
                         continue
                 elif isinstance(ts_str, datetime):
                     ts = ts_str.replace(tzinfo=None) if ts_str.tzinfo else ts_str
@@ -631,7 +632,7 @@ class TemporalValidator:
                 )
 
             return ValidationResult(is_valid=True, message="No future timestamps detected")
-        except Exception as e:
+        except AstroMLError as e:
             return ValidationResult(
                 is_valid=False,
                 error_type="FUTURE_TIMESTAMP_ERROR",
@@ -812,7 +813,7 @@ class StatisticalValidator:
                 message="No amount outliers detected",
                 details={"q1": q1, "q3": q3, "iqr": iqr},
             )
-        except Exception as e:
+        except AstroMLError as e:
             return ValidationResult(
                 is_valid=False,
                 error_type="OUTLIER_DETECTION_ERROR",
@@ -862,7 +863,7 @@ class StatisticalValidator:
                 message="No unusual timestamp gaps detected",
                 details={"max_gap_minutes": max(gaps) / 60 if gaps else 0},
             )
-        except Exception as e:
+        except AstroMLError as e:
             return ValidationResult(
                 is_valid=False,
                 error_type="GAP_DETECTION_ERROR",
@@ -910,7 +911,7 @@ class StatisticalValidator:
                 message="No duplicate patterns detected",
                 details={"total_patterns": len(pattern_counts)},
             )
-        except Exception as e:
+        except AstroMLError as e:
             return ValidationResult(
                 is_valid=False,
                 error_type="PATTERN_DETECTION_ERROR",

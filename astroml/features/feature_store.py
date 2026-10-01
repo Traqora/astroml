@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Feature Store implementation for AstroML.
 
 See ADR-002 (docs/adr/002-sqlite-feature-store-metadata.md) for feature store metadata architecture.
@@ -277,7 +278,7 @@ class FeatureStorage:
         "metadata",
     ]
 
-    def __init__(self, storage_path: str | Path):
+    def __init__(self, storage_path -> Any: str | Path):
         """Initialize storage backend.
 
         Args:
@@ -586,7 +587,7 @@ class FeatureRegistry:
 
     _global_computers: dict[str, FeatureComputer] = {}
 
-    def __init__(self, storage: FeatureStorage):
+    def __init__(self, storage -> Any: FeatureStorage):
         """Initialize feature registry.
 
         Args:
@@ -633,11 +634,11 @@ class FeatureRegistry:
                         }
                         self.register_computer(ep.name, computer_cls, metadata)
                         self._plugin_computers[ep.name] = ep.module or ep.name
-                except Exception as e:
+                except AstroMLError as e:
                     logger.warning(f"Failed to load plugin '{ep.name}': {e}")
         except ImportError:
             logger.debug("importlib.metadata not available for plugin discovery")
-        except Exception as e:
+        except AstroMLError as e:
             logger.warning(f"Plugin discovery failed: {e}")
 
     def _validate_plugin(self, plugin_cls: type) -> None:
@@ -1005,7 +1006,7 @@ class FeatureStore:
                 return self._compute_feature_parallel(
                     computer, feature_name, data, entity_col, timestamp_col, **kwargs
                 )
-            except Exception as e:
+            except AstroMLError as e:
                 logger.warning(f"Parallel computation failed, falling back to sequential: {e}")
         return self._compute_feature_sequential(
             computer, feature_name, data, entity_col, timestamp_col, **kwargs
@@ -1036,7 +1037,7 @@ class FeatureStore:
         try:
             result = computer(data, entity_col, timestamp_col, **kwargs)
             return result
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Error computing feature {feature_name}: {e}")
             raise
 
@@ -1090,7 +1091,7 @@ class FeatureStore:
         def process_chunk(chunk: pd.DataFrame) -> pd.DataFrame:
             try:
                 return computer(chunk, entity_col, timestamp_col, **kwargs)
-            except Exception as e:
+            except AstroMLError as e:
                 logger.error(f"Error processing chunk: {e}")
                 raise
 
@@ -1100,7 +1101,7 @@ class FeatureStore:
             for future in concurrent.futures.as_completed(future_to_chunk):
                 try:
                     results.append(future.result())
-                except Exception as e:
+                except AstroMLError as e:
                     logger.error(f"Chunk processing failed: {e}")
                     raise
 
@@ -1471,9 +1472,9 @@ class FeatureStore:
                         fn, values = future.result()
                         if values is not None:
                             self._add_feature_values_to_dict(feature_data, fn, values)
-                    except Exception as e:
+                    except AstroMLError as e:
                         logger.error(f"Failed to fetch feature {feature_name}: {e}")
-        except Exception as e:
+        except AstroMLError as e:
             logger.warning(f"Parallel fetch failed, falling back to sequential: {e}")
             return self._fetch_features_sequential(feature_names, entity_ids, timestamp)
 
@@ -1638,7 +1639,7 @@ class FeatureStore:
         }
 
     @contextmanager
-    def batch_mode(self):
+    def batch_mode(self) -> Any:
         """Context manager for batch operations.
 
         Clears the cache before and after the batch so that stale entries

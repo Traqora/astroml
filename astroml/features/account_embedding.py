@@ -5,7 +5,7 @@ from astroml.storage.vector_store import VectorStore
 
 
 class AccountEmbeddingGenerator:
-    def __init__(self, vector_store: VectorStore, embedding_model=None):
+    def __init__(self, vector_store -> Any: VectorStore, embedding_model=None):
         self.vector_store = vector_store
         self.embedding_model = embedding_model
 

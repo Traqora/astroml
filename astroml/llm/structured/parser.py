@@ -73,7 +73,7 @@ class JSONParser(OutputParser):
 class PydanticParser(OutputParser):
     """Parser with automatic type coercion and correction."""
 
-    def __init__(self, enable_coercion: bool = True):
+    def __init__(self, enable_coercion -> Any: bool = True):
         self.enable_coercion = enable_coercion
         self.json_parser = JSONParser()
 

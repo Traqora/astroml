@@ -209,6 +209,18 @@ def compute_frequency_metrics(
         :func:`_validate_dataframe`. Metric formulas are delegated to
         :func:`_compute_frequency_metrics_for_timestamps` so the batch and
         single-account paths stay consistent.
+
+    Examples:
+        >>> import pandas as pd
+        >>> df = pd.DataFrame({
+        ...     "account": ["a1", "a1", "a2"],
+        ...     "timestamp": ["2024-01-01", "2024-01-01", "2024-01-02"],
+        ... })
+        >>> metrics = compute_frequency_metrics(df)
+        >>> list(metrics.columns)
+        ['account', 'mean_tx_per_day', 'std_tx_per_day', 'burstiness']
+        >>> metrics["mean_tx_per_day"].tolist()
+        [2.0, 1.0]
     """
     working_df = df.copy()
     _validate_dataframe(working_df, timestamp_col=timestamp_col, account_col=account_col)
@@ -265,8 +277,11 @@ def compute_account_frequency(
         ...     "account": ["acct-1", "acct-1", "acct-2"],
         ...     "timestamp": ["2024-01-01", "2024-01-03", "2024-01-02"],
         ... })
-        >>> compute_account_frequency(df, "acct-1")
-        {'mean_tx_per_day': 0.6666666666666666, 'std_tx_per_day': 0.5773502691896258, 'burstiness': -0.07179676972449088}
+        >>> metrics = compute_account_frequency(df, "acct-1")
+        >>> sorted(metrics)
+        ['burstiness', 'mean_tx_per_day', 'std_tx_per_day']
+        >>> {k: round(v, 6) for k, v in metrics.items()}
+        {'mean_tx_per_day': 0.666667, 'std_tx_per_day': 0.57735, 'burstiness': -0.071797}
 
         Custom column names are supported when they match the batch API:
 
@@ -301,7 +316,22 @@ def compute_daily_transaction_counts(
     timestamp_col: str = "timestamp",
     **kwargs: Any,
 ) -> pd.DataFrame:
-    """Compute daily transaction count metrics per account."""
+    """Compute daily transaction count metrics per account.
+
+    Thin wrapper around :func:`compute_frequency_metrics`; the returned
+    DataFrame has one row per account with ``mean_tx_per_day``,
+    ``std_tx_per_day`` and ``burstiness`` columns.
+
+    Examples:
+        >>> import pandas as pd
+        >>> df = pd.DataFrame({
+        ...     "account": ["a1", "a1", "a2"],
+        ...     "timestamp": ["2024-01-01", "2024-01-01", "2024-01-02"],
+        ... })
+        >>> counts = compute_daily_transaction_counts(df)
+        >>> counts.set_index("account")["mean_tx_per_day"].to_dict()
+        {'a1': 2.0, 'a2': 1.0}
+    """
     account_col = kwargs.get("account_col", entity_col)
     return compute_frequency_metrics(df, timestamp_col=timestamp_col, account_col=account_col)
 
@@ -312,6 +342,21 @@ def compute_burstiness(
     timestamp_col: str = "timestamp",
     **kwargs: Any,
 ) -> pd.DataFrame:
-    """Compute burstiness metric per account."""
+    """Compute burstiness metric per account.
+
+    Thin wrapper around :func:`compute_frequency_metrics`. Burstiness ``B`` is
+    ``(std - mean) / (std + mean)``, bounded in ``[-1, 1]`` (``-1`` = perfectly
+    regular, ``0`` = Poisson-like, ``1`` = highly bursty).
+
+    Examples:
+        >>> import pandas as pd
+        >>> df = pd.DataFrame({
+        ...     "account": ["a1", "a1", "a2"],
+        ...     "timestamp": ["2024-01-01", "2024-01-01", "2024-01-02"],
+        ... })
+        >>> burst = compute_burstiness(df)
+        >>> burst["burstiness"].tolist()
+        [-1.0, -1.0]
+    """
     account_col = kwargs.get("account_col", entity_col)
     return compute_frequency_metrics(df, timestamp_col=timestamp_col, account_col=account_col)

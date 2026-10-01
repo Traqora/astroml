@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """
 Main code review logic.
 
@@ -202,7 +203,7 @@ class CodeReviewer:
                 duration_seconds=duration,
             )
 
-        except Exception as e:
+        except AstroMLError as e:
             duration = time.time() - start_time
             return ReviewResult(
                 status=ReviewStatus.FAILED,
@@ -258,7 +259,7 @@ class CodeReviewer:
                 duration_seconds=duration,
             )
 
-        except Exception as e:
+        except AstroMLError as e:
             duration = time.time() - start_time
             return ReviewResult(
                 status=ReviewStatus.FAILED,
@@ -312,7 +313,7 @@ class CodeReviewer:
                 duration_seconds=duration,
             )
 
-        except Exception as e:
+        except AstroMLError as e:
             duration = time.time() - start_time
             return ReviewResult(
                 status=ReviewStatus.FAILED,
@@ -354,7 +355,7 @@ class CodeReviewer:
                 duration_seconds=duration,
             )
 
-        except Exception as e:
+        except AstroMLError as e:
             duration = time.time() - start_time
             return ReviewResult(
                 status=ReviewStatus.FAILED,

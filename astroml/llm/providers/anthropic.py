@@ -8,7 +8,7 @@ from .base import LLMProvider
 
 
 class AnthropicProvider(LLMProvider):
-    def __init__(self, api_key: str, model: str = "claude-3-opus-20240229"):
+    def __init__(self, api_key -> Any: str, model: str = "claude-3-opus-20240229"):
         super().__init__(api_key, model)
 
     def _generate_raw(self, prompt: str, tools: list[dict] | None = None, **kwargs: Any) -> str:

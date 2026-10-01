@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """Tracking utilities (metrics, usage, experiment tracking, data lineage, etc)."""
 
 # ---------------------------------------------------------------------------
@@ -62,7 +63,7 @@ _LAZY: dict[str, tuple[str, str]] = {
 }
 
 
-def __getattr__(name: str):
+def __getattr__(name -> Any: str):
     if name in _LAZY:
         module_path, attr = _LAZY[name]
         module = import_module(module_path)

@@ -187,5 +187,5 @@ The DVC pipeline integrates with GitHub Actions via `.dvc/config` and the
 ## See Also
 
 - [DVC Documentation](https://dvc.org/doc)
-- [Configuration Reference](../CONFIGURATION.md)
-- [CI/CD Pipeline](../gitops-workflow.md)
+- [Configuration Reference](CONFIGURATION.md)
+- [GitOps Workflow](gitops-workflow.md)

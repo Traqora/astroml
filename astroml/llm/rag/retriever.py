@@ -123,7 +123,7 @@ class Retriever:
 class SimpleReranker:
     """Simple reranker using embedding-based scoring."""
 
-    def __init__(self, embeddings_service: Any):
+    def __init__(self, embeddings_service -> Any: Any):
         """Initialize reranker."""
         self.embeddings = embeddings_service
 

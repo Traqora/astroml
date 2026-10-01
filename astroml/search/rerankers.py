@@ -2,7 +2,7 @@ from typing import Any
 
 
 class Reranker:
-    def __init__(self):
+    def __init__(self) -> Any:
         pass
 
     def rerank(self, query: str, results: list[dict[str, Any]]) -> list[dict[str, Any]]:

@@ -6,7 +6,7 @@ from .indexer import get_indexer
 
 
 class Retriever:
-    def __init__(self):
+    def __init__(self) -> Any:
         pass
 
     def retrieve_keyword(self, query: str, top_k: int = 10) -> list[dict[str, Any]]:

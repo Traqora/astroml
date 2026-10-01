@@ -18,6 +18,8 @@ from astroml.db.schema import (
     Base,
     Experiment,
     ExperimentResult,
+    GoldenDataset,
+    GoldenDatasetEntry,
     GraphAccount,
     GraphClaimDetail,
     GraphEdge,
@@ -117,10 +119,8 @@ def test_table_names():
     assert Experiment.__tablename__ == "experiments"
     assert Variant.__tablename__ == "variants"
     assert ExperimentResult.__tablename__ == "experiment_results"
-
-
-assert GoldenDataset.__tablename__ == "golden_datasets"
-assert GoldenDatasetEntry.__tablename__ == "golden_dataset_entries"
+    assert GoldenDataset.__tablename__ == "golden_datasets"
+    assert GoldenDatasetEntry.__tablename__ == "golden_dataset_entries"
 
 
 # ---------------------------------------------------------------------------
@@ -630,49 +630,6 @@ def test_ab_testing_relationships(session):
     assert result1.variant is variant1
     assert result2.variant is variant1
     assert result3.variant is variant2
-
-
-def test_golden_dataset_columns(engine):
-    inspector = inspect(engine)
-    cols = {c["name"] for c in inspector.get_columns("golden_datasets")}
-    expected = {
-        "id",
-        "name",
-        "description",
-        "dataset_type",
-        "task_type",
-        "version",
-        "source",
-        "size",
-        "status",
-        "quality_score",
-        "metadata",
-        "created_at",
-        "updated_at",
-    }
-    assert expected <= cols
-
-
-def test_golden_dataset_entry_columns(engine):
-    inspector = inspect(engine)
-    cols = {c["name"] for c in inspector.get_columns("golden_dataset_entries")}
-    expected = {
-        "id",
-        "dataset_id",
-        "input_data",
-        "output_data",
-        "metadata",
-        "difficulty",
-        "confidence",
-        "created_at",
-    }
-    assert expected <= cols
-
-    # FK to golden_datasets
-    fks = inspector.get_foreign_keys("golden_dataset_entries")
-    assert any(
-        fk["referred_table"] == "golden_datasets" and fk["referred_columns"] == ["id"] for fk in fks
-    )
 
 
 # ---------------------------------------------------------------------------

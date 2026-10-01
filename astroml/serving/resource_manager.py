@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Resource manager for model serving infrastructure.
 
 Issue #639 Step 3: Manages GPU/CPU allocation for model inference pods,
@@ -401,7 +402,7 @@ class ResourceManager:
         for cb in self._resource_usage_callbacks:
             try:
                 cb(usage)
-            except Exception as e:
+            except AstroMLError as e:
                 logger.warning(f"Resource usage callback failed: {e}")
 
     def update_capacity(self, capacity: ResourceCapacity) -> None:

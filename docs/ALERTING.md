@@ -195,4 +195,4 @@ kubectl exec -n monitoring prometheus -- wget -qO- http://localhost:9090/api/v1/
 - [Alert Rules](../monitoring/prometheus/alert_rules.yml)
 - [Alertmanager Config](../monitoring/prometheus/alertmanager.yml)
 - [Runbooks](../docs/runbooks/)
-- [SLO Documentation](../docs/SLO.md)
+- [SLO Documentation](#service-level-objectives-slos)

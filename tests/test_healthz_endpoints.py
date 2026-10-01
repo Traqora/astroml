@@ -121,6 +121,11 @@ def all_healthy(healthz_module: Any, monkeypatch: pytest.MonkeyPatch) -> None:
         "check_disk_space",
         lambda: _resolved(CheckResult("disk", HealthStatus.OK)),
     )
+    monkeypatch.setattr(
+        healthz_module,
+        "check_ingestion_freshness",
+        lambda: _resolved(CheckResult("ingestion", HealthStatus.OK)),
+    )
 
 
 async def _resolved(result: CheckResult) -> CheckResult:
@@ -242,7 +247,7 @@ class TestAggregateHealthz:
         assert response.status_code == 200
         body = response.json()
         assert body["probe"] == "healthz"
-        assert set(body["details"]) == {"startup", "db", "cache", "disk"}
+        assert set(body["details"]) == {"startup", "db", "cache", "disk", "ingestion"}
 
     def test_aggregate_surfaces_worst_status(
         self,
@@ -257,6 +262,40 @@ class TestAggregateHealthz:
 
         assert response.status_code == 503
         assert response.json()["status"] == "fail"
+
+    def test_aggregate_surfaces_stale_ingestion(
+        self,
+        client: TestClient,
+        all_healthy: None,
+        healthz_module: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            healthz_module,
+            "check_ingestion_freshness",
+            _failing("ingestion", "Restart the worker."),
+        )
+
+        response = client.get("/healthz")
+
+        assert response.status_code == 503
+        body = response.json()
+        assert body["details"]["ingestion"]["status"] == "fail"
+        assert "Restart the worker." in body["remediation"]
+
+    def test_degraded_ingestion_keeps_the_aggregate_serving(
+        self,
+        client: TestClient,
+        all_healthy: None,
+        healthz_module: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(healthz_module, "check_ingestion_freshness", _degraded("ingestion"))
+
+        response = client.get("/healthz")
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "degraded"
 
 
 class TestComponentProbes:
@@ -312,6 +351,106 @@ class TestComponentProbes:
         assert response.status_code in (200, 503)
         assert response.json()["component"] == "disk"
         assert "free_bytes" in response.json()["details"]
+
+
+class TestIngestionProbe:
+    """``GET /healthz/ingestion`` — the ingestion heartbeat surface."""
+
+    def test_fresh_ingestion_is_ok(
+        self, client: TestClient, healthz_module: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            healthz_module,
+            "refresh_ingestion_metrics",
+            lambda: CheckResult(
+                "ingestion",
+                HealthStatus.OK,
+                {"staleness_seconds": 12.5, "last_processed_ledger": 4_242},
+            ),
+        )
+
+        response = client.get("/healthz/ingestion")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "ok"
+        assert body["component"] == "ingestion"
+        assert body["details"]["staleness_seconds"] == 12.5
+
+    def test_stale_ingestion_returns_503(
+        self, client: TestClient, healthz_module: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            healthz_module,
+            "refresh_ingestion_metrics",
+            lambda: CheckResult(
+                "ingestion",
+                HealthStatus.FAIL,
+                {"staleness_seconds": 3_600.0},
+                remediation="The ingestion worker has stopped.",
+            ),
+        )
+
+        response = client.get("/healthz/ingestion")
+
+        assert response.status_code == 503
+        assert response.json()["status"] == "fail"
+        assert "has stopped" in response.json()["remediation"]
+
+    def test_a_missing_heartbeat_degrades_without_failing(
+        self, client: TestClient, healthz_module: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            healthz_module,
+            "refresh_ingestion_metrics",
+            lambda: CheckResult(
+                "ingestion",
+                HealthStatus.DEGRADED,
+                {"staleness_seconds": None},
+                remediation="No ingestion heartbeat is recorded.",
+            ),
+        )
+
+        response = client.get("/healthz/ingestion")
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "degraded"
+        assert response.json()["details"]["staleness_seconds"] is None
+
+    def test_probe_reads_the_configured_state_file_end_to_end(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        """No monkeypatching of the check itself: only ``INGESTION_STATE_FILE``."""
+        from astroml.ingestion.state import StateStore
+
+        state_path = tmp_path / "state.json"
+        StateStore(str(state_path)).mark_processed(4_242)
+        monkeypatch.setenv("INGESTION_STATE_FILE", str(state_path))
+
+        response = client.get("/healthz/ingestion")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "ok"
+        assert body["details"]["last_processed_ledger"] == 4_242
+        assert body["details"]["staleness_seconds"] < body["details"]["stale_threshold_seconds"]
+
+    def test_probe_reports_a_stale_state_file_end_to_end(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        from astroml.ingestion.state import StateStore
+
+        state_path = tmp_path / "state.json"
+        StateStore(str(state_path)).mark_processed(4_242)
+        monkeypatch.setenv("INGESTION_STATE_FILE", str(state_path))
+        # Thresholds below zero make any recorded heartbeat stale and failed.
+        monkeypatch.setenv("INGESTION_STALE_THRESHOLD_SECONDS", "-1")
+        monkeypatch.setenv("INGESTION_FAIL_THRESHOLD_SECONDS", "-1")
+
+        response = client.get("/healthz/ingestion")
+
+        assert response.status_code == 503
+        assert response.json()["status"] == "fail"
 
 
 class TestProbeResilience:

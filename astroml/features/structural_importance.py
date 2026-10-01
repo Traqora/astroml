@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Structural importance metrics for account nodes.
 
 This module provides various centrality and importance measures for nodes
@@ -424,7 +425,7 @@ def compute_structural_importance_metrics(
             metrics["betweenness_centrality"] = compute_betweenness_centrality(
                 edges, nodes, sample_size=betweenness_sample_size
             )
-        except Exception as e:
+        except AstroMLError as e:
             warnings.warn(f"Failed to compute betweenness centrality: {e}")
             metrics["betweenness_centrality"] = pd.Series(
                 0.0, index=metrics["degree_centrality"].index
@@ -433,7 +434,7 @@ def compute_structural_importance_metrics(
     if include_closeness:
         try:
             metrics["closeness_centrality"] = compute_closeness_centrality(edges, nodes)
-        except Exception as e:
+        except AstroMLError as e:
             warnings.warn(f"Failed to compute closeness centrality: {e}")
             metrics["closeness_centrality"] = pd.Series(
                 0.0, index=metrics["degree_centrality"].index
@@ -442,7 +443,7 @@ def compute_structural_importance_metrics(
     if include_eigenvector:
         try:
             metrics["eigenvector_centrality"] = compute_eigenvector_centrality(edges, nodes)
-        except Exception as e:
+        except AstroMLError as e:
             warnings.warn(f"Failed to compute eigenvector centrality: {e}")
             metrics["eigenvector_centrality"] = pd.Series(
                 0.0, index=metrics["degree_centrality"].index

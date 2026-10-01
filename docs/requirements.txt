@@ -35,8 +35,9 @@ memory-profiler>=0.60.0
 line-profiler>=4.0.0
 
 # Documentation testing
-doctest>=0.10.0
-pytest-doctest>=0.1.0
+# `doctest` is part of the standard library and `sphinx.ext.doctest` ships with
+# Sphinx, so neither of the pins that used to live here exists on PyPI at those
+# versions — `pip install -r docs/requirements.txt` died on them.
 
 # Documentation utilities
 sphinx-click>=4.4.0

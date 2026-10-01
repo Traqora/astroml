@@ -1,3 +1,5 @@
+from typing import Any, Dict, List, Optional, Union, Callable
+from astroml.utils.exceptions import AstroMLError
 """Slack integration for chat support (issue #306)."""
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ class SlackConfig:
 class SlackIntegration:
     """Integration with Slack for agent notifications."""
 
-    def __init__(self, config: SlackConfig):
+    def __init__(self, config -> Any: SlackConfig):
         """Initialize Slack integration.
 
         Args:
@@ -58,7 +60,7 @@ class SlackIntegration:
                 logger.error(f"Slack webhook failed: {response.status_code}")
                 return False
 
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Slack webhook error: {e}")
             return False
 
@@ -140,7 +142,7 @@ class SlackIntegration:
                 logger.error(f"Slack API request failed: {response.status_code}")
                 return False
 
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Slack direct message error: {e}")
             return False
 

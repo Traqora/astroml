@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Wrapper-based feature selection methods.
 
 Implements Recursive Feature Elimination (RFE), forward selection,
@@ -236,7 +237,7 @@ class WrapperSelector:
                         scoring=self.scoring
                     )
                     score = float(np.mean(cv_scores))
-                except Exception:
+                except AstroMLError:
                     score = 0.0
                 if score > best_score:
                     best_score = score
@@ -278,7 +279,7 @@ class WrapperSelector:
                 scoring=self.scoring,
             )
             baseline = float(np.mean(base_scores))
-        except Exception:
+        except AstroMLError:
             baseline = 0.5
 
         while len(selected) > n_target:
@@ -298,7 +299,7 @@ class WrapperSelector:
                         scoring=self.scoring,
                     )
                     score = float(np.mean(cv_scores))
-                except Exception:
+                except AstroMLError:
                     score = baseline
                 if score < worst_score:
                     worst_score = score

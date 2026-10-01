@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Schema validation for data pipeline testing.
 
 Issue #638 Step 2: Implements schema validation for pipeline stages,
@@ -113,7 +114,7 @@ class SchemaDefinition:
     version: str = "v1"
     metadata: dict[str, Any] = field(default_factory=dict)
 
-    def __post_init__(self):
+    def __post_init__(self) -> Any:
         if not self.required_columns:
             self.required_columns = set(self.columns.keys())
 
@@ -414,7 +415,7 @@ class SchemaValidator:
             elif expected == ColumnType.CATEGORICAL:
                 return isinstance(series.dtype, pd.CategoricalDtype) or pd.api.types.is_object_dtype(series)
             return True
-        except Exception:
+        except AstroMLError:
             return False
 
     @staticmethod
@@ -527,7 +528,7 @@ class SchemaValidator:
                     message=f"Unknown expectation type: {expectation.expectation_type}",
                 )
 
-        except Exception as e:
+        except AstroMLError as e:
             return ExpectationResult(
                 expectation=expectation,
                 status=ValidationStatus.FAILED,

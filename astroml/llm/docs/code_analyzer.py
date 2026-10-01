@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """
 Code analyzer for documentation generation.
 
@@ -97,7 +98,7 @@ class CodeAnalyzer:
     - Inheritance relationships
     """
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize the code analyzer."""
         self.elements: list[CodeElement] = []
         self.current_module: CodeElement | None = None
@@ -200,7 +201,7 @@ class CodeAnalyzer:
         tree = ast.parse(content)
 
         class FastAPIVisitor(ast.NodeVisitor):
-            def __init__(self, endpoints_list):
+            def __init__(self, endpoints_list) -> Any:
                 self.endpoints = endpoints_list
 
             def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
@@ -279,7 +280,7 @@ class CodeAnalyzer:
             tree = ast.parse(content)
 
             class TestExampleVisitor(ast.NodeVisitor):
-                def __init__(self, examples_list):
+                def __init__(self, examples_list) -> Any:
                     self.examples = examples_list
 
                 def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
@@ -292,7 +293,7 @@ class CodeAnalyzer:
             visitor = TestExampleVisitor(examples)
             visitor.visit(tree)
 
-        except Exception as e:
+        except AstroMLError as e:
             print(f"Error extracting examples from {test_file_path}: {e}")
 
         return examples
@@ -314,7 +315,7 @@ class CodeAnalyzer:
         tree = ast.parse(content)
 
         class ImportVisitor(ast.NodeVisitor):
-            def __init__(self, imports_dict):
+            def __init__(self, imports_dict) -> Any:
                 self.imports = imports_dict
 
             def visit_Import(self, node: ast.Import) -> None:
@@ -361,7 +362,7 @@ class CodeAnalyzer:
 class DocumentationVisitor(ast.NodeVisitor):
     """AST visitor for extracting documentation elements."""
 
-    def __init__(self, analyzer: CodeAnalyzer):
+    def __init__(self, analyzer -> Any: CodeAnalyzer):
         self.analyzer = analyzer
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:

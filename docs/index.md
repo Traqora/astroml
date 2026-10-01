@@ -14,32 +14,54 @@ AstroML is a comprehensive machine learning framework for the Stellar network, p
 ## 📚 Documentation Sections
 
 ### Machine Learning
-- [Structural Importance Metrics](structural_importance.md)
-- [Transaction Graph Analysis](transaction_graph.md)
-- [Feature Engineering Pipeline](feature_pipeline.md)
+- [Graph Construction Architecture](graph-construction.rst)
+- [Graph Batch Processing](graph-batch-processing.md)
+- [Feature Store](FEATURE_STORE.md)
+- [Model Registry](model-registry.md)
+- [Model Interpretability](model-interpretability.md)
+- [Explainability Reports](explainability-reports.md)
+- [Data Quality Validation](DATA_QUALITY_VALIDATION.md)
+
+### Autonomous Agents
+- [LLM Agent Framework](agent-framework.md)
 
 ### Configuration & Experiments
+- [Configuration Reference](CONFIGURATION.md)
 - [Experiment Configuration](experiment-configs.md)
-- [Hydra Setup Guide](hydra-setup.md)
+- [Hydra Config Management (ADR 004)](adr/004-hydra-config-management.md)
 
 ### Performance & Scaling
 - [Scaling and Performance Optimization](scaling-optimization.md)
 - [Benchmarking Suite](benchmarking.md)
+- [Performance Guide](PERFORMANCE.md)
+- [Database Query Profiling](database-query-profiling.md)
 
 ### Deployment
 - [Docker Deployment](docker-deployment.md)
-- [Soroban Contract Integration](soroban-contract.md)
+- [Docker Setup](DOCKER_SETUP.md)
+- [Kubernetes Deployment](KUBERNETES_DEPLOYMENT.md)
+- [Soroban Contract Integration](FRAUD_REGISTRY_CONTRACT.md)
+- [GitOps Workflow](gitops-workflow.md)
+
+### Operations
+- [Alerting](ALERTING.md)
+- [Health Checks](HEALTH_CHECKS.md)
+- [Metrics Reference](METRICS_REFERENCE.md)
+- [Ingestion Monitoring](ingestion-monitoring.md)
+- [Runbooks](runbooks/)
 
 ### API Reference
+- [API Overview](api/index.md)
 - [Models API](api/models.md)
-- [Features API](api/features.md)
-- [Training API](api/training.md)
+- [Ingestion API](api/ingestion.md)
+- [Temporal Models API](api/temporal-models.md)
+- [Usage Examples](api/usage-examples.md)
 
 ## 🔧 Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/tecch-wiz/astroml.git
+git clone https://github.com/Traqora/astroml.git
 cd astroml
 
 # Create virtual environment
@@ -99,14 +121,14 @@ docker-compose up ingestion
 
 ## 🔗 Links
 
-- [GitHub Repository](https://github.com/tecch-wiz/astroml)
+- [GitHub Repository](https://github.com/Traqora/astroml)
 - [Stellar Network](https://www.stellar.org/)
 - [PyTorch Geometric](https://pytorch-geometric.readthedocs.io/)
 
 ## 📖 Contributing
 
-We welcome contributions! Please see our [Contributing Guide](contributing.md) for details.
+We welcome contributions! Please see our [Contributing Guide](../CONTRIBUTING.md) for details, or work through the [First PR walkthrough](ONBOARDING.md).
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.

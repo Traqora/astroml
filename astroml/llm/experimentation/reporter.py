@@ -11,7 +11,7 @@ class ExperimentReporter:
     Produces summaries for stakeholders and automated decision-making.
     """
 
-    def __init__(self, experiment_id: str, experiment_name: str):
+    def __init__(self, experiment_id -> Any: str, experiment_name: str):
         """Initialize reporter."""
         self.experiment_id = experiment_id
         self.experiment_name = experiment_name

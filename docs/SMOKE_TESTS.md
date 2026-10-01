@@ -185,5 +185,5 @@ When deprecating services, remove corresponding smoke tests:
 ## Related Documentation
 
 - [CI/CD Pipeline](../.github/workflows/docker-ci-cd.yml)
-- [Health Check Endpoints](../api/healthz.py)
+- [Health Check Endpoints](../api/routers/healthz.py)
 - [Deployment Guide](../DOCKER_PRODUCTION_DEPLOYMENT.md)

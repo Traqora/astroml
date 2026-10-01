@@ -105,11 +105,31 @@ class PoolMetrics:
         self._health_check_failures = 0
 
 
+# ``_sync_url`` below strips an async driver from whatever scheme it is given;
+# this is the mirror image, so a single ``DATABASE_URL`` serves both engines.
+_ASYNC_DRIVERS = {
+    "postgres": "postgresql+asyncpg",
+    "postgresql": "postgresql+asyncpg",
+    "postgresql+psycopg": "postgresql+asyncpg",
+    "postgresql+psycopg2": "postgresql+asyncpg",
+    "sqlite": "sqlite+aiosqlite",
+}
+
+
 def _async_url() -> str:
-    return os.environ.get(
+    """Return ``DATABASE_URL`` with an async driver.
+
+    ``create_async_engine`` rejects a driver-less scheme, and every
+    docker-compose, k8s and CI config in this repo sets plain
+    ``postgresql://``, so the app could not boot from any published example.
+    """
+    url = os.environ.get(
         "DATABASE_URL",
         "postgresql+asyncpg://astroml:astroml@localhost/astroml",
     )
+    scheme, separator, rest = url.partition("://")
+    driver = _ASYNC_DRIVERS.get(scheme)
+    return f"{driver}://{rest}" if separator and driver else url
 
 
 def _sync_url() -> str:

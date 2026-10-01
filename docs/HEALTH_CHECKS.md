@@ -14,6 +14,7 @@ connection pool health checks from Issue #550.
 | `GET /healthz/db` | Database connectivity + pool saturation | `SELECT 1` fails or the pool is exhausted |
 | `GET /healthz/cache` | Redis connectivity | Redis unreachable **and** `HEALTHZ_CACHE_REQUIRED=true` |
 | `GET /healthz/disk` | Free space on the data volume | Free space below 10% |
+| `GET /healthz/ingestion` | Ingestion heartbeat — how stale the data is | No ledger ingested for `INGESTION_FAIL_THRESHOLD_SECONDS` (default 600s) |
 | `GET /metrics/db-pool` | Connection pool utilization snapshot | Pool exhausted |
 
 The legacy `GET /health` and `GET /health/*` endpoints are unchanged; nothing
@@ -48,6 +49,47 @@ Aggregate probes (`/healthz`, `/healthz/ready`) nest one entry per component:
   "remediation": "Redis is unreachable. Verify REDIS_URL, that the Redis service is running, ..."
 }
 ```
+
+### Ingestion staleness
+
+`GET /healthz/ingestion` compares `last_processed_at` in the ingestion state
+store against the wall clock. Both the state file and this probe have to point
+at the same path — set `INGESTION_STATE_FILE` on the worker and the API, or mount
+one shared volume at the default location:
+
+```json
+{
+  "status": "degraded",
+  "component": "ingestion",
+  "details": {
+    "path": "/var/lib/astroml/.astroml_state/ingestion_state.json",
+    "last_processed_at": "2026-09-24T09:12:31.884512+00:00",
+    "last_processed_ledger": 1100456,
+    "staleness_seconds": 421.7,
+    "stale_threshold_seconds": 300.0,
+    "fail_threshold_seconds": 600.0
+  },
+  "remediation": "No ledger has been ingested for 422s (last at 2026-09-24T09:12:31.884512+00:00), past the 300s stale threshold but under the 600s fail threshold. ...",
+  "duration_ms": 0.41
+}
+```
+
+Grading:
+
+| Staleness | Status | HTTP |
+| --- | --- | --- |
+| `< INGESTION_STALE_THRESHOLD_SECONDS` (300) | `ok` | 200 |
+| `>=` stale threshold, `<` fail threshold | `degraded` | 200 |
+| `>= INGESTION_FAIL_THRESHOLD_SECONDS` (600) | `fail` | 503 |
+| no heartbeat on record, or state file unreadable | `degraded` | 200 |
+
+A missing heartbeat is deliberately `degraded` rather than `fail`: freshness that
+cannot be established is not the same as freshness that has been established, and
+a state file with no timestamp at all is far more often a fresh install or a
+mis-pointed path than a stalled pipeline.
+
+The probe is a real dependency check on **freshness**, not on the ingestion
+process — it reads a file, so it never blocks on Horizon.
 
 ### Status vocabulary
 
@@ -95,6 +137,12 @@ reachable with a non-exhausted pool. The cache and disk checks can downgrade
 readiness to `degraded` but not fail it, unless disk space is critical or
 `HEALTHZ_CACHE_REQUIRED=true`.
 
+Ingestion staleness is deliberately **not** part of the readiness gate. Stale
+data means the pipeline needs attention; it does not mean this API instance
+cannot serve what it has, and failing readiness for it would pull every API pod
+out of the Service while the pipeline is already the thing that is broken. It is
+visible on `/healthz` and pageable via the alerts instead.
+
 The API lifespan calls `readiness_state.mark_started()` after the scheduler and
 WebSocket poller are wired up, and `readiness_state.set_ready(False, ...)` at the
 start of shutdown — so a terminating pod reports `fail` on `/healthz/ready` and
@@ -108,6 +156,9 @@ is drained from the Service before its dependencies are torn down.
 | `HEALTHZ_DISK_PATH` | `.` | Filesystem inspected by the disk probe |
 | `HEALTHZ_CACHE_REQUIRED` | `false` | When true, a Redis outage fails readiness |
 | `REDIS_URL` | `redis://localhost:6379/0` | Cache endpoint pinged by `/healthz/cache` |
+| `INGESTION_STATE_FILE` | `<cwd>/.astroml_state/ingestion_state.json` | State file the ingestion probe reads the heartbeat from |
+| `INGESTION_STALE_THRESHOLD_SECONDS` | `300` | Silence before `/healthz/ingestion` reports `degraded` |
+| `INGESTION_FAIL_THRESHOLD_SECONDS` | `600` | Silence before `/healthz/ingestion` reports `fail` |
 
 ## Kubernetes probes
 
@@ -166,5 +217,8 @@ See `docker-compose.yml` extension fields (`x-graceful-shutdown`,
 ## Related
 
 - Metric definitions: [METRICS_REFERENCE.md](METRICS_REFERENCE.md)
+- Ingestion monitoring and stale-data alerts: [ingestion-monitoring.md](ingestion-monitoring.md)
+- Stale-data runbook: [runbooks/ingestion_heartbeat_stale.md](runbooks/ingestion_heartbeat_stale.md)
 - Pool internals: `astroml/db/pool_health.py`
 - Probe implementation: `api/routers/healthz.py`
+- Heartbeat check: `astroml/observability/ingestion.py`

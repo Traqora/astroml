@@ -37,7 +37,7 @@ quickstart-verbose:
 	python -m astroml.quick_start --num-ledgers 200 --num-accounts 100 --epochs 20
 
 test:
-	pytest tests/ -v
+	pytest tests/ -v --continue-on-collection-errors
 
 test-api:
 	pytest api/tests/ -v --tb=short
@@ -156,8 +156,8 @@ security-audit:
 
 .PHONY: secrets-scan
 secrets-scan:
-	@echo "🔍 Running detect-secrets to scan for leaked credentials..."
-	detect-secrets scan --baseline .secrets.baseline
+	@echo "🔍 Running detect-secrets gate (fails on new or unaudited secrets)..."
+	python -m astroml.ci.secrets_gate --baseline .secrets.baseline
 
 .PHONY: benchmark
 benchmark:

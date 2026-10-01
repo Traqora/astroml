@@ -132,6 +132,12 @@ class NetworkProfile:
 
     @property
     def is_production(self) -> bool:
+        """Whether this profile describes pubnet, i.e. real money.
+
+        Gates the destructive paths: a profile that answers ``True`` here
+        should be the only thing a writer may point at a production store, and
+        :class:`CrossNetworkWriteError` is what catches the mismatch otherwise.
+        """
         return self.network.is_production
 
     def matches(self, other: NetworkProfile | StellarNetwork | str) -> bool:

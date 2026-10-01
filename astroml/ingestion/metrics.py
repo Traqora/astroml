@@ -78,3 +78,21 @@ INGESTION_BATCH_THROUGHPUT = Gauge(
     "astroml_ingestion_batch_throughput_ledgers_per_second",
     "Ledgers processed per second during the most recent batch",
 )
+
+# Ingestion heartbeat / stale-data metrics.
+#
+# Unlabelled on purpose: there is one ingestion pipeline per state store, and a
+# labelled-by-source gauge would make the `absent()`/staleness alerts harder to
+# reason about without buying anything. Sampled from the state store on every
+# `/metrics` scrape by `astroml.observability.ingestion.update_ingestion_metrics`,
+# so staleness keeps climbing while ingestion is silent. Both are `NaN` until
+# the first heartbeat lands.
+INGESTION_LAST_SUCCESS_TIMESTAMP = Gauge(
+    "astroml_ingestion_last_success_timestamp_seconds",
+    "Unix timestamp of the most recently processed ledger (ingestion heartbeat)",
+)
+
+INGESTION_STALENESS_SECONDS = Gauge(
+    "astroml_ingestion_staleness_seconds",
+    "Seconds since the most recently processed ledger (data freshness lag)",
+)

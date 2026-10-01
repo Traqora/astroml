@@ -30,7 +30,7 @@ class PromptTemplate(BaseModel):
 class TemplateEngine:
     """Jinja2-based template rendering engine."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize Jinja2 environment."""
         self.env = Environment(autoescape=False)
         self._cache = {}
@@ -112,7 +112,7 @@ class TemplateEngine:
         except (TemplateError, UndefinedError) as e:
             raise ValueError(f"Template rendering error: {e}")
 
-    def clear_cache(self):
+    def clear_cache(self) -> Any:
         """Clear template cache."""
         self._cache.clear()
 

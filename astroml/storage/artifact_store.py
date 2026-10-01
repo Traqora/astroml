@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """Configurable artifact store with fsspec support for S3, GCS, and local storage."""
 
 from __future__ import annotations
@@ -91,7 +92,7 @@ class ArtifactStore(ABC):
 class LocalArtifactStore(ArtifactStore):
     """Local filesystem artifact store."""
 
-    def __init__(self, base_path: str | Path):
+    def __init__(self, base_path -> Any: str | Path):
         """Initialize local artifact store.
 
         Args:

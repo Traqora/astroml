@@ -13,7 +13,7 @@ class BlockchainContextBuilder:
     string that fits within a token budget, compressing older days first.
     """
 
-    def __init__(self, token_limit: int = 4000, recent_detailed_days: int = 7, group_size: int = 7):
+    def __init__(self, token_limit -> Any: int = 4000, recent_detailed_days: int = 7, group_size: int = 7):
         self.token_limit = token_limit
         self.recent_detailed_days = recent_detailed_days
         self.group_size = group_size

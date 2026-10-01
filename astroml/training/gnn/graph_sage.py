@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """GraphSAGE model for node classification and transaction analysis.
 
 Implements inductive representation learning and node classification on
@@ -44,7 +45,7 @@ def _get_sage_conv(
                 aggr=aggregator,
                 bias=bias,
             )
-        except Exception:
+        except AstroMLError:
             pass
     return InternalSAGEConv(
         in_dim=in_channels,

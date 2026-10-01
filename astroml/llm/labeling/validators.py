@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Label validation for LLM-based data labeling (issue #475)."""
 
 from __future__ import annotations
@@ -40,14 +41,14 @@ class ValidationRule:
         try:
             is_valid = self.validator(label, context)
             return is_valid, None if is_valid else f"Rule '{self.name}' violated"
-        except Exception as e:
+        except AstroMLError as e:
             return False, f"Rule '{self.name}' error: {str(e)}"
 
 
 class LabelValidator:
     """Validator for generated labels."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize label validator."""
         self.rules: List[ValidationRule] = []
         self._register_default_rules()

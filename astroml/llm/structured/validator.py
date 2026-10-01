@@ -13,7 +13,7 @@ T = TypeVar("T", bound=BaseModel)
 class ValidationResult:
     """Result of output validation."""
 
-    def __init__(self, valid: bool, errors: list[str] = None, data: Any = None):
+    def __init__(self, valid -> Any: bool, errors: list[str] = None, data: Any = None):
         self.valid = valid
         self.errors = errors or []
         self.data = data

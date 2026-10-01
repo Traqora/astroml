@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """Tests for the LLM provider abstraction layer (issue #359)."""
 
 import sys
@@ -8,7 +9,7 @@ from unittest.mock import MagicMock
 from .factory import _PROVIDERS, get_llm_provider
 
 
-def _install_fake_module(name: str, **attrs):
+def _install_fake_module(name -> Any: str, **attrs):
     module = types.ModuleType(name)
     for key, value in attrs.items():
         setattr(module, key, value)
@@ -17,14 +18,14 @@ def _install_fake_module(name: str, **attrs):
 
 
 class FactoryTests(unittest.TestCase):
-    def test_unknown_provider_raises(self):
+    def test_unknown_provider_raises(self) -> Any:
         with self.assertRaises(ValueError):
             get_llm_provider("not-a-provider")
 
-    def test_known_providers_registered(self):
+    def test_known_providers_registered(self) -> Any:
         self.assertEqual(set(_PROVIDERS), {"openai", "anthropic", "huggingface", "local"})
 
-    def test_switch_provider_via_config_only(self):
+    def test_switch_provider_via_config_only(self) -> Any:
         import os
 
         os.environ["LLM_PROVIDER"] = "anthropic"
@@ -38,14 +39,14 @@ class FactoryTests(unittest.TestCase):
 class SameInterfaceTests(unittest.TestCase):
     """Each provider must expose the same generate()/get_token_usage() interface."""
 
-    def setUp(self):
+    def setUp(self) -> Any:
         self._orig_modules = dict(sys.modules)
 
-    def tearDown(self):
+    def tearDown(self) -> Any:
         sys.modules.clear()
         sys.modules.update(self._orig_modules)
 
-    def test_openai_provider_generate(self):
+    def test_openai_provider_generate(self) -> Any:
         fake_choice = MagicMock()
         fake_choice.message.content = "hello from openai"
         fake_response = MagicMock(choices=[fake_choice])
@@ -70,7 +71,7 @@ class SameInterfaceTests(unittest.TestCase):
             },
         )
 
-    def test_anthropic_provider_generate(self):
+    def test_anthropic_provider_generate(self) -> Any:
         fake_block = MagicMock(text="hello from anthropic")
         fake_response = MagicMock(content=[fake_block])
         fake_response.usage.input_tokens = 6
@@ -93,7 +94,7 @@ class SameInterfaceTests(unittest.TestCase):
             },
         )
 
-    def test_huggingface_provider_generate(self):
+    def test_huggingface_provider_generate(self) -> Any:
         fake_client = MagicMock()
         fake_client.text_generation.return_value = "hello from huggingface"
         fake_hf = _install_fake_module("huggingface_hub")

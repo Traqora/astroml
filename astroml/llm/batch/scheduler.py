@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class BackfillScheduler:
     """Manages backfill job lifecycle: create, pause, resume, list."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         self._jobs: dict[str, dict[str, Any]] = {}
 
     def create_job(

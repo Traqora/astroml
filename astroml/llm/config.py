@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 import os
 from typing import Any
 
@@ -100,7 +101,7 @@ def load_all_configs(config_dir: str = None) -> GlobalLLMSettings:
                     p_name = p_data.get("provider_name") or os.path.splitext(fname)[0]
                     try:
                         providers[p_name] = ProviderSettings(**p_data)
-                    except Exception as e:
+                    except AstroMLError as e:
                         raise ConfigurationError(
                             f"Validation failed for provider config '{fname}': {e}"
                         ) from e
@@ -122,13 +123,13 @@ def load_all_configs(config_dir: str = None) -> GlobalLLMSettings:
     global_data["providers"] = providers
     try:
         return GlobalLLMSettings(**global_data)
-    except Exception as e:
+    except AstroMLError as e:
         raise ConfigurationError(f"Validation failed for global LLM config: {e}") from e
 
 
 # Load and validate configs on module import to fail fast on startup
 try:
     llm_settings = load_all_configs()
-except Exception as e:
+except AstroMLError as e:
     # Re-raise so importing anything from here fails fast
     raise e

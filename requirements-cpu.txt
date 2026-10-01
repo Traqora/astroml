@@ -14,6 +14,17 @@ pyyaml>=6.0
 aiohttp>=3.9
 aiohttp-sse-client>=0.2.1
 pytest-asyncio>=0.23
+# `astroml/ingestion/metrics.py` imports prometheus_client at module scope, and
+# that module is reached from `astroml.db`, so the CPU profile cannot even
+# collect tests without it. It was already in requirements.txt; this file had
+# drifted.
+prometheus-client>=0.19.0
+# Same drift: `astroml/features/feature_cache.py` and `astroml/cache/redis_cache.py`
+# import redis at module scope, and `feature_store.py`/`feature_cache.py` import
+# cachetools, so anything reaching `astroml.features` needs them. Both are in
+# requirements.txt.
+redis>=5.0.0
+cachetools>=5.3.0
 stellar-sdk>=9.0.0
 tenacity>=8.4.0
 hydra-core>=1.3.0

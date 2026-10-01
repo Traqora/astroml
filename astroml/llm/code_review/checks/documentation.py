@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """
 Documentation checks for code review.
 
@@ -27,7 +28,7 @@ class DocumentationCheck(BaseCheck):
     - Type hints
     """
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize the documentation check."""
         self.patterns = self._init_patterns()
 

@@ -1,41 +1,42 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 try:
     from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 except ImportError:
     # Minimal mock for environment without prometheus_client
     class Counter:
-        def __init__(self, name, desc, labelnames=()):
+        def __init__(self, name, desc, labelnames=()) -> Any:
             self.name = name
 
-        def labels(self, *args, **kwargs):
+        def labels(self, *args, **kwargs) -> Any:
             return self
 
-        def inc(self, amount=1):
+        def inc(self, amount=1) -> Any:
             pass
 
     class Histogram:
-        def __init__(self, name, desc, labelnames=(), buckets=None):
+        def __init__(self, name, desc, labelnames=(), buckets=None) -> Any:
             self.name = name
 
-        def labels(self, *args, **kwargs):
+        def labels(self, *args, **kwargs) -> Any:
             return self
 
-        def observe(self, val):
+        def observe(self, val) -> Any:
             pass
 
     class Gauge:
-        def __init__(self, name, desc, labelnames=()):
+        def __init__(self, name, desc, labelnames=()) -> Any:
             self.name = name
 
-        def labels(self, *args, **kwargs):
+        def labels(self, *args, **kwargs) -> Any:
             return self
 
-        def set(self, val):
+        def set(self, val) -> Any:
             pass
 
-        def inc(self, amount=1):
+        def inc(self, amount=1) -> Any:
             pass
 
-    def generate_latest():
+    def generate_latest() -> Any:
         return b""
 
     CONTENT_TYPE_LATEST = "text/plain"
@@ -44,7 +45,7 @@ from .collector import get_metrics_collector
 
 
 class PrometheusExporter:
-    def __init__(self):
+    def __init__(self) -> Any:
         self.request_counter = Counter(
             "llm_requests_total", "Total LLM requests", ["model", "feature", "status"]
         )
@@ -63,7 +64,7 @@ class PrometheusExporter:
             "llm_safety_incidents_total", "Total LLM safety incidents"
         )
 
-    def update_metrics(self):
+    def update_metrics(self) -> Any:
         collector = get_metrics_collector()
 
         # In a real environment, we'd update gauges or increment counters as events happen.

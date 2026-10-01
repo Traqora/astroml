@@ -44,6 +44,13 @@ class LedgerReader:
 
     @property
     def data_dir(self) -> pathlib.Path:
+        """Directory the reader lists and streams from.
+
+        Normalised to a :class:`~pathlib.Path` at construction, and the
+        directory is *not* required to exist — an empty result from
+        :meth:`list_ledger_files` is the answer for a missing path, not an
+        error.
+        """
         return self._data_dir
 
     def list_ledger_files(
@@ -59,12 +66,10 @@ class LedgerReader:
             return []
 
         files = []
-        for f in self._data_dir.iterdir():
+        for f in self._data_dir.rglob("ledger_*.*"):
             if not f.is_file():
                 continue
-            if not f.name.startswith("ledger_") or not (
-                f.name.endswith(".json") or f.name.endswith(".jsonl")
-            ):
+            if not (f.name.endswith(".json") or f.name.endswith(".jsonl")):
                 continue
             seq = self._extract_sequence(f.name)
             if seq is None:
@@ -216,9 +221,18 @@ class LedgerReader:
         Streams the file to find the matching record without loading
         the entire directory.
         """
+        # Fast path: check root
         file_path = self._data_dir / f"ledger_{sequence}.json"
-        if not file_path.exists():
-            return None
+        if file_path.exists():
+            return self._read_file_for_sequence(file_path, sequence)
+            
+        # Slower path: search in subdirectories (partitions)
+        for file_path in self._data_dir.rglob(f"ledger_{sequence}.json"):
+            return self._read_file_for_sequence(file_path, sequence)
+            
+        return None
+
+    def _read_file_for_sequence(self, file_path: pathlib.Path, sequence: int) -> Optional[dict[str, Any]]:
         for record in self.stream_file(file_path):
             if record.get("sequence") == sequence:
                 return record

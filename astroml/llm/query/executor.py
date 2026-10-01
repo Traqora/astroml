@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Safe SQL query executor with timeouts and audit logging."""
 
 from __future__ import annotations
@@ -49,6 +50,6 @@ async def execute_safe_query(
     except asyncio.TimeoutError:
         logger.error("Audit Log: Query timed out after %s seconds: '%s'", timeout_seconds, sql)
         raise TimeoutError(f"Query execution timed out after {timeout_seconds}s limit.")
-    except Exception as e:
+    except AstroMLError as e:
         logger.error("Audit Log: Database execution error for query '%s': %s", sql, e)
         raise e

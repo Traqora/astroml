@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Factory for LLM Providers with automatic fallback chains."""
 
 import logging
@@ -45,7 +46,7 @@ def get_llm_provider(provider_name: str = None, **kwargs) -> LLMProvider:
             try:
                 f_key = get_api_key(fallback_name)
                 secondaries.append(_PROVIDERS[fallback_name](api_key=f_key))
-            except Exception as e:
+            except AstroMLError as e:
                 logger.warning(f"Failed to initialize fallback provider {fallback_name}: {e}")
 
     primary_prov.fallback_providers = secondaries

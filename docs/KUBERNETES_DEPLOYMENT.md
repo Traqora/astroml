@@ -86,7 +86,7 @@ PostgreSQL, Redis
 
 ### 1. Clone Repository
 ```bash
-git clone https://github.com/Menjay7/astroml.git
+git clone https://github.com/Traqora/astroml.git
 cd astroml
 ```
 

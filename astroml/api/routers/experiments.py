@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Experiments API router for AstroML.
 
 Provides REST endpoints for experiment management, run comparison,
@@ -130,7 +131,7 @@ async def create_experiment(request: CreateExperimentRequest) -> ExperimentRespo
         return _exp_to_response(exp)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error creating experiment")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -154,7 +155,7 @@ async def list_experiments(
             reverse=reverse,
         )
         return [_exp_to_response(e) for e in exps]
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error listing experiments")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -191,7 +192,7 @@ async def update_experiment(
         return _exp_to_response(exp)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error updating experiment")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -209,7 +210,7 @@ async def delete_experiment(experiment_id: str) -> MessageResponse:
         return MessageResponse(message=f"Deleted experiment {experiment_id}")
     except HTTPException:
         raise
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error deleting experiment")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -245,7 +246,7 @@ async def add_run(experiment_id: str, request: RunMetricsRequest) -> MessageResp
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error adding run")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -263,7 +264,7 @@ async def remove_run(experiment_id: str, run_id: str) -> MessageResponse:
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error removing run")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -300,7 +301,7 @@ async def compare_runs(request: CompareRequest) -> dict[str, Any]:
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error comparing runs")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -323,7 +324,7 @@ async def hyperparameter_importance(
         return [
             {"parameter": p, "importance": round(s, 6)} for p, s in scores
         ]
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error computing hyperparameter importance")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -344,7 +345,7 @@ async def add_tag(experiment_id: str, tag: str = Query(..., min_length=1)) -> Ex
         return _exp_to_response(exp)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error adding tag")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -360,7 +361,7 @@ async def remove_tag(experiment_id: str, tag: str = Query(..., min_length=1)) ->
         return _exp_to_response(exp)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error removing tag")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -390,7 +391,7 @@ async def clone_experiment(
         return _exp_to_response(exp)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error cloning experiment")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -419,7 +420,7 @@ async def generate_report(
         return data
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error generating report")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -438,7 +439,7 @@ async def get_stats() -> DashboardStatsResponse:
     try:
         stats = _dashboard.dashboard_stats()
         return DashboardStatsResponse(**stats)
-    except Exception as e:
+    except AstroMLError as e:
         logger.exception("Error getting dashboard stats")
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Load balancer for model serving infrastructure.
 
 Issue #639 Step 2: Implements intelligent request routing across
@@ -344,7 +345,7 @@ class LoadBalancer:
                 with self._lock:
                     replica.healthy = healthy
                 results[rid] = healthy
-            except Exception as e:
+            except AstroMLError as e:
                 logger.warning(f"Health check failed for {rid}: {e}")
                 with self._lock:
                     replica.healthy = False

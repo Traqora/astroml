@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """Tests for enhanced streaming service with robust error handling."""
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from astroml.ingestion.enhanced_stream import (
 class TestRateLimitTracker:
     """Test rate limiting and adaptive throttling."""
 
-    def test_record_request(self):
+    def test_record_request(self) -> Any:
         """Test request recording."""
         tracker = RateLimitTracker()
 
@@ -35,7 +36,7 @@ class TestRateLimitTracker:
         assert tracker.request_count == 2
         assert tracker.get_request_rate() > 0.0
 
-    def test_handle_rate_limit(self):
+    def test_handle_rate_limit(self) -> Any:
         """Test rate limit backoff calculation."""
         tracker = RateLimitTracker(backoff_factor=2.0)
 
@@ -54,7 +55,7 @@ class TestRateLimitTracker:
         backoff = tracker.handle_rate_limit()
         assert backoff == 300.0  # Capped at 300s
 
-    def test_should_throttle(self):
+    def test_should_throttle(self) -> Any:
         """Test throttling logic."""
         tracker = RateLimitTracker()
 
@@ -75,7 +76,7 @@ class TestRateLimitTracker:
 class TestConnectionHealthMonitor:
     """Test connection health monitoring."""
 
-    def test_record_success(self):
+    def test_record_success(self) -> Any:
         """Test successful request recording."""
         monitor = ConnectionHealthMonitor()
 
@@ -86,7 +87,7 @@ class TestConnectionHealthMonitor:
         assert monitor.consecutive_failures == 0
         assert monitor.is_healthy
 
-    def test_record_failure(self):
+    def test_record_failure(self) -> Any:
         """Test failure recording and health status."""
         monitor = ConnectionHealthMonitor(max_consecutive_failures=2)
 
@@ -100,7 +101,7 @@ class TestConnectionHealthMonitor:
         assert monitor.consecutive_failures == 2
         assert not monitor.is_healthy  # Now unhealthy
 
-    def test_should_check_health(self):
+    def test_should_check_health(self) -> Any:
         """Test health check timing."""
         monitor = ConnectionHealthMonitor(check_interval=30.0)
 
@@ -115,7 +116,7 @@ class TestConnectionHealthMonitor:
         monitor.last_health_check = time.time() - 31.0
         assert monitor.should_check_health()
 
-    def test_is_connection_stale(self):
+    def test_is_connection_stale(self) -> Any:
         """Test connection staleness detection."""
         monitor = ConnectionHealthMonitor(check_interval=30.0)
 
@@ -135,7 +136,7 @@ class TestEnhancedStellarStream:
     """Test enhanced streaming functionality."""
 
     @pytest.fixture
-    def config(self):
+    def config(self) -> Any:
         """Create test configuration."""
         return EnhancedStreamConfig(
             horizon_url="https://horizon-testnet.stellar.org",
@@ -145,7 +146,7 @@ class TestEnhancedStellarStream:
         )
 
     @pytest.fixture
-    def stream(self, config):
+    def stream(self, config) -> Any:
         """Create test stream."""
         return EnhancedStellarStream(config)
 

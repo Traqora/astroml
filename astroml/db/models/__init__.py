@@ -243,15 +243,41 @@ class Effect(Base):
 
 class NormalizedTransaction(Base):
     __tablename__ = "normalized_transactions"
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # ``GRAPH_ID_TYPE`` is the repository's sqlite-safe autoincrement id: SQLite
+    # only auto-increments an ``INTEGER PRIMARY KEY``, and this row's id is
+    # generated rather than supplied by the caller (unlike ``Operation.id``,
+    # which carries Horizon's operation id).  Renders BIGINT on Postgres.
+    id: Mapped[int] = mapped_column(GRAPH_ID_TYPE, primary_key=True, autoincrement=True)
     transaction_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Natural key for ingestion idempotency (issue #728).  Horizon's operation
+    # id is a toid — ``ledger << 32 | tx_order << 12 | op_index`` — so the
+    # ledger it was applied in is recoverable from the id alone, and
+    # ``hop_index`` keeps the several rows one path-payment operation
+    # decomposes into distinct while leaving them individually addressable.
+    #
+    # These are nullable so the migration can add them to a table that already
+    # holds rows recorded before the key existed and which therefore have no
+    # operation id to backfill from.  Postgres and SQLite both treat NULLs as
+    # distinct in a UNIQUE constraint, so those legacy rows are exempt from the
+    # guarantee below while every new write is subject to it.
+    ledger_sequence: Mapped[Optional[int]] = mapped_column(BigInteger)
+    operation_id: Mapped[Optional[int]] = mapped_column(BigInteger)
+    hop_index: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="0")
     sender: Mapped[str] = mapped_column(String(56), nullable=False)
     receiver: Mapped[Optional[str]] = mapped_column(String(56))
     asset: Mapped[str] = mapped_column(String(70), nullable=False)
     amount: Mapped[Optional[float]] = mapped_column(Numeric)
     timestamp: Mapped[datetime] = mapped_column(nullable=False)
-    __table_args__ = (Index("ix_normalized_transactions_hash", "transaction_hash"), Index("ix_normalized_transactions_sender_timestamp", "sender",
-                      "timestamp"), Index("ix_normalized_transactions_receiver_timestamp", "receiver", "timestamp", postgresql_where=(receiver.isnot(None))))
+    __table_args__ = (UniqueConstraint("ledger_sequence", "operation_id", "hop_index",
+                      name="uq_normalized_transactions_natural_key"), Index("ix_normalized_transactions_hash", "transaction_hash"), Index(
+        "ix_normalized_transactions_operation", "ledger_sequence", "operation_id"), Index("ix_normalized_transactions_sender_timestamp", "sender",
+                      "timestamp"), Index("ix_normalized_transactions_receiver_timestamp", "receiver", "timestamp", postgresql_where=(receiver.isnot(None))),
+        # Issue #732 — the snapshot builders read a timestamp range in the
+        # blockchain's total order, so this index carries that order all the
+        # way through: the planner walks it for the range and the rows arrive
+        # already sorted, with no sort node and no tie left for it to break.
+        Index("ix_normalized_transactions_timestamp_order", "timestamp",
+              "ledger_sequence", "operation_id", "hop_index"))
 
 
 class DbModel(Base):

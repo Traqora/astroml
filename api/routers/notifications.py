@@ -18,9 +18,10 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from api.auth.dependencies import AuthContext, get_current_auth
-from api.database import get_db
+from api.database import get_db, get_sync_db
 from api.models.orm import Notification, NotificationPreference
 from api.schemas import (
     DigestEmailOut,
@@ -202,7 +203,12 @@ async def update_preferences(
 @router.post("/webhook/github", status_code=202)
 async def handle_github_webhook(
     body: WebhookEventIn,
-    db: AsyncSession = Depends(get_db),
+    # Issue #713 — GitHubWebhookHandler/NotificationService are synchronous
+    # (sync Session API: execute/flush/commit). Wiring the async session in
+    # here made every event that reaches the DB fail with a 500 (the
+    # coroutine returned by AsyncSession.execute has no scalar_one_or_none),
+    # so this route takes the sync session instead.
+    db: Session = Depends(get_sync_db),
 ):
     """Handle GitHub webhook events.
 
@@ -243,7 +249,7 @@ async def handle_github_webhook(
     else:
         raise HTTPException(status_code=400, detail="Unknown event type")
 
-    await db.commit()
+    db.commit()
     return {"status": "accepted"}
 
 

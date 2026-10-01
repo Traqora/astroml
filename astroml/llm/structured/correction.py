@@ -15,7 +15,7 @@ T = TypeVar("T", bound=BaseModel)
 class AutoCorrector:
     """Automatic correction of validation failures."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         self.validator = OutputValidator()
 
     def correct(self, data: dict[str, Any], schema: type[T]) -> dict[str, Any]:

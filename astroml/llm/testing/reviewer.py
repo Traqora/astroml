@@ -1,3 +1,5 @@
+from typing import Any, Dict, List, Optional, Union, Callable
+from astroml.utils.exceptions import AstroMLError
 """Test quality reviewer.
 
 Reviews generated tests for correctness, coverage, and best practices.
@@ -40,7 +42,7 @@ class TestReviewer:
     - Mock usage
     """
 
-    def __init__(self, source_code: str | None = None):
+    def __init__(self, source_code -> Any: str | None = None):
         self.source_code = source_code
 
     def review_test(self, test: GeneratedTest) -> ReviewResult:
@@ -84,7 +86,7 @@ class TestReviewer:
             ast.parse(full_code)
         except SyntaxError as e:
             issues.append(f"Syntax error in {test.name}: {e}")
-        except Exception as e:
+        except AstroMLError as e:
             issues.append(f"Parse error in {test.name}: {e}")
         return issues
 

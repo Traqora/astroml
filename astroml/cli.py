@@ -237,6 +237,30 @@ def main(argv: list[str] | None = None) -> int:
         help="Optional explicit input format.",
     )
 
+    agent = sub.add_parser("agent", help="LLM Agent Framework for autonomous task execution")
+    agent_sub = agent.add_subparsers(dest="agent_command", required=True)
+
+    agent_interactive = agent_sub.add_parser("interactive", help="Run agent in interactive mode")
+    agent_interactive.add_argument(
+        "--agent-type",
+        choices=["fraud-detection", "model-training", "generic"],
+        default="generic",
+        help="Type of agent to use",
+    )
+
+    agent_run = agent_sub.add_parser("run", help="Run agent on a single task")
+    agent_run.add_argument(
+        "--agent-type",
+        choices=["fraud-detection", "model-training", "generic"],
+        default="generic",
+        help="Type of agent to use",
+    )
+    agent_run.add_argument("--task", required=True, help="Task description")
+    agent_run.add_argument("--context", help="Context as JSON string")
+    agent_run.add_argument("--verbose", action="store_true", help="Enable verbose output")
+
+    agent_sub.add_parser("list-tools", help="List available tools")
+
     args = parser.parse_args(argv)
 
     # Wire the top-level --env flag into ASTROML_ENV so downstream loaders
@@ -309,7 +333,7 @@ def main(argv: list[str] | None = None) -> int:
                             "name": db_config.name,
                             "user": db_config.user,
                             "password": "***" if db_config.password else "",
-                            "url": db_config.to_url(),
+                            "url": db_config.masked_url,
                         },
                         indent=2,
                     )

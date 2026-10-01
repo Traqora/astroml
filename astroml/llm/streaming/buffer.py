@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Buffering and backpressure handling for slow consumers."""
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ class StreamBuffer(Generic[T]):
     If the queue grows too large, pushing is blocked or slower to handle backpressure.
     """
 
-    def __init__(self, max_size: int = 100):
+    def __init__(self, max_size -> Any: int = 100):
         self._queue: asyncio.Queue[T] = asyncio.Queue(maxsize=max_size)
         self._max_size = max_size
         self._aborted = False
@@ -31,7 +32,7 @@ class StreamBuffer(Generic[T]):
             # If queue is full, this will wait asynchronously, applying backpressure
             await self._queue.put(item)
             return True
-        except Exception as e:
+        except AstroMLError as e:
             logger.error("Failed to push item to stream buffer: %s", e)
             return False
 

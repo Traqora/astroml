@@ -11,7 +11,7 @@ from .engine import PromptTemplate, TemplateEngine
 class PromptRegistry:
     """Manages versioned prompt templates with A/B testing support."""
 
-    def __init__(self, storage_path: str | None = None):
+    def __init__(self, storage_path -> Any: str | None = None):
         """Initialize prompt registry.
 
         Args:

@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Blue-green deployment strategy for zero-downtime model rollouts.
 
 Maintains two identical environments (blue = current, green = new).

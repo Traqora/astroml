@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Change Data Capture connector (issue #626).
 
 Integrates Debezium for capturing database changes from PostgreSQL and
@@ -171,7 +172,14 @@ class ChangeEvent:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize to dict."""
+        """Serialise the event for a transport or a JSON column.
+
+        Returns:
+            The event's fields, with ``op`` flattened to its string value so
+                the result is JSON serialisable. ``before``/``after`` are
+                passed through as-is and may themselves be ``None`` — for an
+                insert, a delete and a read snapshot respectively.
+        """
         return {
             "source": self.source,
             "op": self.op.value,
@@ -231,7 +239,14 @@ class CDCConnector:
         self.status = ConnectorStatus.PAUSED
 
     def resume(self) -> None:
-        """Resume event capture."""
+        """Resume event capture after a :meth:`pause`.
+
+        Sets the status back to :attr:`ConnectorStatus.RUNNING`. Like
+        :meth:`pause`, this only moves the local state machine — events
+        published by PostgreSQL while paused are not replayed, so resuming is
+        not lossless and a gap must be closed by a re-read of the source
+        tables.
+        """
         self.status = ConnectorStatus.RUNNING
 
     def subscribe(self, callback: Callable[[ChangeEvent], None]) -> None:

@@ -1,0 +1,25 @@
+graph_cache.py unchanged vs HEAD: False
+HEAD blob as utf-8: SyntaxError: invalid character '—' (U+2014) (<unknown>, line 12)
+HEAD blob as cp1252: SyntaxError: invalid character '€' (U+20AC) (<unknown>, line 12)
+local file as utf-8: SyntaxError: invalid character '—' (U+2014) (<unknown>, line 12)
+local file as cp1252: SyntaxError: invalid character '€' (U+20AC) (<unknown>, line 12)
+  raw line 11: b'process.\r'
+  raw line 12: b'"""Graph computation cache for repeated graph outputs \xe2\x80\x94 issue #767.\r'
+  raw line 13: b'\r'
+
+--- mypy (strict, repo config) on my module ---
+astroml\tracking\model_registry.py:912: error: Cannot find implementation or library stub for module named "mlflow"  [import-not-found]
+astroml\tracking\model_registry.py:912: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+astroml\db\session.py:31: error: Library stubs not installed for "yaml"  [import-untyped]
+astroml\db\session.py:31: note: Hint: "python3 -m pip install types-PyYAML"
+astroml\db\session.py:31: note: (or run "mypy --install-types" to install all missing stub packages)
+astroml\tracking\ab_testing.py:11: error: Library stubs not installed for "scipy"  [import-untyped]
+astroml\tracking\ab_testing.py:11: note: Hint: "python3 -m pip install scipy-stubs"
+astroml\tracking\mlflow_tracker.py:13: error: Cannot find implementation or library stub for module named "torch.nn"  [import-not-found]
+astroml\tracking\mlflow_tracker.py:13: error: Cannot find implementation or library stub for module named "torch"  [import-not-found]
+astroml\tracking\mlflow_tracker.py:63: error: Cannot find implementation or library stub for module named "mlflow"  [import-not-found]
+astroml\tracking\mlflow_tracker.py:238: error: Cannot find implementation or library stub for module named "sklearn.metrics"  [import-not-found]
+C:\Users\MENDOS\AppData\Local\Programs\Python312\Lib\site-packages\numpy\__init__.pyi:737: error: Type statement is only supported in Python 3.12 and greater  [syntax]
+Found 8 errors in 5 files (errors prevented further checking)
+(no stderr)
+mypy exit=2

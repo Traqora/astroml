@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Alert configuration and threshold checks for LLM costs."""
 
 from __future__ import annotations
@@ -57,7 +58,7 @@ async def check_and_trigger_alerts(db: AsyncSession, budget: LLMBudget) -> None:
                             is_read=False,
                         )
                         db.add(notif)
-                except Exception as e:
+                except AstroMLError as e:
                     logger.debug("Could not create ORM notification: %s", e)
 
                 break  # only alert for the highest crossed threshold

@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """End-to-end model compression and quantization pipeline for edge deployments.
 
 Sequences pruning, distillation, and quantization, benchmarks speed/size reductions,
@@ -76,7 +77,7 @@ def compute_model_size_mb(model: nn.Module) -> float:
     try:
         torch.save(model.state_dict(), buf)
         return len(buf.getvalue()) / (1024 * 1024)
-    except Exception:
+    except AstroMLError:
         # Fallback to parameter size estimation
         param_size = sum(p.numel() * p.element_size() for p in model.parameters())
         buffer_size = sum(b.numel() * b.element_size() for b in model.buffers())

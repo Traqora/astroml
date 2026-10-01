@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """MLflow experiment tracking integration for AstroML."""
 
 from __future__ import annotations
@@ -84,7 +85,7 @@ class MLflowTracker:
             try:
                 self.artifact_store = create_artifact_store(artifact_uri)
                 logger.info(f"Artifact store initialized: {artifact_uri}")
-            except Exception as e:
+            except AstroMLError as e:
                 logger.warning(f"Failed to initialize artifact store: {e}")
                 self.artifact_store = None
 
@@ -316,7 +317,7 @@ class MLflowTracker:
                 self._run.info.run_id,
             )
             return entry
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Failed to register model: {e}")
             db.rollback()
             return None
@@ -361,7 +362,7 @@ class MLflowTracker:
                 "tags": run.data.tags,
                 "artifact_uri": run.info.artifact_uri,
             }
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Failed to load run metadata: {e}")
             return None
         finally:

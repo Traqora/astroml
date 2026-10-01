@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """FastAPI router for Model Registry and Lineage Tracking endpoints."""
 
 from __future__ import annotations

@@ -178,10 +178,10 @@ class IPRateLimiter:
         return removed
 
 
-class SecurityHeadersMiddleware:
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add security headers to all responses."""
 
-    async def __call__(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next) -> Response:
         response = await call_next(request)
 
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -197,7 +197,7 @@ class SecurityHeadersMiddleware:
         return response
 
 
-class PublicRateLimitMiddleware:
+class PublicRateLimitMiddleware(BaseHTTPMiddleware):
     """Rate limit unauthenticated/public endpoints per IP address.
 
     Authenticated endpoints use the per-user rate limiter in AuthMiddleware.
@@ -211,13 +211,15 @@ class PublicRateLimitMiddleware:
         requests_per_minute: int = 30,
         burst_size: int = 10,
     ) -> None:
-        self._app = app
+        # Starlette constructs middleware as `cls(app, **options)`, so the base
+        # has to receive the downstream app.
+        super().__init__(app)
         self._limiter = IPRateLimiter(
             requests_per_minute=requests_per_minute,
             burst_size=burst_size,
         )
 
-    async def __call__(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next) -> Response:
         path = request.url.path
 
         if path in ("/health", "/healthz", "/ready"):
@@ -271,18 +273,16 @@ def enforce_jwt_secret() -> str:
         if not secret:
             raise RuntimeError(
                 "JWT_SECRET_KEY must be set in production. "
-                "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+                'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
             )
         weak_secrets = {"change-me-in-production", "secret", "admin", "password", "jwt-secret"}
         if secret.lower() in weak_secrets:
             raise RuntimeError(
                 "JWT_SECRET_KEY is set to a weak/default value. "
-                "Generate a strong secret with: python -c \"import secrets; print(secrets.token_hex(32))\""
+                'Generate a strong secret with: python -c "import secrets; print(secrets.token_hex(32))"'
             )
         if len(secret) < 32:
-            raise RuntimeError(
-                "JWT_SECRET_KEY must be at least 32 characters in production."
-            )
+            raise RuntimeError("JWT_SECRET_KEY must be at least 32 characters in production.")
 
     return secret or "dev-only-secret-change-in-production"
 

@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """
 Style checks for code review.
 
@@ -26,7 +27,7 @@ class StyleCheck(BaseCheck):
     - Best practices
     """
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize the style check."""
         self.patterns = self._init_patterns()
 

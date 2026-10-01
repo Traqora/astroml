@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Data lineage API router for AstroML.
 
 Provides REST endpoints for querying and recording lineage and provenance

@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class LLMEvalFramework:
     """Orchestrates LLM evaluation benchmarks, regression checks, and reporting."""
 
-    def __init__(self, model_name: str, generation_fn: Callable[[str], Awaitable[str]]):
+    def __init__(self, model_name -> Any: str, generation_fn: Callable[[str], Awaitable[str]]):
         self.model_name = model_name
         self.runner = BenchmarkRunner(model_name, generation_fn)
         self.regression_detector = QualityRegressionDetector()

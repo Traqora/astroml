@@ -111,7 +111,7 @@ _compliance_checker = None
 _card_generator = None
 
 
-def _get_audit_logger():
+def _get_audit_logger() -> Any:
     global _audit_logger
     if _audit_logger is None:
         from astroml.governance.audit_logger import FileAuditStore, ModelAuditLogger
@@ -120,7 +120,7 @@ def _get_audit_logger():
     return _audit_logger
 
 
-def _get_workflow_manager():
+def _get_workflow_manager() -> Any:
     global _workflow_manager
     if _workflow_manager is None:
         from astroml.governance.approval_workflow import ApprovalWorkflowManager
@@ -129,7 +129,7 @@ def _get_workflow_manager():
     return _workflow_manager
 
 
-def _get_compliance_checker():
+def _get_compliance_checker() -> Any:
     global _compliance_checker
     if _compliance_checker is None:
         from astroml.governance.compliance import ComplianceChecker
@@ -138,7 +138,7 @@ def _get_compliance_checker():
     return _compliance_checker
 
 
-def _get_card_generator():
+def _get_card_generator() -> Any:
     global _card_generator
     if _card_generator is None:
         from astroml.governance.model_card import ModelCardGenerator

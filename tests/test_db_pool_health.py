@@ -211,3 +211,40 @@ class TestSessionHelpers:
 
         assert "pool_pre_ping=True" in source
         assert "pool_recycle" in source
+
+    def test_get_session_binds_to_current_engine(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """`get_session()` has no direct regression test elsewhere (issue #977).
+
+        It's exercised indirectly through modules that monkeypatch it, but
+        nothing verifies it actually returns a live `Session` bound to
+        whatever `get_engine()` currently returns.
+        """
+        from sqlalchemy.orm import Session
+
+        from astroml.db import session as session_module
+
+        engine = create_engine("sqlite://")
+        monkeypatch.setattr(session_module, "get_engine", lambda: engine)
+
+        sess = session_module.get_session()
+        try:
+            assert isinstance(sess, Session)
+            assert sess.get_bind() is engine
+        finally:
+            sess.close()
+
+    def test_get_session_returns_a_new_session_each_call(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from astroml.db import session as session_module
+
+        engine = create_engine("sqlite://")
+        monkeypatch.setattr(session_module, "get_engine", lambda: engine)
+
+        first = session_module.get_session()
+        second = session_module.get_session()
+        try:
+            assert first is not second
+        finally:
+            first.close()
+            second.close()

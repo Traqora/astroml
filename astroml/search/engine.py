@@ -5,7 +5,7 @@ from .retrievers import Retriever
 
 
 class SearchEngine:
-    def __init__(self):
+    def __init__(self) -> Any:
         self.retriever = Retriever()
         self.reranker = Reranker()
 

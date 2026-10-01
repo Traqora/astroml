@@ -1,0 +1,11 @@
+usage: python -m astroml.ingestion.normalizer [-h] [--hops] [input]
+
+Normalize raw Horizon operation JSON into NormalizedTransaction records. Input
+is a JSON object or array of operations; output is one JSON record per line.
+
+positional arguments:
+  input       path to a JSON file of operations, or '-' for stdin (default: -)
+
+options:
+  -h, --help  show this help message and exit
+  --hops      expand path payments into one record per hop

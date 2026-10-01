@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Feature computation engine for the Feature Store.
 
 This module provides the core computation engine that orchestrates feature
@@ -161,7 +162,7 @@ class BaseFeatureComputer(CoreFeatureComputer):
     Implements the core FeatureComputer ABC for dependency injection (issue #573).
     """
 
-    def __init__(self, name: str):
+    def __init__(self, name -> Any: str):
         """Initialize feature computer.
 
         Args:
@@ -279,7 +280,7 @@ class BaseFeatureComputer(CoreFeatureComputer):
 class FrequencyFeatureComputer(BaseFeatureComputer):
     """Computer for frequency-based features."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         super().__init__("frequency_features")
 
         # Add data dependencies
@@ -329,7 +330,7 @@ class FrequencyFeatureComputer(BaseFeatureComputer):
 class StructuralFeatureComputer(BaseFeatureComputer):
     """Computer for structural graph features."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         super().__init__("structural_features")
 
         # Add data dependencies
@@ -383,7 +384,7 @@ class StructuralFeatureComputer(BaseFeatureComputer):
 class NodeFeatureComputer(BaseFeatureComputer):
     """Computer for basic node features."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         super().__init__("node_features")
 
         # Add data dependencies
@@ -422,7 +423,7 @@ class NodeFeatureComputer(BaseFeatureComputer):
 class AssetFeatureComputer(BaseFeatureComputer):
     """Computer for asset-related features."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         super().__init__("asset_features")
 
         # Add data dependencies
@@ -462,7 +463,7 @@ class ComputationEngine:
     dependency resolution, and error handling.
     """
 
-    def __init__(self, max_workers: int = 4):
+    def __init__(self, max_workers -> Any: int = 4):
         """Initialize computation engine.
 
         Args:
@@ -510,11 +511,11 @@ class ComputationEngine:
                         logger.info(
                             f"Plugin {ep.name} is a callable; register via the feature registry"
                         )
-                except Exception as e:
+                except AstroMLError as e:
                     logger.warning(f"Failed to load plugin '{ep.name}': {e}")
         except ImportError:
             logger.debug("importlib.metadata not available for plugin discovery")
-        except Exception as e:
+        except AstroMLError as e:
             logger.warning(f"Plugin discovery failed: {e}")
 
     def _validate_plugin_computer(self, plugin_cls: type) -> None:
@@ -671,7 +672,7 @@ class ComputationEngine:
 
             logger.info(f"Completed task {task.task_id} for feature {task.feature_name}")
 
-        except Exception as e:
+        except AstroMLError as e:
             task.error = str(e)
             task.status = ComputationStatus.FAILED
             logger.error(f"Task {task.task_id} failed: {e}")
@@ -708,7 +709,7 @@ class ComputationEngine:
                     try:
                         future.result()  # Wait for completion
                         self._completed_tasks[task.task_id] = task
-                    except Exception as e:
+                    except AstroMLError as e:
                         logger.error(f"Task execution error: {e}")
                         self._completed_tasks[task.task_id] = task
         else:
@@ -751,7 +752,7 @@ class ComputationEngine:
         logger.info("Cleared completed tasks")
 
     @contextmanager
-    def computation_context(self):
+    def computation_context(self) -> Any:
         """Context manager for computation operations."""
         try:
             yield self
@@ -868,7 +869,7 @@ def feature_computer(
 
     def decorator(func: Callable) -> BaseFeatureComputer:
         class DecoratedComputer(BaseFeatureComputer):
-            def __init__(self):
+            def __init__(self) -> Any:
                 super().__init__(name)
 
                 # Add dependencies

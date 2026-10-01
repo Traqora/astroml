@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """LLM Provider health checks."""
 
 import asyncio
@@ -75,7 +76,7 @@ async def check_provider_health(provider_name: str, timeout: float = 5.0) -> dic
                 "latency_ms": round(latency_ms, 2),
                 "http_status": response.status,
             }
-    except Exception as e:
+    except AstroMLError as e:
         latency_ms = (time.perf_counter() - start) * 1000
         return {
             "provider": provider_name,

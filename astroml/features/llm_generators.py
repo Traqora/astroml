@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """LLM feature generation orchestration.
 
 Provides high-level generators that orchestrate LLM calls and
@@ -160,11 +161,11 @@ class LLMFeatureGenerator:
         for emb_type in EmbeddingType:
             try:
                 features.append(self.generate_embeddings(data, entity_col, timestamp_col, emb_type))
-            except Exception as e:
+            except AstroMLError as e:
                 logger.warning(f"Failed to generate {emb_type.value} embeddings: {e}")
         for score_type in ScoreType:
             try:
                 features.append(self.generate_scores(data, entity_col, timestamp_col, score_type))
-            except Exception as e:
+            except AstroMLError as e:
                 logger.warning(f"Failed to generate {score_type.value} scores: {e}")
         return features

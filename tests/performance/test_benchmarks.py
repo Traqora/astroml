@@ -18,7 +18,7 @@ import networkx as nx
 import numpy as np
 import pytest
 
-from astroml.features.frequency import compute_frequency_features
+from astroml.features.frequency import compute_frequency_metrics
 from astroml.features.graph_validation import check_isolated_nodes
 from astroml.graph_utils import graph_to_pyg_data
 
@@ -56,36 +56,29 @@ def test_feature_computation_1000_nodes(benchmark):
 
     Threshold: should complete in <2s
     """
-    # Create test data with 1000 nodes
-    num_nodes = 1000
-    entity_ids = [f"node_{i}" for i in range(num_nodes)]
-
-    # Create mock transaction data
-    edges = []
-    for i in range(num_nodes):
-        for j in range(min(5, num_nodes - i - 1)):
-            edges.append(
-                {
-                    "source": entity_ids[i],
-                    "target": entity_ids[i + j + 1],
-                    "amount": np.random.rand() * 1000,
-                    "timestamp": i * 1000 + j,
-                }
-            )
-
     import pandas as pd
 
-    edges_df = pd.DataFrame(edges)
+    num_accounts = 1000
+    tx_per_account = 5
+
+    # `compute_frequency_metrics` groups the transaction frame by `account` and
+    # buckets `timestamp` into daily counts, so those are the columns it needs.
+    days = pd.date_range("2024-01-01", periods=30, freq="D")
+    transactions = [
+        {
+            "account": f"node_{i}",
+            "timestamp": days[(i + j) % len(days)],
+            "amount": float(np.random.rand() * 1000),
+        }
+        for i in range(num_accounts)
+        for j in range(tx_per_account)
+    ]
+    transactions_df = pd.DataFrame(transactions)
 
     # Benchmark feature computation
-    result = benchmark(
-        compute_frequency_features,
-        edges_df,
-        entity_ids=entity_ids[:100],  # Sample for benchmark
-        time_window_days=30,
-    )
+    result = benchmark(compute_frequency_metrics, transactions_df)
 
-    assert result is not None
+    assert len(result) == num_accounts
 
 
 @pytest.mark.benchmark(group="database-query")
@@ -205,10 +198,21 @@ def test_graph_validation_large_graph(benchmark):
 
 @pytest.fixture
 def db_session():
-    """Create a test database session."""
+    """Create a test database session.
+
+    Skips when the configured database is unreachable: the performance job runs
+    with no postgres service, so there is nothing to time and a query benchmark
+    that never issues a query says nothing about a regression.
+    """
+    from sqlalchemy import text
+
     from astroml.db.session import get_session
 
-    session = get_session()
+    try:
+        session = get_session()
+        session.execute(text("SELECT 1"))
+    except Exception as exc:
+        pytest.skip(f"no reachable database for this runner: {exc}")
     try:
         yield session
     finally:

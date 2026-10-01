@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Model registry for managing ML models and their versions.
 
 Enhanced with:
@@ -7,6 +8,7 @@ Enhanced with:
 - Rollback capability
 - A/B testing support
 - Deployment tracking
+- Model lineage tracking (training provenance + parent/child version links)
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from astroml.db.schema import Model, ModelVersion
 from astroml.db.session import get_session
+from astroml.tracking.lineage import ModelLineage, TrainingLineage
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +68,7 @@ class InvalidStatusTransitionError(ValueError):
 class SemanticVersion:
     """Semantic version parser and comparator."""
 
-    def __init__(self, version: str):
+    def __init__(self, version -> Any: str):
         self.version = version
         self.major, self.minor, self.patch = self._parse(version)
 
@@ -111,7 +114,7 @@ class ModelRegistry:
     with helper methods for common registry operations.
     """
 
-    def __init__(self, session: Session | None = None):
+    def __init__(self, session -> Any: Session | None = None):
         """Initialize the registry.
 
         Args:
@@ -281,6 +284,8 @@ class ModelRegistry:
         metadata: dict[str, Any] | None = None,
         auto_version: bool = True,
         mlflow_run_id: str | None = None,
+        parent_model_id: int | None = None,
+        parent_version: str | None = None,
     ) -> ModelVersion:
         """Create a new model version.
 
@@ -294,6 +299,8 @@ class ModelRegistry:
             metadata: Optional additional metadata
             auto_version: Whether to auto-generate version if not provided
             mlflow_run_id: Optional MLflow run ID to link this version to
+            parent_model_id: Optional ID of the model this version is derived from
+            parent_version: Optional version of the parent model to link
 
         Returns:
             Created ModelVersion instance
@@ -319,6 +326,18 @@ class ModelRegistry:
         if existing:
             raise ValueError(f"Version '{version}' already exists for model {model_id}")
 
+        # A parent link needs both halves, and the parent must already exist.
+        if (parent_model_id is None) != (parent_version is None):
+            raise ValueError(
+                "Both parent_model_id and parent_version are required to link a parent version"
+            )
+        if parent_model_id is not None and parent_version is not None:
+            parent = self.get_model_version(parent_model_id, parent_version)
+            if parent is None:
+                raise ValueError(
+                    f"Parent version '{parent_version}' not found for model {parent_model_id}"
+                )
+
         model_version = ModelVersion(
             model_id=model_id,
             version=version,
@@ -332,6 +351,20 @@ class ModelRegistry:
         self.session.add(model_version)
         self.session.commit()
         self.session.refresh(model_version)
+
+        # Persist the parent link as a fork lineage event (append-only).
+        if parent_model_id is not None and parent_version is not None:
+            model_version.lineage = _append_lineage(
+                model_version.lineage,
+                {
+                    "type": "fork",
+                    "at": datetime.now(timezone.utc).isoformat(),
+                    "parent_model_id": parent_model_id,
+                    "parent_version": parent_version,
+                },
+            )
+            self.session.commit()
+            self.session.refresh(model_version)
 
         logger.info(
             "Created model version: %s (id=%d, model_id=%d)",
@@ -539,7 +572,7 @@ class ModelRegistry:
             target.lineage = _append_lineage(target.lineage, {**record, "role": "activated"})
 
             self.session.commit()
-        except Exception:
+        except AstroMLError:
             self.session.rollback()
             raise
 
@@ -634,6 +667,7 @@ class ModelRegistry:
                     "created_at": version.created_at.isoformat(),
                     "deployed_at": version.deployed_at.isoformat() if version.deployed_at else None,
                     "metadata": version.metadata,
+                    "lineage": version.lineage,
                 }
             )
 
@@ -894,10 +928,195 @@ class ModelRegistry:
             logger.warning("mlflow package not installed — cannot fetch run details")
             return None
         except Exception as exc:
-            logger.warning(
-                "Failed to fetch MLflow run %s: %s", mv.mlflow_run_id, exc
-            )
+            logger.warning("Failed to fetch MLflow run %s: %s", mv.mlflow_run_id, exc)
             return None
+
+    # ------------------------------------------------------------------
+    # Model lineage tracking
+    # ------------------------------------------------------------------
+    #
+    # ``ModelVersion.lineage`` is an append-only JSON column shared by serving
+    # transitions (activate / rollback, issue #718) and the training / fork
+    # events recorded here. Events are appended via _append_lineage so every
+    # record is retained; the most recent ``training`` event is the current
+    # provenance for the version.
+
+    @staticmethod
+    def _lineage_events(lineage: dict[str, Any] | None) -> list[dict[str, Any]]:
+        """Return the recorded lineage events of a raw lineage dict."""
+        return list((lineage or {}).get("events", []))
+
+    @staticmethod
+    def _training_lineage_from_event(event: dict[str, Any]) -> TrainingLineage:
+        """Build a TrainingLineage from a persisted ``training`` lineage event."""
+        kwargs = {
+            key: event.get(key)
+            for key in (
+                "dataset_id",
+                "dataset_version",
+                "dataset_hash",
+                "code_repository",
+                "commit_hash",
+                "branch",
+                "pipeline_run_id",
+                "parent_model_id",
+                "parent_version",
+                "hyperparameters",
+                "environment",
+                "artifact_hashes",
+            )
+        }
+        return TrainingLineage(**kwargs)
+
+    def record_training_lineage(
+        self,
+        model_id: int,
+        version: str,
+        *,
+        dataset_id: str,
+        dataset_version: str = "latest",
+        dataset_hash: str | None = None,
+        code_repository: str | None = None,
+        commit_hash: str | None = None,
+        branch: str | None = None,
+        pipeline_run_id: str | None = None,
+        parent_model_id: int | None = None,
+        parent_version: str | None = None,
+        hyperparameters: dict[str, Any] | None = None,
+        environment: dict[str, str] | None = None,
+        artifact_hashes: dict[str, str] | None = None,
+    ) -> ModelVersion | None:
+        """Record training provenance for a model version.
+
+        Appends a ``training`` event to the version's ``lineage`` JSON column,
+        retrievable later through :meth:`get_model_lineage`. Multiple calls
+        append; the most recent training event wins when reconstructing the
+        current ``TrainingLineage``.
+
+        Args:
+            model_id: Parent model ID.
+            version: Version string whose lineage is being recorded.
+            dataset_id: Dataset identifier used for training.
+            dataset_version: Dataset version (default ``"latest"``).
+            dataset_hash: Optional dataset content hash.
+            code_repository: Optional code repository URL.
+            commit_hash: Optional training code commit hash.
+            branch: Optional training code git branch.
+            pipeline_run_id: Optional orchestration run ID.
+            parent_model_id: Optional ID of the model this version derives from.
+            parent_version: Optional version of the parent model.
+            hyperparameters: Optional hyperparameters used for training.
+            environment: Optional training environment snapshot.
+            artifact_hashes: Optional artifact name-to-hash mapping.
+
+        Returns:
+            The updated ModelVersion, or ``None`` if the version does not exist.
+        """
+        mv = self.get_model_version(model_id, version)
+        if mv is None:
+            return None
+
+        mv.lineage = _append_lineage(
+            mv.lineage,
+            {
+                "type": "training",
+                "at": datetime.now(timezone.utc).isoformat(),
+                "dataset_id": dataset_id,
+                "dataset_version": dataset_version,
+                "dataset_hash": dataset_hash,
+                "code_repository": code_repository,
+                "commit_hash": commit_hash,
+                "branch": branch,
+                "pipeline_run_id": pipeline_run_id,
+                "parent_model_id": parent_model_id,
+                "parent_version": parent_version,
+                "hyperparameters": hyperparameters or {},
+                "environment": environment or {},
+                "artifact_hashes": artifact_hashes or {},
+            },
+        )
+        self.session.commit()
+        self.session.refresh(mv)
+        logger.info("Recorded training lineage for model version: %s:%s", model_id, version)
+        return mv
+
+    def get_model_lineage(
+        self,
+        model_id: int,
+        version: str,
+    ) -> ModelLineage | None:
+        """Return the structured lineage for a model version.
+
+        Reconstructs a :class:`ModelLineage` from the version's persisted
+        ``training`` events and its child versions.
+
+        Args:
+            model_id: Parent model ID.
+            version: Version string.
+
+        Returns:
+            A :class:`ModelLineage` if training provenance has been recorded,
+            ``None`` otherwise (or if the version does not exist).
+        """
+        mv = self.get_model_version(model_id, version)
+        if mv is None:
+            return None
+
+        events = self._lineage_events(mv.lineage)
+        training_events = [e for e in events if e.get("type") == "training"]
+        if not training_events:
+            return None
+
+        training = self._training_lineage_from_event(training_events[-1])
+
+        model_name = mv.model.name if mv.model else str(model_id)
+
+        upstream_nodes: list[str] = []
+        if training.dataset_id:
+            upstream_nodes.append(training.dataset_id)
+        if training.parent_model_id is not None and training.parent_version is not None:
+            upstream_nodes.append(f"{training.parent_model_id}:{training.parent_version}")
+
+        downstream_nodes = [
+            f"{child.model.name if child.model else child.model_id}:{child.version}"
+            for child in self.list_child_versions(model_id, version)
+        ]
+
+        return ModelLineage(
+            model_name=model_name,
+            version=version,
+            training_lineage=training,
+            upstream_nodes=upstream_nodes,
+            downstream_nodes=downstream_nodes,
+        )
+
+    def list_child_versions(
+        self,
+        model_id: int,
+        version: str,
+    ) -> list[ModelVersion]:
+        """List versions whose lineage records ``model_id:version`` as parent.
+
+        A child references its parent through a ``training`` or ``fork`` lineage
+        event carrying matching ``parent_model_id`` and ``parent_version``
+        fields. Because the references live inside JSON lineage records, they
+        are resolved in Python rather than in SQL.
+
+        Returns:
+            List of ModelVersion rows that declare this version as a parent.
+        """
+        children: list[ModelVersion] = []
+        for candidate in self.session.execute(select(ModelVersion)).scalars().all():
+            for event in self._lineage_events(candidate.lineage):
+                if event.get("type") not in ("training", "fork"):
+                    continue
+                if (
+                    event.get("parent_model_id") == model_id
+                    and event.get("parent_version") == version
+                ):
+                    children.append(candidate)
+                    break
+        return children
 
     # ------------------------------------------------------------------
     # Validation helpers

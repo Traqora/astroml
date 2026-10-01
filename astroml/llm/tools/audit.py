@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 class ToolAuditLog:
     """Records all tool invocations with metadata."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         self._entries: list[dict[str, Any]] = []
 
     def record(

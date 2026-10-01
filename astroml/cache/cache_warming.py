@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Cache warming utilities for Redis cache.
 
 Issue #330: Cache warming on startup for hot data paths.
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 class CacheWarmer:
     """Cache warming service for pre-loading hot data paths."""
 
-    def __init__(self, cache_client=None):
+    def __init__(self, cache_client=None) -> Any:
         """Initialize cache warmer.
 
         Args:
@@ -71,7 +72,7 @@ class CacheWarmer:
 
                 results[account_id] = True
                 success_count += 1
-            except Exception as e:
+            except AstroMLError as e:
                 logger.warning(f"Failed to warm cache for account {account_id}: {e}")
                 results[account_id] = False
 
@@ -109,7 +110,7 @@ class CacheWarmer:
 
                 results[feature_name] = True
                 success_count += 1
-            except Exception as e:
+            except AstroMLError as e:
                 logger.warning(f"Failed to warm cache for feature {feature_name}: {e}")
                 results[feature_name] = False
 
@@ -149,7 +150,7 @@ class CacheWarmer:
 
                 results[snapshot_id] = True
                 success_count += 1
-            except Exception as e:
+            except AstroMLError as e:
                 logger.warning(f"Failed to warm cache for snapshot {snapshot_id}: {e}")
                 results[snapshot_id] = False
 

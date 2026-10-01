@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """CLI configuration loader for LLM operations."""
 
 import os
@@ -27,7 +28,7 @@ def load_cli_config(config_path: str | None = None) -> dict[str, Any]:
             with open(cfg_path) as f:
                 loaded = yaml.safe_load(f) or {}
             config.update(loaded)
-        except Exception:
+        except AstroMLError:
             pass
 
     env_key = os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY") or ""

@@ -35,7 +35,7 @@ class StatisticalAnalyzer:
     Calculates significance, confidence intervals, and effect sizes.
     """
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize analyzer."""
         pass
 

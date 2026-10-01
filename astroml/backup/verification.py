@@ -1,3 +1,5 @@
+from typing import Any, Dict, List, Optional, Union, Callable
+from astroml.utils.exceptions import AstroMLError
 """Backup verification utilities for issue #304."""
 
 from __future__ import annotations
@@ -16,7 +18,7 @@ logger = logging.getLogger(__name__)
 class BackupVerifier:
     """Verifier for backup integrity."""
 
-    def __init__(self, config: BackupConfig):
+    def __init__(self, config -> Any: BackupConfig):
         """Initialize backup verifier.
 
         Args:
@@ -49,8 +51,14 @@ class BackupVerifier:
                 )
                 return False
 
-            # Additional verification based on file type
-            if backup_file.suffix == ".gz":
+            # Additional verification based on file type. An encrypted
+            # backup's on-disk bytes are ciphertext, not gzip/tar content,
+            # so opening it with gzip/tarfile here would only ever fail;
+            # the checksum check above is this backup's integrity check
+            # (it still detects corruption or tampering of the ciphertext).
+            if backup_file.name.endswith(".enc"):
+                pass
+            elif backup_file.suffix == ".gz":
                 if not self._verify_gzip_integrity(backup_file):
                     return False
             elif backup_file.suffixes == [".tar", ".gz"]:
@@ -60,7 +68,7 @@ class BackupVerifier:
             logger.info(f"Backup verification passed: {backup_file}")
             return True
 
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Backup verification failed: {e}")
             return False
 
@@ -93,7 +101,7 @@ class BackupVerifier:
                     logger.warning(f"Database backup may not contain valid SQL: {backup_file}")
                     return False
 
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Database backup verification failed: {e}")
             return False
 
@@ -124,7 +132,7 @@ class BackupVerifier:
                 logger.info(f"Model backup verification passed: {backup_file}")
                 return True
 
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Model backup verification failed: {e}")
             return False
 
@@ -143,7 +151,7 @@ class BackupVerifier:
                 # Try to read some data
                 f.read(1024)
             return True
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Gzip integrity check failed: {e}")
             return False
 
@@ -154,6 +162,6 @@ class BackupVerifier:
                 # Try to read file list
                 tar.getmembers()
             return True
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Tar.gz integrity check failed: {e}")
             return False

@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """FastAPI router for federated learning orchestration and client coordination."""
 
 from __future__ import annotations
@@ -284,7 +285,7 @@ async def start_round(session_id: str, payload: StartRoundRequest) -> dict[str, 
             "global_metrics": round_res.global_metrics,
             "duration_seconds": round_res.duration_seconds,
         }
-    except Exception as e:
+    except AstroMLError as e:
         logger.error("Round execution failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 

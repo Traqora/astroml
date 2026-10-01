@@ -1,0 +1,10 @@
+groups:
+  - name: prediction_drift
+    rules:
+      - alert: PredictionDriftHigh
+        expr: model_prediction_drift > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High prediction drift detected"

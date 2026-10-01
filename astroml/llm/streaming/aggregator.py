@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Aggregates multiple streaming sources into a unified output stream."""
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 class StreamAggregator:
     """Combines/aggregates tokens from multiple streaming LLM outputs into one."""
 
-    def __init__(self, buffer_max_size: int = 200):
+    def __init__(self, buffer_max_size -> Any: int = 200):
         self.buffer = StreamBuffer[dict[str, Any]](max_size=buffer_max_size)
         self._tasks: list[asyncio.Task] = []
         self._active_sources = 0
@@ -33,7 +34,7 @@ class StreamAggregator:
                 if self.buffer.is_aborted:
                     break
                 await self.buffer.push({"source_id": source_id, "token": chunk, "finished": False})
-        except Exception as e:
+        except AstroMLError as e:
             logger.error("Error consuming source %s in aggregator: %s", source_id, e)
         finally:
             self._active_sources -= 1

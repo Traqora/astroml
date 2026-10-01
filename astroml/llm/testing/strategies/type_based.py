@@ -17,7 +17,7 @@ class TypeBasedStrategy:
 
     BUILTIN_TYPES = {int, float, str, bool, bytes, list, dict, tuple, set}
 
-    def __init__(self, type_hints: dict[str, str]):
+    def __init__(self, type_hints -> Any: dict[str, str]):
         self.type_hints = type_hints
 
     def suggest_hypothesis_strategies(self) -> dict[str, str]:

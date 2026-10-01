@@ -25,7 +25,7 @@ class EmbeddingProvider(ABC):
 class EmbeddingsService:
     """Service for generating, storing, and retrieving embeddings."""
 
-    def __init__(self, config: EmbeddingConfig, provider: EmbeddingProvider | None = None):
+    def __init__(self, config -> Any: EmbeddingConfig, provider: EmbeddingProvider | None = None):
         """Initialize embeddings service.
 
         Args:

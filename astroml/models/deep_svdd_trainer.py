@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Training utilities and advanced Deep SVDD implementations.
 
 This module provides enhanced Deep SVDD training with various loss functions,
@@ -273,7 +274,7 @@ class DeepSVDDTrainer:
         else:
             raise ValueError(f"Unknown scheduler type: {scheduler_type}")
 
-    def _save_checkpoint(self):
+    def _save_checkpoint(self) -> Any:
         """Save best model checkpoint and log it to MLflow."""
         checkpoint = {
             'model_state_dict': self.model.state_dict(),
@@ -296,7 +297,7 @@ class DeepSVDDTrainer:
                 'deep_svdd/best_deep_svdd.pth'
             )
             print(f"Checkpoint saved to artifact store: {checkpoint_uri}")
-        except Exception as e:
+        except AstroMLError as e:
             print(f"Warning: Failed to save to artifact store: {e}")
             # Fallback to local save
             torch.save(checkpoint, 'best_deep_svdd.pth')
@@ -338,7 +339,7 @@ class DeepSVDDTrainer:
                         checkpoint_path,
                         device=self.device
                     )
-                except Exception:
+                except AstroMLError:
                     # Fall through to local file loading
                     if not Path(checkpoint_path).exists():
                         raise FileNotFoundError(
@@ -367,7 +368,7 @@ class DeepSVDDTrainer:
 
         except FileNotFoundError:
             raise
-        except Exception as e:
+        except AstroMLError as e:
             raise RuntimeError(
                 f"Failed to load checkpoint '{checkpoint_path}': {e}\n"
                 f"The file may be corrupted or incompatible with this PyTorch version."
@@ -422,7 +423,7 @@ class DeepSVDDTrainer:
         # Load model state
         try:
             self.model.load_state_dict(checkpoint['model_state_dict'])
-        except Exception as e:
+        except AstroMLError as e:
             raise ValueError(
                 f"Failed to load model state dict:\n"
                 f"Error: {e}\n"

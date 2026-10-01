@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """Language detection for automatic locale identification."""
 
 import re
@@ -10,7 +11,7 @@ class LanguageDetector:
     Targets >95% accuracy for supported languages.
     """
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize detector."""
         self.language_patterns = {
             "es": r"(¿|¡|señor|bueno|hola)",

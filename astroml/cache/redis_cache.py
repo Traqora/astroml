@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Redis caching service with decorators and metrics.
 
 This module provides a Redis-based caching service with:
@@ -116,7 +117,7 @@ class RedisCache:
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self, config: CacheConfig | None = None):
+    def __init__(self, config -> Any: CacheConfig | None = None):
         """Initialize Redis cache.
 
         Args:
@@ -155,7 +156,7 @@ class RedisCache:
             # Test connection
             self._client.ping()
             logger.info("Redis connection established successfully")
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Failed to connect to Redis: {e}")
             self._client = None
 
@@ -285,7 +286,7 @@ class RedisCache:
             else:
                 self._stats.misses += 1
                 return None
-        except Exception as e:
+        except AstroMLError as e:
             self._stats.errors += 1
             logger.warning(f"Redis GET error: {e}")
             return None
@@ -324,7 +325,7 @@ class RedisCache:
 
             self._stats.sets += 1
             return result
-        except Exception as e:
+        except AstroMLError as e:
             self._stats.errors += 1
             logger.warning(f"Redis SET error: {e}")
             return False
@@ -342,7 +343,7 @@ class RedisCache:
             result = self.client.delete(key)
             self._stats.deletes += 1
             return result > 0
-        except Exception as e:
+        except AstroMLError as e:
             self._stats.errors += 1
             logger.warning(f"Redis DELETE error: {e}")
             return False
@@ -361,7 +362,7 @@ class RedisCache:
             if keys:
                 return self.client.delete(*keys)
             return 0
-        except Exception as e:
+        except AstroMLError as e:
             self._stats.errors += 1
             logger.warning(f"Redis DELETE_PATTERN error: {e}")
             return 0
@@ -376,7 +377,7 @@ class RedisCache:
             self.client.flushdb()
             self._stats = CacheStats()
             return True
-        except Exception as e:
+        except AstroMLError as e:
             self._stats.errors += 1
             logger.error(f"Redis CLEAR error: {e}")
             return False
@@ -392,7 +393,7 @@ class RedisCache:
         """
         try:
             return self.client.exists(key) > 0
-        except Exception:
+        except AstroMLError:
             self._stats.errors += 1
             return False
 
@@ -416,7 +417,7 @@ class RedisCache:
         try:
             ttl = self.client.ttl(key)
             return ttl if ttl > 0 else None
-        except Exception:
+        except AstroMLError:
             self._stats.errors += 1
             return None
 
@@ -444,7 +445,7 @@ def cached(
 
     def decorator(func: F) -> F:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args, **kwargs) -> Any:
             cache = RedisCache()
 
             # Generate cache key

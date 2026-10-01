@@ -5,13 +5,20 @@ AstroML Documentation
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents
+   :caption: Guides
+
+   graph-construction
+
+.. toctree::
+   :maxdepth: 2
+   :caption: API Reference
 
    modules/ingestion
    modules/features
    modules/models
    modules/training
    modules/validation
+   modules/agent
 
 Indices and tables
 ==================

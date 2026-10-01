@@ -41,6 +41,34 @@ groups:
           summary: "Ingestion stalled for {{ $labels.stream_type }} on {{ $labels.horizon_url }}"
           description: "No records have been processed for {{ $labels.stream_type }} in the last 15 minutes."
 
+      # ─── Stale-data alerts (ingestion heartbeat) ──────────────────────────
+      #
+      # Driven by `astroml_ingestion_staleness_seconds`, which is re-sampled
+      # from the ingestion state store on every `/metrics` scrape — so these
+      # fire on their own timeline even when the worker is gone and pushing
+      # nothing. Both are `NaN` (and therefore silent) until the first
+      # heartbeat lands, so an API-only deployment that runs no ingestion does
+      # not page anyone. See docs/ingestion-monitoring.md.
+      - alert: IngestionDataStale
+        expr: astroml_ingestion_staleness_seconds > 900
+        for: 5m
+        labels:
+          severity: warning
+          runbook: "docs/runbooks/ingestion_heartbeat_stale.md"
+        annotations:
+          summary: "Ingested data is stale ({{ $value | humanizeDuration }} behind)"
+          description: "The newest processed ledger is {{ $value | humanizeDuration }} old, past the 15m stale threshold. Ingestion is slow or intermittent but not yet fully stopped."
+
+      - alert: IngestionHeartbeatStopped
+        expr: time() - astroml_ingestion_last_success_timestamp_seconds > 3600
+        for: 5m
+        labels:
+          severity: critical
+          runbook: "docs/runbooks/ingestion_heartbeat_stale.md"
+        annotations:
+          summary: "No ingestion heartbeat for over an hour"
+          description: "The last successfully processed ledger was {{ $value | humanizeDuration }} ago. The ingestion worker has stopped, crashed, or is wedged."
+
       - alert: PersistentRateLimit
         expr: astroml_ingestion_rate_limit_backoff_seconds > 60
         for: 10m

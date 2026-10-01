@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """Pipeline testing framework for data quality, schema validation, and integrity checks.
 
 Issue #638: Comprehensive testing framework for data pipelines.
@@ -36,7 +37,7 @@ _LAZY: dict[str, tuple[str, str]] = {
 }
 
 
-def __getattr__(name: str):
+def __getattr__(name -> Any: str):
     if name in _LAZY:
         module_path, attr = _LAZY[name]
         module = import_module(module_path)

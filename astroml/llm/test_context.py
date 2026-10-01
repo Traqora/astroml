@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """Tests for blockchain LLM context management (issue #360)."""
 
 import unittest
@@ -25,7 +26,7 @@ def _make_raw_data(num_days: int, txs_per_day: int = 20) -> list:
 
 
 class BlockchainContextBuilderTests(unittest.TestCase):
-    def test_30_days_fits_4k_token_budget(self):
+    def test_30_days_fits_4k_token_budget(self) -> Any:
         raw_data = _make_raw_data(30)
         builder = BlockchainContextBuilder(token_limit=4000)
 
@@ -33,7 +34,7 @@ class BlockchainContextBuilderTests(unittest.TestCase):
 
         self.assertLessEqual(builder.analyze_token_size(context), 4000)
 
-    def test_small_input_stays_detailed(self):
+    def test_small_input_stays_detailed(self) -> Any:
         raw_data = _make_raw_data(3)
         builder = BlockchainContextBuilder(token_limit=4000)
 
@@ -45,7 +46,7 @@ class BlockchainContextBuilderTests(unittest.TestCase):
 
 
 class CompressDataTests(unittest.TestCase):
-    def test_compression_ratio_at_least_60_percent(self):
+    def test_compression_ratio_at_least_60_percent(self) -> Any:
         raw_data = _make_raw_data(30)
         builder = BlockchainContextBuilder()
         summaries = builder.summarize_by_day(30, raw_data)
@@ -59,7 +60,7 @@ class CompressDataTests(unittest.TestCase):
 
         self.assertGreaterEqual(compression_ratio, 0.6)
 
-    def test_compression_preserves_totals_within_5_percent(self):
+    def test_compression_preserves_totals_within_5_percent(self) -> Any:
         raw_data = _make_raw_data(30)
         builder = BlockchainContextBuilder()
         summaries = builder.summarize_by_day(30, raw_data)

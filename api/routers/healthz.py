@@ -11,6 +11,7 @@ Endpoints
 ``GET /healthz/db``          Database connectivity plus pool saturation.
 ``GET /healthz/cache``       Redis connectivity.
 ``GET /healthz/disk``        Free disk space on the data volume.
+``GET /healthz/ingestion``   Ingestion heartbeat — how stale the data is.
 ``GET /metrics/db-pool``     Connection pool utilization snapshot.
 ===========================  ==================================================
 
@@ -44,6 +45,7 @@ from astroml.observability.health import (
     check_disk,
     readiness_state,
 )
+from astroml.observability.ingestion import refresh_ingestion_metrics
 from astroml.observability.metrics import update_db_pool_metrics
 
 router = APIRouter(tags=["health"])
@@ -226,6 +228,22 @@ async def check_disk_space() -> CheckResult:
     return await asyncio.to_thread(check_disk, DISK_PATH)
 
 
+async def check_ingestion_freshness() -> CheckResult:
+    """Check how stale ingested data is, from the ingestion heartbeat.
+
+    Runs in a worker thread because it reads the shared state file, and
+    publishes the freshness gauges while it is there so a probe refreshes
+    them the same way a ``/metrics`` scrape does.
+
+    Returns:
+        A ``CheckResult`` named ``"ingestion"``. ``DEGRADED`` once no ledger has
+        been ingested for ``INGESTION_STALE_THRESHOLD_SECONDS`` (default 300s),
+        ``FAIL`` past ``INGESTION_FAIL_THRESHOLD_SECONDS`` (default 600s), and
+        ``DEGRADED`` — never ``FAIL`` — when no heartbeat is on record at all.
+    """
+    return await asyncio.to_thread(refresh_ingestion_metrics)
+
+
 # ─── Routes ──────────────────────────────────────────────────────────────────
 
 
@@ -236,6 +254,7 @@ async def healthz() -> JSONResponse:
         _with_timeout("db", check_database),
         _with_timeout("cache", check_cache),
         _with_timeout("disk", check_disk_space),
+        _with_timeout("ingestion", check_ingestion_freshness),
     )
     return _aggregate_envelope([readiness_state.snapshot(), *results], probe="healthz")
 
@@ -298,6 +317,18 @@ async def healthz_cache() -> JSONResponse:
 async def healthz_disk() -> JSONResponse:
     """Check free space on the data volume."""
     return _envelope(await _with_timeout("disk", check_disk_space))
+
+
+@router.get("/healthz/ingestion", summary="Ingestion heartbeat freshness probe")
+async def healthz_ingestion() -> JSONResponse:
+    """Report when ingestion last succeeded and how stale the data now is.
+
+    Reads ``last_processed_at`` from the ingestion state store. Deliberately not
+    part of the readiness gate: stale data is an alert to page on, not a reason
+    for Kubernetes to pull API pods out of the Service and concentrate load on
+    the rest.
+    """
+    return _envelope(await _with_timeout("ingestion", check_ingestion_freshness))
 
 
 @router.get("/metrics/db-pool", summary="Connection pool utilization")

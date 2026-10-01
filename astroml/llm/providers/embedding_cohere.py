@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Cohere embedding provider.
 
 Uses ``embed-english-v3.0`` (1024-dim) by default.

@@ -191,7 +191,7 @@ class FeatureLineage:
 class FeatureVersionManager:
     """Manages feature versioning and metadata."""
 
-    def __init__(self, storage_path: str | Path):
+    def __init__(self, storage_path -> Any: str | Path):
         """Initialize version manager.
 
         Args:
@@ -849,7 +849,7 @@ class FeatureVersionManager:
         return FeatureLineage.from_dict(data)
 
     @contextmanager
-    def version_context(self, feature_name: str, created_by: str = ""):
+    def version_context(self, feature_name -> Any: str, created_by: str = ""):
         """Context manager for version operations.
 
         Args:

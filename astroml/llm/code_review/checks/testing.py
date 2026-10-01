@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """
 Testing checks for code review.
 
@@ -26,7 +27,7 @@ class TestingCheck(BaseCheck):
     - Test quality issues
     """
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize the testing check."""
         self.patterns = self._init_patterns()
 

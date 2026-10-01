@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Graph Attention Network (GAT) model for node classification and transaction analysis.
 
 Implements multi-head graph attention networks for relational transaction networks,
@@ -48,7 +49,7 @@ def _get_gat_conv(
                 dropout=dropout,
                 bias=bias,
             )
-        except Exception:
+        except AstroMLError:
             pass
     return InternalGATConv(
         in_dim=in_channels,

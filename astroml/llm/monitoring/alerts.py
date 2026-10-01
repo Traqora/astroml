@@ -4,7 +4,7 @@ from .collector import get_metrics_collector
 
 
 class AlertManager:
-    def __init__(self):
+    def __init__(self) -> Any:
         self.alerts: list[dict[str, Any]] = []
         self.thresholds = {
             "latency_p95_limit": 2.5,  # seconds
@@ -46,7 +46,7 @@ class AlertManager:
 
         return self.alerts
 
-    def _add_alert(self, alert_type: str, message: str):
+    def _add_alert(self, alert_type -> Any: str, message: str):
         # Prevent duplicate alerts in a short span
         for alert in self.alerts:
             if alert["type"] == alert_type and alert["message"] == message:

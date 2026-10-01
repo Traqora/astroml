@@ -14,6 +14,8 @@ Scrape endpoint: `GET /metrics` (Prometheus text exposition format).
 | `feature_compute_time` | Histogram | `feature` | Seconds spent computing one feature. |
 | `model_inference_latency` | Histogram | `model` | Seconds spent in a model prediction call. |
 | `active_jobs` | Gauge | `job_type` | Jobs currently running, e.g. `ingestion`. |
+| `astroml_ingestion_last_success_timestamp_seconds` | Gauge | — | Unix timestamp of the most recently processed ledger. Re-sampled from the ingestion state store on every scrape. `NaN` until the first heartbeat. |
+| `astroml_ingestion_staleness_seconds` | Gauge | — | Seconds since that timestamp. Keeps climbing while ingestion is silent, because it is recomputed per scrape rather than pushed by the worker. `NaN` until the first heartbeat. |
 
 Histogram buckets: `0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30`
 seconds. Each histogram also exports the standard `_bucket`, `_sum` and
@@ -65,8 +67,9 @@ with FEATURE_COMPUTE_TIME.labels(feature_name).time():
 | API middleware (`api/app.py`) | `http_request_duration_seconds`, `http_requests_total` |
 | `FeatureEngine.compute_feature` | `feature_compute_time` |
 | `DeepSVDDFraudDetector.predict_anomaly_scores` | `model_inference_latency` |
-| `IngestionService.ingest_stream` | `active_jobs{job_type="ingestion"}` |
+| `IngestionService.ingest_stream` | `active_jobs{job_type="ingestion"}`, `astroml_ingestion_*` |
 | `/metrics`, `/healthz/db`, `/metrics/db-pool` | `db_pool_size`, `db_pool_utilization_ratio` |
+| `/metrics`, `/healthz/ingestion` | `astroml_ingestion_last_success_timestamp_seconds`, `astroml_ingestion_staleness_seconds` |
 
 ## Connection pool health indicators
 
@@ -120,6 +123,8 @@ Defined in `monitoring/prometheus/alert_rules.yml`, group `astroml_api_alerts`:
 | `ApiHighErrorRate` | 5xx ratio > 5% for 5m | critical |
 | `IngestionJobsStalled` | `active_jobs{job_type="ingestion"} == 0` for 30m | warning |
 | `ModelInferenceLatencyHigh` | P95 > 2s for 10m | warning |
+| `IngestionDataStale` | `astroml_ingestion_staleness_seconds > 900` for 5m | warning |
+| `IngestionHeartbeatStopped` | `time() - astroml_ingestion_last_success_timestamp_seconds > 3600` for 5m | critical |
 
 ## Grafana dashboards
 
@@ -135,4 +140,7 @@ Dashboards are provisioned from `monitoring/grafana/provisioning/`.
 ## Related
 
 - Health probes: [HEALTH_CHECKS.md](HEALTH_CHECKS.md)
-- Implementation: `astroml/observability/metrics.py`, `astroml/db/pool_health.py`
+- Ingestion monitoring and stale-data alerts: [ingestion-monitoring.md](ingestion-monitoring.md)
+- Stale-data runbook: [runbooks/ingestion_heartbeat_stale.md](runbooks/ingestion_heartbeat_stale.md)
+- Implementation: `astroml/observability/metrics.py`, `astroml/db/pool_health.py`,
+  `astroml/observability/ingestion.py`

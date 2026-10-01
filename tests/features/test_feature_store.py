@@ -1476,3 +1476,26 @@ class TestParallelFeatureComputation:
 
 if __name__ == "__main__":
     pytest.main([__file__])
+
+    def test_reread_consistency_after_recompute(self, feature_store, sample_data):
+        """Test that re-reading after a recompute yields consistent data (Issue #705)."""
+        feature_store.registry.register_computer("test_feature", lambda d, e, t, **k: pd.DataFrame({"test_feature": [1.0, 2.0, 3.0]}))
+        feature_store.registry.register_feature(FeatureDefinition(name="test_feature", type=FeatureType.NUMERICAL, computer="test_feature", dependencies=[]))
+        
+        # Initial compute
+        first_result = feature_store.compute_and_store("test_feature", sample_data, "entity", "timestamp")
+        
+        # Read from cache/storage
+        read_1 = feature_store.get_feature_set("test_feature")
+        
+        # Recompute
+        second_result = feature_store.compute_and_store("test_feature", sample_data, "entity", "timestamp", force=True)
+        
+        # Read again
+        read_2 = feature_store.get_feature_set("test_feature")
+        
+        assert first_result is not None
+        assert second_result is not None
+        assert read_1 is not None
+        assert read_2 is not None
+        pd.testing.assert_frame_equal(read_1.values, read_2.values)

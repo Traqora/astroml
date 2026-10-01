@@ -1,0 +1,26 @@
+# Locale registry for docs/i18n/. Single source of truth for which languages
+# exist, how they're named, and where they live. A locale is "registered" here
+# AND has a matching folder docs/i18n/<dir>/. See README.md for the workflow.
+#
+# Fields per locale:
+#   code:     ISO 639-1 language code (used as the filename suffix, e.g. README.<code>.md)
+#   dir:      folder name under docs/i18n/
+#   english:  language name in English
+#   native:   language name in its own language
+#   progress: stub | partial | complete (rough human-coverage signal)
+
+default_locale: en
+
+locales:
+  - code: en
+    dir: .
+    english: English
+    native: English
+    progress: complete
+    source: true
+
+  - code: es
+    dir: es
+    english: Spanish
+    native: Español
+    progress: partial

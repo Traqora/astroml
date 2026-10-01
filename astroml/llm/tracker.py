@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """LLM Token Usage and Cost Tracking."""
 
 import logging
@@ -19,7 +20,7 @@ COST_RATES = {
 
 
 class LLMUsageTracker:
-    def __init__(self):
+    def __init__(self) -> Any:
         self.total_cost = 0.0
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
@@ -61,7 +62,7 @@ class LLMUsageTracker:
     def record_error(self, provider_name: str) -> None:
         LLM_REQUESTS_TOTAL.labels(provider=provider_name, status="error").inc()
 
-    def check_alerts(self):
+    def check_alerts(self) -> Any:
         if self.total_cost > self.alert_threshold:
             logger.warning(
                 "LLM Cost Alert! Total cost ($%.2f) has exceeded " "threshold ($%.2f)",

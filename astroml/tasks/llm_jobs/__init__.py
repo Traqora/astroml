@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """LLM backfill job type handlers."""
 
 from .embedding_job import EmbeddingJobHandler
@@ -13,7 +14,7 @@ JOB_HANDLERS = {
 }
 
 
-def get_job_handler(job_type: str):
+def get_job_handler(job_type -> Any: str):
     handler = JOB_HANDLERS.get(job_type)
     if handler is None:
         raise ValueError(f"Unknown job type: {job_type}")

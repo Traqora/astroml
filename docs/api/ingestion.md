@@ -68,6 +68,90 @@ print(f"Processed: {len(result.processed)}")
 print(f"Skipped: {len(result.skipped)}")
 ```
 
+#### ingest_backfill_chunked()
+
+Memory-efficient backfill for very large ledger ranges. Partitions the range into chunks and processes each independently, discarding accumulated data between chunks to keep memory usage bounded.
+
+**Parameters:**
+- `start_ledger` (int): First ledger to process (inclusive). If `resume_from_checkpoint=True` and a checkpoint exists, this is overridden by the checkpoint position.
+- `end_ledger` (int): Last ledger to process (inclusive).
+- `chunk_size` (int): Number of ledgers per memory-bounded batch. Default 10,000.
+- `fetch_fn` (Optional[Callable]): Function to fetch data for a ledger ID. Defaults to identity payload.
+- `process_fn` (Optional[Callable]): Function to handle processing. Defaults to no-op.
+- `batch_size` (int): State-flush cadence inside each chunk. Default 100.
+- `resume_from_checkpoint` (bool): If True, resume from the last checkpoint instead of starting from `start_ledger`. Defaults to False.
+- `checkpoint_path` (Optional[str]): Optional path to the checkpoint file. If None, uses `.astroml_state/backfill_checkpoint.json`.
+
+**Returns:** Generator yielding one summary dict per chunk with keys: `chunk_start`, `chunk_end`, `processed`, `skipped`, `errors`.
+
+**Behavior:**
+- Processes ledgers in chunks to bound memory usage
+- Runs garbage collection between chunks
+- When `resume_from_checkpoint=True`, saves position after each successful chunk
+- On restart with checkpoint, resumes from the last saved position
+- Clears checkpoint file on successful completion
+- Continues processing even if individual chunks fail (errors are counted)
+
+**Example with checkpointing:**
+```python
+from astroml.ingestion import IngestionService
+
+service = IngestionService()
+
+# Process a large range with checkpoint support
+for chunk_summary in service.ingest_backfill_chunked(
+    start_ledger=1000000,
+    end_ledger=5000000,
+    chunk_size=10000,
+    resume_from_checkpoint=True,
+    checkpoint_path="backfill_checkpoint.json",
+    fetch_fn=lambda ledger_id: fetch_stellar_ledger(ledger_id),
+    process_fn=lambda ledger_id, data: store_ledger_data(ledger_id, data)
+):
+    print(f"Chunk {chunk_summary['chunk_start']}-{chunk_summary['chunk_end']}: "
+          f"processed={chunk_summary['processed']}, "
+          f"skipped={chunk_summary['skipped']}, "
+          f"errors={chunk_summary['errors']}")
+```
+
+**Example without checkpointing:**
+```python
+# Standard chunked backfill (no checkpoint)
+for chunk_summary in service.ingest_backfill_chunked(
+    start_ledger=1000000,
+    end_ledger=5000000,
+    chunk_size=10000
+):
+    print(f"Processed chunk {chunk_summary['chunk_start']}-{chunk_summary['chunk_end']}")
+```
+
+#### Failure notifications
+
+`IngestionService` accepts an optional `notifier` — any `(message) -> Any`
+callable — which is invoked with a one-line summary whenever an ingestion run
+fails. `SlackIntegration.send_webhook` is the intended implementation:
+
+```python
+from astroml.chat.slack import SlackConfig, SlackIntegration
+from astroml.ingestion import IngestionService
+
+slack = SlackIntegration(SlackConfig(webhook_url=os.environ["SLACK_WEBHOOK_URL"]))
+service = IngestionService(notifier=slack.send_webhook)
+```
+
+Behavior worth knowing:
+
+| Path | Notified? | Notes |
+|------|-----------|-------|
+| `ingest()` | Yes | Message names the last attempted ledger and how many succeeded. |
+| `ingest_incremental()` | Yes | Delegates to `ingest()`. |
+| `ingest_backfill_chunked()` | Yes, once per failed chunk | The chunk exception is caught so the backfill continues, but each failure is still reported (issue #993). |
+| No failure | No | A successful run never calls the notifier. |
+
+The notifier's return value is ignored, and an exception raised by the notifier
+is logged at `WARNING` rather than propagated — alerting can never mask or
+replace the original ingestion error.
+
 ### IngestionResult
 
 Container for ingestion operation results.
@@ -102,6 +186,67 @@ class StateStore:
     def save(self, state: IngestionState) -> None
     def mark_processed(self, ledger_id: int) -> None
     def get_last_processed_ledger(self) -> Optional[int]
+```
+
+### BackfillCheckpointManager
+
+Manages checkpoint persistence for chunked backfill operations. Stores the last successfully completed chunk position to enable resuming from that point on restart.
+
+#### Class Definition
+
+```python
+class BackfillCheckpointManager:
+    def __init__(self, checkpoint_path: Optional[str] = None) -> None
+    def save(self, last_ledger: int) -> None
+    def load(self) -> Optional[int]
+    def clear(self) -> None
+```
+
+#### Methods
+
+##### __init__()
+
+Initialize the checkpoint manager.
+
+**Parameters:**
+- `checkpoint_path` (Optional[str]): Path to the checkpoint file. If None, uses `.astroml_state/backfill_checkpoint.json`.
+
+##### save()
+
+Save checkpoint position atomically.
+
+**Parameters:**
+- `last_ledger` (int): The last ledger successfully processed.
+
+##### load()
+
+Load the last checkpoint position.
+
+**Returns:** Optional[int] - The last ledger processed, or None if no checkpoint exists.
+
+##### clear()
+
+Remove the checkpoint file.
+
+**Example:**
+```python
+from astroml.ingestion.service import BackfillCheckpointManager
+
+# Use default checkpoint path
+checkpoint_mgr = BackfillCheckpointManager()
+
+# Save position after processing a chunk
+checkpoint_mgr.save(12345)
+
+# Later, resume from checkpoint
+last_position = checkpoint_mgr.load()
+if last_position is not None:
+    start_ledger = last_position + 1
+else:
+    start_ledger = 1
+
+# Clear checkpoint on completion
+checkpoint_mgr.clear()
 ```
 
 #### Methods
@@ -299,6 +444,72 @@ async def process_ledger(ledger):
 async for ledger in stream.stream_ledgers([process_ledger]):
     # Process each ledger
     pass
+```
+
+### HorizonStreamingClient
+
+SSE client for Horizon transaction events, with automatic reconnection.
+
+#### Delivery guarantees
+
+SSE plus automatic reconnection makes delivery **at-least-once**. When a
+connection drops, Horizon replays the tail of the page it had already begun
+sending, so the same transaction can arrive again — often many times per second
+of outage.
+
+That matters downstream. `ClaimService.submit_claim()` keys pending claims by
+`claim_reference` and rebuilds the submission, so a replayed transaction resets
+`retry_count` to `0` and restarts the retry budget for a claim that is already
+in flight. A handler that moves money has the same problem, one tier worse.
+
+`HorizonStreamingClient` drops replays for you. A transaction whose
+`paging_token` was already delivered is logged at `DEBUG` and counted in
+`duplicates_skipped` instead of reaching the handler again. The cursor still
+advances, so suppressing a replay never rewinds the stream.
+
+De-duplication is keyed on `paging_token` and bounded by `dedupe_capacity`
+tokens (default 1024), so memory stays constant on a long-running stream.
+Transactions with no `paging_token` cannot be identified and are always
+delivered.
+
+#### Constructor Parameters
+
+- `base_url` (str): Horizon base URL, must be `http` or `https`
+- `endpoint` (str): SSE path, default `/transactions`
+- `cursor` (str): Initial paging token, default `"now"`
+- `reconnect_delay` (float): Initial reconnect backoff, default `1.0`
+- `max_reconnect_delay` (float): Backoff ceiling, default `30.0`
+- `dedupe` (bool): Suppress replayed transactions, default `True`
+- `dedupe_capacity` (int): Recently delivered tokens to remember, default `1024`
+- `logger` (logging.Logger): Logger for disconnect and replay messages
+
+#### Properties
+
+- `cursor` (str): Current paging token, advanced as transactions are read
+- `duplicates_skipped` (int): Replays suppressed since construction
+
+#### Example
+
+```python
+from astroml.ingestion.horizon_stream import HorizonStreamingClient
+
+client = HorizonStreamingClient(base_url="https://horizon.stellar.org")
+
+async def submit_claim(tx):
+    # Reaches this handler once per transaction, replays excluded.
+    claim_service.submit_claim(claim_reference=tx["id"], ...)
+
+await client.start(submit_claim)
+
+print(f"suppressed {client.duplicates_skipped} replays")
+```
+
+If your handler is already idempotent (writes keyed on the transaction id into
+a table with a unique constraint, for example), opt out and take raw
+at-least-once delivery:
+
+```python
+client = HorizonStreamingClient(dedupe=False)
 ```
 
 ### EnhancedStream
@@ -574,19 +785,52 @@ result = service.backfill(
 # Process in chunks to manage memory
 def process_large_range(start_ledger, end_ledger, chunk_size=100000):
     service = IngestionService()
-    
+
     for chunk_start in range(start_ledger, end_ledger + 1, chunk_size):
         chunk_end = min(chunk_start + chunk_size - 1, end_ledger)
-        
+
         result = service.ingest(chunk_start, chunk_end)
-        
+
         # Clear memory after each chunk
         del result
-        
+
         # Force garbage collection if needed
         import gc
         gc.collect()
 ```
+
+### Checkpointing for Resumable Backfills
+
+For large backfills that may be interrupted, use checkpointing to resume from the last completed chunk:
+
+```python
+from astroml.ingestion import IngestionService
+
+service = IngestionService()
+
+# Resumable backfill - if interrupted, restart from last checkpoint
+for chunk_summary in service.ingest_backfill_chunked(
+    start_ledger=1000000,
+    end_ledger=10000000,
+    chunk_size=50000,
+    resume_from_checkpoint=True,
+    fetch_fn=fetch_ledger,
+    process_fn=process_ledger
+):
+    print(f"Progress: {chunk_summary['chunk_end']} processed")
+```
+
+**Benefits:**
+- Automatically saves progress after each successful chunk
+- Resumes from last checkpoint on restart
+- No reprocessing of already-completed chunks
+- Checkpoint file is atomically written to avoid corruption
+- Checkpoint is cleared on successful completion
+
+**Checkpoint file location:**
+- Default: `.astroml_state/backfill_checkpoint.json`
+- Customizable via `checkpoint_path` parameter
+- Contains: `last_ledger` and `updated_at` timestamp
 
 ### Streaming Optimization
 

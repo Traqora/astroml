@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """
 Complexity checks for code review.
 
@@ -26,7 +27,7 @@ class ComplexityCheck(BaseCheck):
     - Parameter count
     """
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize the complexity check."""
         self.max_complexity = 10
         self.max_function_length = 50
@@ -129,7 +130,7 @@ class ComplexityCheck(BaseCheck):
         """Check nesting depth of code blocks."""
 
         class NestingDepthVisitor(ast.NodeVisitor):
-            def __init__(self, max_depth: int):
+            def __init__(self, max_depth -> Any: int):
                 self.max_depth = max_depth
                 self.suggestions = []
                 self.current_depth = 0

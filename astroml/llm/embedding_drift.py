@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Embedding drift detection for monitoring embedding quality degradation.
 
 Tracks per-dimension statistics of embedding vectors over time and applies

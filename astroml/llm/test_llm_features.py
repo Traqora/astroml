@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """Tests for the new LLM features (secrets, rate limits, budgets, fallbacks)."""
 
 import unittest
@@ -14,7 +15,7 @@ from astroml.llm.secrets import decrypt_key, encrypt_key, get_api_key, rotate_ap
 
 
 class SecretsTests(unittest.TestCase):
-    def test_encryption_decryption(self):
+    def test_encryption_decryption(self) -> Any:
         plain = "sk-test-key-12345"
         encrypted = encrypt_key(plain)
         self.assertNotEqual(plain, encrypted)
@@ -22,12 +23,12 @@ class SecretsTests(unittest.TestCase):
         decrypted = decrypt_key(encrypted)
         self.assertEqual(plain, decrypted)
 
-    def test_store_and_get_api_key(self):
+    def test_store_and_get_api_key(self) -> Any:
         store_api_key("test_provider", "api-key-value")
         key = get_api_key("test_provider")
         self.assertEqual(key, "api-key-value")
 
-    def test_rotate_api_key(self):
+    def test_rotate_api_key(self) -> Any:
         store_api_key("test_provider", "first-key")
         self.assertEqual(get_api_key("test_provider"), "first-key")
 
@@ -36,7 +37,7 @@ class SecretsTests(unittest.TestCase):
 
 
 class RateLimiterTests(unittest.TestCase):
-    def test_request_rate_limiting(self):
+    def test_request_rate_limiting(self) -> Any:
         limiter = ProviderRateLimiter(requests_per_minute=2, tokens_per_minute=0)
 
         # First 2 requests succeed
@@ -47,7 +48,7 @@ class RateLimiterTests(unittest.TestCase):
         with self.assertRaises(RateLimitExceededError):
             limiter.check_and_record(10)
 
-    def test_token_rate_limiting(self):
+    def test_token_rate_limiting(self) -> Any:
         limiter = ProviderRateLimiter(requests_per_minute=0, tokens_per_minute=50)
 
         # First request consumes 30 tokens
@@ -59,7 +60,7 @@ class RateLimiterTests(unittest.TestCase):
 
 
 class CostBudgetTests(unittest.TestCase):
-    def test_cost_budget_enforcement(self):
+    def test_cost_budget_enforcement(self) -> Any:
         manager = CostBudgetManager(daily_limit=1.0, monthly_limit=5.0)
 
         # Spends under budget
@@ -71,7 +72,7 @@ class CostBudgetTests(unittest.TestCase):
         with self.assertRaises(CostBudgetExceededError):
             manager.check_budget()
 
-    def test_cost_budget_alerts(self):
+    def test_cost_budget_alerts(self) -> Any:
         manager = CostBudgetManager(daily_limit=10.0, monthly_limit=100.0)
 
         with self.assertLogs("astroml.llm.rate_limiter", level="WARNING") as cm:
@@ -85,7 +86,7 @@ class CostBudgetTests(unittest.TestCase):
 class FallbackChainTests(unittest.TestCase):
     @patch("astroml.llm.providers.openai.OpenAIProvider._generate_raw")
     @patch("astroml.llm.providers.anthropic.AnthropicProvider._generate_raw")
-    def test_fallback_automatic_failover(self, mock_anthropic_gen, mock_openai_gen):
+    def test_fallback_automatic_failover(self, mock_anthropic_gen, mock_openai_gen) -> Any:
         # Configure primary (OpenAI) to raise a transient exception
         mock_openai_gen.side_effect = Exception("500 Internal Server Error")
         mock_anthropic_gen.return_value = "hello from fallback claude"
@@ -107,7 +108,7 @@ class FallbackChainTests(unittest.TestCase):
 
 
 class ModelInterpretabilityTests(unittest.TestCase):
-    def test_shap_values(self):
+    def test_shap_values(self) -> Any:
         from astroml.llm.explainer import get_shap_values
 
         features = {"amount": 800.0, "velocity": 4.0, "unique_counterparties": 6}
@@ -117,7 +118,7 @@ class ModelInterpretabilityTests(unittest.TestCase):
         self.assertGreater(shap["amount"], 0)
         self.assertGreater(shap["velocity"], 0)
 
-    def test_decision_tree(self):
+    def test_decision_tree(self) -> Any:
         from astroml.llm.explainer import generate_decision_tree
 
         features = {"amount": 800.0, "velocity": 4.0, "unique_counterparties": 6}
@@ -125,7 +126,7 @@ class ModelInterpretabilityTests(unittest.TestCase):
         self.assertEqual(tree["final_decision"], "Fraud Suspected")
         self.assertIn("digraph", tree["exportable_dot"])
 
-    def test_attention_visualization(self):
+    def test_attention_visualization(self) -> Any:
         from astroml.llm.explainer import get_attention_visualization
 
         text = "This transaction is suspicious because velocity spiked and fraud is suspected."
@@ -140,7 +141,7 @@ class ModelInterpretabilityTests(unittest.TestCase):
         att_suspicious = next(t["attention"] for t in viz["tokens"] if t["token"] == "suspicious")
         self.assertEqual(att_suspicious, 0.90)
 
-    def test_generate_explanation_report(self):
+    def test_generate_explanation_report(self) -> Any:
         from astroml.llm.explainer import generate_explanation_report
 
         features = {"amount": 800.0, "velocity": 4.0, "unique_counterparties": 6}

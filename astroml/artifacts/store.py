@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Artifact storage management using fsspec for multi-backend support.
 
 This module provides a unified interface for saving and loading artifacts
@@ -29,7 +30,7 @@ logger = logging.getLogger(__name__)
 class ArtifactStore:
     """Unified artifact storage using fsspec for multi-backend support."""
 
-    def __init__(self, artifact_uri: str | None = None):
+    def __init__(self, artifact_uri -> Any: str | None = None):
         """Initialize artifact store with optional URI override.
 
         Args:
@@ -131,7 +132,7 @@ class ArtifactStore:
 
             return full_path
 
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Failed to save model to {full_path}: {e}")
             raise
 
@@ -179,7 +180,7 @@ class ArtifactStore:
                 logger.info(f"Loaded state dict from {full_path}")
                 return state_dict
 
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Failed to load model from {full_path}: {e}")
             raise
 
@@ -215,7 +216,7 @@ class ArtifactStore:
             logger.info(f"Saved metadata to {full_path}")
             return full_path
 
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Failed to save metadata to {full_path}: {e}")
             raise
 
@@ -238,7 +239,7 @@ class ArtifactStore:
                 with self.fs.open(full_path, 'r') as f:
                     return json.load(f)
 
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Failed to load metadata from {full_path}: {e}")
             raise
 
@@ -276,7 +277,7 @@ class ArtifactStore:
             logger.info(f"Saved checkpoint to {full_path}")
             return full_path
 
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Failed to save checkpoint to {full_path}: {e}")
             raise
 
@@ -311,7 +312,7 @@ class ArtifactStore:
                     if os.path.exists(tmp_path):
                         os.remove(tmp_path)
 
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Failed to load checkpoint from {full_path}: {e}")
             raise
 
@@ -339,7 +340,7 @@ class ArtifactStore:
             else:
                 return self.fs.glob(f"{search_path}/**")
 
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Failed to list artifacts from {search_path}: {e}")
             return []
 
@@ -365,7 +366,7 @@ class ArtifactStore:
                 logger.info(f"Deleted artifact {full_path}")
                 return True
 
-        except Exception as e:
+        except AstroMLError as e:
             logger.error(f"Failed to delete artifact at {full_path}: {e}")
             return False
 

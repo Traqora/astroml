@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """Mentorship program core logic — matching, tracking, and metrics.
 
 Features:
@@ -31,7 +32,7 @@ class SkillScore:
 class MentorshipMatcher:
     """Matches mentees with mentors using skill-based algorithm."""
 
-    def __init__(self, db: Session):
+    def __init__(self, db -> Any: Session):
         self.db = db
 
     def find_matches(
@@ -139,7 +140,7 @@ class MentorshipMatcher:
 class MentorshipTracking:
     """Tracks mentorship sessions and generates metrics."""
 
-    def __init__(self, db: Session):
+    def __init__(self, db -> Any: Session):
         self.db = db
 
     def record_session(

@@ -385,6 +385,7 @@ async def health():
 async def prometheus_metrics():
     """Prometheus exposition endpoint (issue #567)."""
     _refresh_pool_gauges()
+    _refresh_ingestion_gauges()
     body, content_type = render_latest()
     return Response(body, media_type=content_type)
 
@@ -399,6 +400,24 @@ def _refresh_pool_gauges() -> None:
         )
 
         update_db_pool_metrics(collect_pool_stats(get_async_engine()))
+    except Exception:  # noqa: BLE001 - a scrape must never 500
+        pass
+
+
+def _refresh_ingestion_gauges() -> None:
+    """Sample the ingestion heartbeat into the gauges just before a scrape.
+
+    Re-reading the state store on every scrape is what makes
+    ``astroml_ingestion_staleness_seconds`` keep climbing while ingestion is
+    silent, so ``IngestionDataStale`` fires on its own timeline without needing
+    the ingestion worker to be alive to push anything.
+    """
+    try:
+        from astroml.observability.ingestion import (  # noqa: PLC0415
+            refresh_ingestion_metrics,
+        )
+
+        refresh_ingestion_metrics()
     except Exception:  # noqa: BLE001 - a scrape must never 500
         pass
 

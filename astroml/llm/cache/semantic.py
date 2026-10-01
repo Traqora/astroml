@@ -142,7 +142,7 @@ class SemanticCache:
 
 
 class SemanticCache:
-    def __init__(self, similarity_threshold: float = 0.85, ttl: int = 86400, **kwargs):
+    def __init__(self, similarity_threshold -> Any: float = 0.85, ttl: int = 86400, **kwargs):
         self.threshold = similarity_threshold
         self.ttl = ttl
         # Stores: query_text -> (response_text, embedding_vector)
@@ -169,7 +169,7 @@ class SemanticCache:
             return self.cache[best_query][0]
         return None
 
-    def set(self, query: str, response: str):
+    def set(self, query -> Any: str, response: str):
         embedder = get_embedder()
         vec = embedder.generate_embedding(query)
         self.cache[query] = (response, vec)

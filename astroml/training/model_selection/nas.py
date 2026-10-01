@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Neural architecture search (NAS) framework.
 
 Samples feed-forward network architectures and evaluates them with
@@ -219,7 +220,7 @@ class NeuralArchitectureSearch:
             try:
                 score = self.evaluate(spec, X, y, cv=cv, scoring=scoring)
                 evaluated.append((spec, score))
-            except Exception:
+            except AstroMLError:
                 continue
         if not evaluated:
             raise ValueError("No architectures could be evaluated")

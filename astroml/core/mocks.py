@@ -21,7 +21,7 @@ class MockIngestor(Ingestor):
     Simulates ingestion without requiring real data sources.
     """
 
-    def __init__(self, fail_on: Optional[List[int]] = None):
+    def __init__(self, fail_on -> Any: Optional[List[int]] = None):
         """Initialize mock ingestor.
 
         Args:
@@ -89,7 +89,7 @@ class MockFeatureComputer(FeatureComputer):
     Simulates feature computation without real logic.
     """
 
-    def __init__(self, feature_name: str = "mock_feature"):
+    def __init__(self, feature_name -> Any: str = "mock_feature"):
         """Initialize mock feature computer.
 
         Args:
@@ -155,7 +155,7 @@ class MockGraphBuilder(GraphBuilder):
     Simulates graph construction without real logic.
     """
 
-    def __init__(self, directed: bool = True):
+    def __init__(self, directed -> Any: bool = True):
         """Initialize mock graph builder.
 
         Args:

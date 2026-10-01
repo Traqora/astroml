@@ -5,6 +5,11 @@
 [![codecov](https://codecov.io/gh/Traqora/astroml/branch/main/graph/badge.svg)](https://codecov.io/gh/Traqora/astroml)
 [![Code Complexity](https://img.shields.io/badge/complexity-A-brightgreen)](https://github.com/mombu/xenon)
 
+> 🌐 **Languages:** This README is being translated under
+> [`docs/i18n/`](./docs/i18n/). Available so far:
+> [Español (partial)](./docs/i18n/es/README.es.md).
+> See [`docs/i18n/README.md`](./docs/i18n/README.md) to add a locale.
+
 ## Dynamic Graph Machine Learning Framework for the Stellar Network
 
 **AstroML** is a research-driven Python framework for building **dynamic graph machine learning models** on the Stellar Development Foundation Stellar blockchain.
@@ -17,33 +22,53 @@ It treats blockchain data as a **multi-asset, time-evolving graph**, enabling ad
 
 AstroML provides end-to-end tooling for:
 
-- Ledger ingestion and normalization
-- Dynamic transaction graph construction
-- Feature engineering for blockchain accounts
-- Graph Neural Networks (GNNs)
-- Self-supervised node embeddings
-- Anomaly detection
-- Temporal modeling
-- Reproducible ML experimentation
-- Model registry with versioning and metrics tracking
+* Ledger ingestion and normalization
+* Dynamic transaction graph construction
+* Feature engineering for blockchain accounts
+* Graph Neural Networks (GNNs)
+* Self-supervised node embeddings
+* Anomaly detection
+* Temporal modeling
+* Reproducible ML experimentation
+* **LLM Agent Framework** for multi-step reasoning and autonomous task execution
 
 ---
 
-## 📦 Model Registry
+## � LLM Agent Framework
 
-The Model Registry provides version control for your trained models, enabling you to track model versions, performance metrics, and activate specific versions for production use.
+AstroML now includes a powerful **LLM Agent Framework** for autonomous task execution and multi-step reasoning:
 
-**Key Features:**
-- Register new model versions with auto‑generated or custom version tags
-- Track performance metrics alongside model artifacts
-- Activate specific model versions for inference
-- Configurable model storage location
+### Key Capabilities
 
-For full documentation, see [docs/model-registry.md](./docs/model-registry.md)
+* **Multi-step reasoning** with think-act-observe loops
+* **Task planning** with automatic decomposition
+* **Tool calling** for autonomous execution
+* **Memory management** with conversation and vector storage
+* **Pre-configured agents** for fraud detection and model training
+
+### Quick Start
+
+```bash
+# Interactive agent mode
+python -m astroml agent interactive --agent-type fraud-detection
+
+# Run a single task
+python -m astroml agent run \
+  --agent-type model-training \
+  --task "Train a fraud detection model" \
+  --verbose
+
+# List available tools
+python -m astroml agent list-tools
+```
+
+### Documentation
+
+See [AGENTS_FRAMEWORK.md](./AGENTS_FRAMEWORK.md) for complete documentation.
 
 ---
 
-## 🧠 Core Idea
+## �🧠 Core Idea
 
 Blockchain networks are naturally **graph-structured systems**:
 
@@ -487,6 +512,45 @@ docker compose up -d
 ```
 
 This starts only the database and cache, letting you run Python scripts and training natively on your machine. Alternatively, you can configure your own database and update `config/database.yaml`.
+
+---
+
+## 🤖 LLM Agent Framework
+
+AstroML includes an LLM agent framework for **multi-step reasoning and autonomous task execution** over the graph pipeline. It is provider agnostic, dependency light (the core loop is standard library only) and traces every step so runs stay auditable.
+
+```bash
+# Offline smoke test with the deterministic echo provider
+python -m astroml.agent "Summarise this transaction graph"
+
+# Against a local Ollama server, with task decomposition
+python -m astroml.agent --provider ollama --model llama3.1 --plan \
+  "Rank the busiest accounts and flag anything unusual"
+
+# Analyse a graph file and print the full trace as JSON
+python -m astroml.agent --edges data/edges.json --json "How many accounts?"
+```
+
+```python
+from astroml.agent import (
+    AgentConfig,
+    AgentExecutor,
+    build_default_registry,
+    provider_from_env,
+)
+
+agent = AgentExecutor(
+    llm=provider_from_env(),           # echo | scripted | openai | ollama | ...
+    tools=build_default_registry(),    # graph_overview, window_stats, ...
+    config=AgentConfig(mode="auto", max_steps=8),
+)
+result = agent.run("Which accounts look unusual?")
+
+print(result.answer)
+print(result.trace.summary())
+```
+
+📚 **Full guide**: [docs/agent-framework.md](./docs/agent-framework.md) — providers, tools, memory, planning, CLI flags and design notes.
 
 ---
 

@@ -36,7 +36,7 @@ class ModelCompressor:
     Methods include pruning, structured pruning, and sparsity optimization.
     """
 
-    def __init__(self, config: CompressionConfig | None = None):
+    def __init__(self, config -> Any: CompressionConfig | None = None):
         """Initialize compressor."""
         self.config = config or CompressionConfig()
 

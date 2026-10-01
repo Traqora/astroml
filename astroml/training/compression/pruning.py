@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Model weight pruning framework supporting unstructured and structured pruning strategies.
 
 Supports L1/L2 norm unstructured magnitude pruning, structured channel/layer pruning,
@@ -159,7 +160,7 @@ class ModelPruner:
                         w, _ = module._packed_params._weight_bias()
                         total_elements += w.numel()
                         zero_elements += int((w.dequantize() == 0).sum().item())
-                    except Exception:
+                    except AstroMLError:
                         pass
 
         return float(zero_elements / total_elements) if total_elements > 0 else 0.0

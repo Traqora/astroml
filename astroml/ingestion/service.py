@@ -11,12 +11,36 @@ Key components:
 Dependencies:
 - StateStore: Persistent state management
 - observability.metrics: Job tracking metrics
+
+Intended use (issue #969):
+- Backfilling or incrementally ingesting a range of Stellar ledgers via
+  ``ingest``/``ingest_stream``/``ingest_backfill_chunked``, and catching up
+  to the network head via ``ingest_incremental``.
+- ``fetch_fn``/``process_fn`` are supplied by the caller; this module owns
+  ordering, idempotency (skip-if-already-processed), state persistence, and
+  batching — not how a ledger is fetched or what "processing" it means.
+
+Limitations:
+- No built-in retry/backoff for a failing ``fetch_fn``/``process_fn``: an
+  exception is logged and aborts the current ``ingest``/``ingest_stream``
+  call (see ``ingest_stream``). Callers that need resilience to transient
+  fetch/process failures must implement retries in their own callbacks.
+- Idempotency relies on ``process_fn`` itself tolerating being re-invoked
+  for the same ledger id — this module only prevents *re-attempting* a
+  ledger already recorded as processed; it does not undo partial side
+  effects from an attempt that failed midway.
+- Not safe for concurrent ``ingest*`` calls sharing the same ``StateStore``.
+
+Test coverage: ``tests/test_ingestion_service_streaming.py``,
+``tests/test_backfill_chunked.py``, ``tests/ingestion/test_incremental_ingestion.py``.
 """
 
 from __future__ import annotations
 
 import gc
+import json
 import logging
+import os
 from collections.abc import Callable, Generator, Iterator
 from dataclasses import dataclass
 from datetime import datetime
@@ -24,12 +48,70 @@ from typing import Any, Dict, Literal, Optional
 
 from astroml.core.abstracts import IngestionResult as BaseIngestionResult
 from astroml.core.abstracts import Ingestor
+from astroml.utils.logging import CorrelationId, get_correlation_id
 from astroml.utils.validators import validate_positive_int, validate_range
 
 from .batch_metrics import BatchMetricsRecorder
 from .state import StateStore
 
 logger = logging.getLogger("astroml.ingestion.service")
+
+
+class BackfillCheckpointManager:
+    """Manages checkpoint persistence for chunked backfill operations.
+
+    Stores the last successfully completed chunk position to enable
+    resuming from that point on restart. The checkpoint file is written
+    atomically to avoid corruption on crash.
+    """
+
+    def __init__(self, checkpoint_path: str | None = None):
+        """Initialize the checkpoint manager.
+
+        Args:
+            checkpoint_path: Path to the checkpoint file. If None, uses
+                default path in .astroml_state directory.
+        """
+        if checkpoint_path is None:
+            state_dir = os.path.join(os.getcwd(), ".astroml_state")
+            os.makedirs(state_dir, exist_ok=True)
+            checkpoint_path = os.path.join(state_dir, "backfill_checkpoint.json")
+        self.checkpoint_path = checkpoint_path
+
+    def save(self, last_ledger: int) -> None:
+        """Save checkpoint position.
+
+        Args:
+            last_ledger: The last ledger successfully processed.
+        """
+        checkpoint_data = {
+            "last_ledger": last_ledger,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        tmp_path = f"{self.checkpoint_path}.tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(checkpoint_data, f, indent=2)
+        os.replace(tmp_path, self.checkpoint_path)
+
+    def load(self) -> int | None:
+        """Load the last checkpoint position.
+
+        Returns:
+            The last ledger processed, or None if no checkpoint exists.
+        """
+        if not os.path.exists(self.checkpoint_path):
+            return None
+        try:
+            with open(self.checkpoint_path, encoding="utf-8") as f:
+                data = json.load(f)
+            return data.get("last_ledger")
+        except (OSError, json.JSONDecodeError, KeyError):
+            return None
+
+    def clear(self) -> None:
+        """Remove the checkpoint file."""
+        if os.path.exists(self.checkpoint_path):
+            os.remove(self.checkpoint_path)
 
 
 @dataclass
@@ -52,7 +134,7 @@ class IngestionResult(BaseIngestionResult):
     end_time: datetime
     errors: List[str] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> Any:
         if self.errors is None:
             self.errors = []
 
@@ -76,14 +158,22 @@ class IngestionService(Ingestor):
     and implementation swapping (issue #573).
     """
 
-    def __init__(self, state_store: Optional[StateStore] = None) -> None:
+    def __init__(
+        self,
+        state_store: Optional[StateStore] = None,
+        notifier: Optional[Callable[[str], Any]] = None,
+    ) -> None:
         """Initialize the ingestion service.
 
         Args:
             state_store: Optional state store for tracking processed ledgers.
                         Defaults to a new StateStore instance.
+            notifier: Optional ``(message) -> Any`` callback invoked when
+                :meth:`ingest` fails, e.g.
+                ``SlackIntegration(config).send_webhook`` (issue #986).
         """
         self.state = state_store or StateStore()
+        self.notifier = notifier
 
     def ingest(
         self,
@@ -95,14 +185,6 @@ class IngestionService(Ingestor):
     ) -> IngestionResult:
         """Ingest ledgers incrementally and idempotently.
 
-        - start_ledger: starting ledger id (inclusive). If None, resume from last_processed_ledger+1 or 0.
-        - end_ledger: ending ledger id (inclusive). If None, will process only the start_ledger if provided,
-                      or nothing if no bounds are provided.
-        - fetch_fn: function to fetch data for a ledger id; defaults to identity payload
-        - process_fn: function to handle processing; defaults to no-op
-        - batch_size: progress-logging granularity, forwarded to :meth:`ingest_stream`
-          (see its docstring — issue #547). Does not change this method's return value.
-
         The function will skip any ledger already recorded as processed. State is updated per-ledger,
         ensuring safe retries.
 
@@ -113,7 +195,20 @@ class IngestionService(Ingestor):
         callers that rely on the full id lists.
 
         Returns:
-            IngestionResult with timestamps and error tracking (issue #573)
+            IngestionResult with timestamps and error tracking (issue #573).
+            Failures raised by either caller-provided callback are captured in
+            ``errors`` and reported through ``notifier`` when configured;
+            already completed ledgers remain listed in ``processed``.
+
+        Args:
+            start_ledger: Starting ledger id (inclusive). If None, resume from
+                last_processed_ledger+1 or 0.
+            end_ledger: Ending ledger id (inclusive). If None, only
+                ``start_ledger`` is processed when provided, otherwise nothing.
+            fetch_fn: Function to fetch data for a ledger id; defaults to identity payload.
+            process_fn: Function to handle processing; defaults to no-op.
+            batch_size: Progress-logging granularity, forwarded to
+                :meth:`ingest_stream` (issue #547). Does not change the return value.
         """
         start_time = datetime.utcnow()
         attempted: list[int] = []
@@ -134,9 +229,14 @@ class IngestionService(Ingestor):
                     processed.append(ledger_id)
                 else:
                     skipped.append(ledger_id)
-        except Exception as e:
-            errors.append(str(e))
-            logger.error(f"Ingestion error: {e}")
+        except Exception as exc:
+            # ``fetch_fn`` and ``process_fn`` are caller-provided callbacks,
+            # so failures are not limited to AstroML's exception hierarchy.
+            # Preserve ``ingest``'s result-returning contract for all callback
+            # failures and make sure its notifier sees the same failure.
+            errors.append(str(exc))
+            logger.error("Ingestion error: %s", exc)
+            self._notify_failure(exc, attempted, processed)
 
         end_time = datetime.utcnow()
 
@@ -148,6 +248,24 @@ class IngestionService(Ingestor):
             end_time=end_time,
             errors=errors,
         )
+
+    def _notify_failure(self, error: Exception, attempted: list[int], processed: list[int]) -> None:
+        """Send an ingestion-failure alert via ``self.notifier`` (issue #986).
+
+        Notifier errors are logged and swallowed so alerting can never mask
+        the original ingestion failure.
+        """
+        if self.notifier is None:
+            return
+        last = attempted[-1] if attempted else None
+        message = (
+            f":rotating_light: AstroML ingestion failed after ledger {last}: {error} "
+            f"({len(processed)} processed before failure)"
+        )
+        try:
+            self.notifier(message)
+        except Exception:
+            logger.warning("Ingestion failure notifier raised", exc_info=True)
 
     @validate_positive_int("batch_size")
     @validate_range("batch_size", start=1)
@@ -193,7 +311,52 @@ class IngestionService(Ingestor):
         ledger) already covers this. The final partial batch is always
         flushed before the generator returns or is closed early (e.g. the
         caller stops iterating partway through), via a ``finally`` block.
+
+        Tracing/correlation (issues #944, #950): every log line emitted while
+        this generator runs — including from ``fetch_fn``/``process_fn`` if
+        they log through the standard logging module — carries a
+        ``request_id`` field (see :mod:`astroml.utils.logging`), so a single
+        ingestion run can be correlated end-to-end in structured logs. If the
+        caller already established a correlation id (e.g. an HTTP handler or
+        an outer ``ingest_backfill_chunked`` chunk loop), it's inherited
+        as-is; otherwise a fresh one is generated for this run and scoped to
+        the lifetime of the generator via :class:`~astroml.utils.logging.CorrelationId`.
+
+        Args:
+            start_ledger: First ledger to process (inclusive). If None, resumes
+                from ``last_processed_ledger + 1``; yields nothing on a cold
+                state store.
+            end_ledger: Last ledger to process (inclusive). If None, only
+                ``start_ledger`` is processed.
+            fetch_fn: Fetches a ledger's payload; defaults to an identity payload.
+            process_fn: Handles a fetched ledger; defaults to a no-op.
+            batch_size: Progress-logging and state-flush granularity; must be
+                ``>= 1``.
+
+        Yields:
+            ``(ledger_id, LedgerOutcome)`` per ledger, with a status of
+            ``"processed"`` or ``"skipped"``. An exception from ``fetch_fn`` or
+            ``process_fn`` is logged and re-raised, aborting the generator.
         """
+        inherited_correlation_id = get_correlation_id()
+        with CorrelationId(inherited_correlation_id):
+            yield from self._ingest_stream_impl(
+                start_ledger=start_ledger,
+                end_ledger=end_ledger,
+                fetch_fn=fetch_fn,
+                process_fn=process_fn,
+                batch_size=batch_size,
+            )
+
+    def _ingest_stream_impl(
+        self,
+        start_ledger: int | None,
+        end_ledger: int | None,
+        fetch_fn: Callable[[int], object] | None,
+        process_fn: Callable[[int, object], None] | None,
+        batch_size: int,
+    ) -> Iterator[tuple[int, LedgerOutcome]]:
+        """Body of :meth:`ingest_stream`, run inside its correlation-id scope."""
 
         state = self.state.load()
         processed_set = state.processed_ledgers
@@ -222,6 +385,13 @@ class IngestionService(Ingestor):
 
         from astroml.observability.metrics import track_active_job
 
+        logger.info(
+            "ingest_stream starting: ledgers %d..%d (request_id=%s)",
+            start_ledger,
+            end_ledger,
+            get_correlation_id(),
+        )
+
         pending_flush = 0
         batch_metrics = BatchMetricsRecorder()
         batch_metrics.start()
@@ -238,16 +408,15 @@ class IngestionService(Ingestor):
                             payload = fetch(ledger_id)
                             process(ledger_id, payload)
                         except Exception as exc:
-                            batch_metrics.observe(LedgerOutcome(ledger_id=ledger_id, status="error"))
+                            batch_metrics.observe(
+                                LedgerOutcome(ledger_id=ledger_id, status="error")
+                            )
                             batch_metrics.finish()
                             logger.error("Ingestion error for ledger %d: %s", ledger_id, exc)
                             raise
-                        processed_set.add(ledger_id)
-                        state.last_processed_ledger = (
-                            ledger_id
-                            if state.last_processed_ledger is None
-                            else max(state.last_processed_ledger, ledger_id)
-                        )
+                        # Also stamps ``state.last_processed_at`` — the heartbeat
+                        # the ingestion staleness probe reads.
+                        state.record_processed(ledger_id)
                         pending_flush += 1
                         if pending_flush >= batch_size:
                             self.state.save(state)
@@ -375,6 +544,8 @@ class IngestionService(Ingestor):
         fetch_fn: Callable[[int], object] | None = None,
         process_fn: Callable[[int, object], None] | None = None,
         batch_size: int = 100,
+        resume_from_checkpoint: bool = False,
+        checkpoint_path: str | None = None,
     ) -> Generator[dict[str, Any], None, None]:
         """Memory-efficient backfill for very large ledger ranges — issue #766.
 
@@ -389,6 +560,12 @@ class IngestionService(Ingestor):
         chunks. Peak RSS is therefore proportional to ``chunk_size`` instead
         of the full range length.
 
+        Checkpoint support: When ``resume_from_checkpoint=True``, the method
+        saves the last successfully completed chunk position to a checkpoint
+        file. On restart, it resumes from that position rather than from
+        ``start_ledger``. This enables resuming large backfills after crashes
+        or interruptions without reprocessing already-completed chunks.
+
         Yields one summary ``dict`` per chunk:
 
         .. code-block:: python
@@ -402,20 +579,41 @@ class IngestionService(Ingestor):
             }
 
         Args:
-            start_ledger: First ledger to process (inclusive).
+            start_ledger: First ledger to process (inclusive). If
+                ``resume_from_checkpoint=True`` and a checkpoint exists,
+                this is overridden by the checkpoint position.
             end_ledger: Last ledger to process (inclusive).
             chunk_size: Number of ledgers per memory-bounded batch. Default 10 000.
             fetch_fn: Forwarded to :meth:`ingest_stream`.
             process_fn: Forwarded to :meth:`ingest_stream`.
             batch_size: State-flush cadence inside each chunk, forwarded to
                 :meth:`ingest_stream`.
+            resume_from_checkpoint: If True, resume from the last checkpoint
+                instead of starting from ``start_ledger``. Defaults to False.
+            checkpoint_path: Optional path to the checkpoint file. If None,
+                uses ``.astroml_state/backfill_checkpoint.json``.
+
+        Yields one summary ``dict`` per chunk, where ``errors`` counts the
+        chunks that failed. A failed chunk is also reported through
+        ``self.notifier`` (e.g. ``SlackIntegration(config).send_webhook``),
+        matching :meth:`ingest` — see issue #993.
+
+        Correlation (issue #957): each chunk delegates to :meth:`ingest_stream`,
+        which mints a fresh correlation id whenever none is already set on entry.
+        Without a shared scope around the whole chunk loop, that means every
+        chunk of one backfill run got a *different* request_id in the logs,
+        defeating the point of #944/#950's tracing for exactly the run most in
+        need of it: a multi-million-ledger backfill spanning many chunks. This
+        method now establishes one correlation id (inherited from the caller if
+        already set, otherwise freshly generated) before the loop starts, so
+        every chunk's logs carry the same ``request_id``.
         """
         if end_ledger < start_ledger:
             raise ValueError("end_ledger must be >= start_ledger")
         if chunk_size < 1:
             raise ValueError("chunk_size must be >= 1")
 
-        current = start_ledger
+
         while current <= end_ledger:
             chunk_end = min(current + chunk_size - 1, end_ledger)
             n_processed = 0
@@ -442,6 +640,11 @@ class IngestionService(Ingestor):
                     exc,
                 )
                 n_errors += 1
+                # A chunked backfill swallows the per-chunk exception and keeps
+                # going, so without this the operator gets no alert at all: a
+                # backfill where every chunk fails looks exactly like a
+                # successful one from the notifier's point of view (issue #993).
+                self._notify_failure(exc, [], [])
 
             yield {
                 "chunk_start": current,
@@ -451,11 +654,21 @@ class IngestionService(Ingestor):
                 "errors": n_errors,
             }
 
+            # Save checkpoint after successful chunk completion
+            if checkpoint_mgr is not None and n_errors == 0:
+                checkpoint_mgr.save(chunk_end)
+                logger.debug("Checkpoint saved at ledger %d", chunk_end)
+
             # Release per-chunk temporaries and compact the heap before the
             # next chunk's fetch allocations begin.  gc.collect() is a no-op
             # when the GC would have run anyway, so the overhead is negligible.
             gc.collect()
             current = chunk_end + 1
+
+        # Clear checkpoint on successful completion
+        if checkpoint_mgr is not None:
+            checkpoint_mgr.clear()
+            logger.info("Backfill completed, checkpoint cleared")
 
     def get_status(self) -> Dict[str, Any]:
         """Get current status of the ingestor (issue #573).

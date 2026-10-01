@@ -4,7 +4,7 @@ from typing import Any
 
 
 class MultiSourceAggregator:
-    def __init__(self):
+    def __init__(self) -> Any:
         pass
 
     async def aggregate_streams(

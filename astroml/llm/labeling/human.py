@@ -81,7 +81,7 @@ class ReviewTask:
 class HumanReviewQueue:
     """Queue for human review of low-confidence labels."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize human review queue."""
         self.tasks: Dict[str, ReviewTask] = {}
         self.user_assignments: Dict[str, List[str]] = {}  # user -> task_ids

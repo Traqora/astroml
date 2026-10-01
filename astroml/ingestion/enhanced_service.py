@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Enhanced ingestion service orchestrator for robust Stellar data streaming.
 
 Provides high-level service management for multiple concurrent streams
@@ -81,7 +82,7 @@ class StreamService:
                 logger.info("Stream %s cancelled", stream_id)
                 break
 
-            except Exception as e:
+            except AstroMLError as e:
                 retry_count += 1
                 logger.error("Stream %s failed (attempt %d): %s", stream_id, retry_count, e)
 
@@ -184,7 +185,7 @@ class MultiHorizonService:
         try:
             start_http_server(self.prometheus_port)
             logger.info("Prometheus metrics server started on port %d", self.prometheus_port)
-        except Exception as e:
+        except AstroMLError as e:
             logger.error("Failed to start Prometheus metrics server: %s", e)
 
         logger.info("Starting %d Horizon services", len(self.services))
@@ -209,7 +210,7 @@ class MultiHorizonService:
             await service.start()
         except asyncio.CancelledError:
             logger.info("Service %s cancelled", service_id)
-        except Exception as e:
+        except AstroMLError as e:
             logger.error("Service %s failed: %s", service_id, e)
         finally:
             if self._running and not self._shutdown_event.is_set():
@@ -219,7 +220,17 @@ class MultiHorizonService:
                 logger.warning("Service %s stopped unexpectedly", service_id)
 
     async def stop_all(self) -> None:
-        """Stop all services."""
+        """Ask every managed service to stop and release the run loop.
+
+        Requests shutdown rather than cancelling: each service notices the
+        flag at its next boundary and unwinds itself, so an in-flight ledger
+        finishes instead of being cut off mid-write.
+
+        Side effects: clears the running flag, calls ``stop()`` on every
+        service, and sets the shutdown event that the run loop waits on.
+        Idempotent — a second call, or one made before :meth:`start`, is a
+        no-op, which is what makes it safe to install as a signal handler.
+        """
         if not self._running:
             return
 

@@ -57,7 +57,7 @@ def cache_model_prediction(
 
     def decorator(func: F) -> F:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args, **kwargs) -> Any:
             cache = RedisCache()
 
             # Generate cache key with model version if available

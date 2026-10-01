@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class FraudProbabilityComputer(BaseFeatureComputer):
     """Computer for LLM-based fraud probability scores."""
 
-    def __init__(self, model: str = "gpt-4", prompt_version: str = "v1"):
+    def __init__(self, model -> Any: str = "gpt-4", prompt_version: str = "v1"):
         super().__init__("fraud_probability")
         self.model = model
         self.prompt_version = prompt_version
@@ -59,7 +59,7 @@ class FraudProbabilityComputer(BaseFeatureComputer):
 class ExplanationConfidenceComputer(BaseFeatureComputer):
     """Computer for LLM explanation confidence scores."""
 
-    def __init__(self, model: str = "gpt-4", prompt_version: str = "v1"):
+    def __init__(self, model -> Any: str = "gpt-4", prompt_version: str = "v1"):
         super().__init__("explanation_confidence")
         self.model = model
         self.prompt_version = prompt_version
@@ -99,7 +99,7 @@ class ExplanationConfidenceComputer(BaseFeatureComputer):
 class UncertaintyEstimatorComputer(BaseFeatureComputer):
     """Computer for LLM uncertainty estimates."""
 
-    def __init__(self, model: str = "gpt-4", num_samples: int = 5):
+    def __init__(self, model -> Any: str = "gpt-4", num_samples: int = 5):
         super().__init__("uncertainty_estimates")
         self.model = model
         self.num_samples = num_samples

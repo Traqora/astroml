@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """FastAPI router for automated model validation and compliance verification."""
 
 from __future__ import annotations
@@ -116,7 +117,7 @@ async def run_validation_gate(payload: ValidateModelRequest) -> dict[str, Any]:
             "robustness_results": result.robustness_results,
             "compliance_results": result.compliance_results,
         }
-    except Exception as e:
+    except AstroMLError as e:
         logger.error("Validation gate evaluation failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -144,7 +145,7 @@ async def evaluate_robustness(payload: RobustnessTestRequest) -> dict[str, Any]:
             "total_tests": res["total_tests"],
             "results": res["results"],
         }
-    except Exception as e:
+    except AstroMLError as e:
         logger.error("Robustness evaluation failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -185,7 +186,7 @@ async def evaluate_compliance(payload: ComplianceCheckRequest) -> dict[str, Any]
                 for r in report.results
             ],
         }
-    except Exception as e:
+    except AstroMLError as e:
         logger.error("Compliance evaluation failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 

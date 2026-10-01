@@ -67,3 +67,32 @@ def test_compute_node_features_with_provided_first_seen_and_ref_time():
     assert feats.loc["A", "account_age"] == 110  # 200 - 90
     assert feats.loc["B", "account_age"] == 105  # 200 - 95
     assert feats.loc["D", "account_age"] == 150  # 200 - 50
+
+def test_compute_rolling_node_features():
+    from astroml.features.node_features import compute_rolling_node_features
+    
+    edges = [
+        {"src": "A", "dst": "B", "amount": 10, "timestamp": 100, "asset": "XLM"},
+        {"src": "A", "dst": "C", "amount": 5, "timestamp": 110, "asset": "USDC"},
+        {"src": "B", "dst": "A", "amount": 2, "timestamp": 120, "asset": "XLM"},
+        {"src": "C", "dst": "A", "amount": 3, "timestamp": 130, "asset": "USDC"},
+    ]
+    
+    # Window [115, 130], includes only 120 and 130
+    feats = compute_rolling_node_features(edges, window=15, ref_time=130, window_name="15s")
+    
+    # A received from B (2) and C (3)
+    assert feats.loc["A", "in_degree_15s"] == 2
+    assert feats.loc["A", "out_degree_15s"] == 0
+    assert feats.loc["A", "total_received_15s"] == 5
+    
+    # B sent to A (2)
+    assert feats.loc["B", "out_degree_15s"] == 1
+    assert feats.loc["B", "in_degree_15s"] == 0
+    
+    # C sent to A (3)
+    assert feats.loc["C", "out_degree_15s"] == 1
+    
+    assert "account_age_15s" not in feats.columns
+    assert "first_seen_15s" not in feats.columns
+

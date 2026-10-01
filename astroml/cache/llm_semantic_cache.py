@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Semantic similarity cache for LLM responses.
 
 This module implements a similarity-based lookup layer:
@@ -171,7 +172,7 @@ class LLMSemanticCache:
         # Candidate cache_id list is expected to be strings.
         try:
             candidate_ids = self._redis.zrevrange(idx_key, 0, self._config.candidate_top_k - 1)
-        except Exception as e:  # pragma: no cover
+        except AstroMLError as e:  # pragma: no cover
             logger.warning("Semantic cache ZREVRANGE failed: %s", e)
             candidate_ids = []
 
@@ -185,7 +186,7 @@ class LLMSemanticCache:
         emb_blobs = []
         try:
             emb_blobs = pipe.execute()
-        except Exception:  # pragma: no cover
+        except AstroMLError:  # pragma: no cover
             emb_blobs = []
 
         for cid_b, emb_blob in zip(candidate_ids, emb_blobs):
@@ -194,7 +195,7 @@ class LLMSemanticCache:
                 continue
             try:
                 emb_vec = json.loads(emb_blob)
-            except Exception:
+            except AstroMLError:
                 continue
             if not isinstance(emb_vec, list):
                 continue
@@ -227,7 +228,7 @@ class LLMSemanticCache:
         # use RedisCache.get on resp_key.
         try:
             response_obj = self._redis_cache.get(resp_key)
-        except Exception:
+        except AstroMLError:
             response_obj = None
 
         cached_at: float | None = None
@@ -235,7 +236,7 @@ class LLMSemanticCache:
             try:
                 meta = json.loads(meta_blob)
                 cached_at = meta.get("cached_at")
-            except Exception:
+            except AstroMLError:
                 cached_at = None
 
         hit = SemanticCacheHit(
@@ -271,7 +272,7 @@ class LLMSemanticCache:
         # Store response using existing RedisCache.set (pickle).
         try:
             self._redis_cache.set(resp_key, response, ttl_seconds=ttl_seconds)
-        except Exception as e:  # pragma: no cover
+        except AstroMLError as e:  # pragma: no cover
             logger.warning("Semantic cache response set failed: %s", e)
 
         emb_json = json.dumps(list(map(float, emb_vec)))
@@ -286,7 +287,7 @@ class LLMSemanticCache:
             # Soft cap: keep only recent 10x candidate_top_k
             cap = max(self._config.candidate_top_k * 10, 100)
             self._redis.zremrangebyrank(idx_key, 0, -(cap + 1))
-        except Exception as e:  # pragma: no cover
+        except AstroMLError as e:  # pragma: no cover
             logger.warning("Semantic cache embedding/index set failed: %s", e)
 
         return cache_id
@@ -299,7 +300,7 @@ class SimpleDeterministicEmbeddingProvider(LLMEmbeddingProvider):
     Produces a fixed-length vector derived from hash of text.
     """
 
-    def __init__(self, dim: int = 64):
+    def __init__(self, dim -> Any: int = 64):
         self.dim = dim
 
     def embed(self, *, text: str, model: str) -> list[float]:

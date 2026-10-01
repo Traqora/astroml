@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 class BatchLabelingWorker:
     """Worker for batch labeling of data items."""
 
-    def __init__(self):
+    def __init__(self) -> Any:
         """Initialize batch labeling worker."""
         self.labeler = DataLabeler()
         self.consensus_labeler = ConsensusLabeler()

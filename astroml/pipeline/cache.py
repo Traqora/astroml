@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 """Content-addressable cache key generation for ML pipeline caching.
 
 Issue #636: Implements intelligent content-addressable cache keys that uniquely
@@ -41,7 +42,7 @@ def _make_json_safe(obj: Any) -> Any:
     # Fallback: convert to string representation and hash
     try:
         return str(obj)
-    except Exception:
+    except AstroMLError:
         return hashlib.sha256(repr(obj).encode()).hexdigest()
 
 

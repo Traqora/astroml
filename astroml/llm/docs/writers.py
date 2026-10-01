@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """
 Documentation writers for different output formats.
 
@@ -30,7 +31,7 @@ class WriterConfig:
 class BaseWriter(ABC):
     """Base class for documentation writers."""
 
-    def __init__(self, config: WriterConfig = None):
+    def __init__(self, config -> Any: WriterConfig = None):
         """Initialize the writer with configuration."""
         self.config = config or WriterConfig()
 

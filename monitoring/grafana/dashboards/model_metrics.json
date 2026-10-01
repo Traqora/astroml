@@ -1,0 +1,5 @@
+{
+  "title": "Model Metrics",
+  "description": "Dashboard for model metrics, prediction drift, and observability",
+  "panels": []
+}

@@ -52,7 +52,7 @@ class ABTestConfig:
 class ExperimentVariant:
     """Represents a variant in an experiment with accumulated results."""
 
-    def __init__(self, variant: Variant):
+    def __init__(self, variant -> Any: Variant):
         """Initialize variant."""
         self.variant = variant
         self.samples_seen = 0
@@ -93,7 +93,7 @@ class ABTest:
     Manages experiment lifecycle, randomization, and result analysis.
     """
 
-    def __init__(self, config: ABTestConfig):
+    def __init__(self, config -> Any: ABTestConfig):
         """Initialize A/B test."""
         self.config = config
         self.test_id = config.test_id or str(uuid.uuid4())

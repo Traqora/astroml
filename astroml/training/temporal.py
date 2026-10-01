@@ -1,3 +1,4 @@
+from astroml.utils.exceptions import AstroMLError
 import logging
 from dataclasses import dataclass
 from datetime import datetime
@@ -35,7 +36,7 @@ class TemporalTrainingConfig:
     augmentation_enabled: bool = True
     augmentation_prob: float = 0.3
 
-    def __post_init__(self):
+    def __post_init__(self) -> Any:
         if self.hidden_dims is None:
             self.hidden_dims = [128, 64]
 
@@ -82,7 +83,7 @@ class TemporalDataset(Dataset):
 class TemporalTrainer:
     """Trainer for temporal GNN models."""
 
-    def __init__(self, config: TemporalTrainingConfig):
+    def __init__(self, config -> Any: TemporalTrainingConfig):
         self.config = config
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -308,7 +309,7 @@ class TemporalTrainer:
 
         return self.training_history
 
-    def _save_checkpoint(self, epoch: int):
+    def _save_checkpoint(self, epoch -> Any: int):
         """Save model checkpoint."""
         checkpoint = {
             "epoch": epoch,
@@ -336,7 +337,7 @@ class TemporalTrainer:
             checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=True)
         except FileNotFoundError:
             raise FileNotFoundError(f"Checkpoint file not found: {checkpoint_path}")
-        except Exception as e:
+        except AstroMLError as e:
             raise ValueError(f"Failed to load checkpoint: {e}")
 
         # Validate required keys
@@ -352,17 +353,17 @@ class TemporalTrainer:
 
         try:
             self.model.load_state_dict(checkpoint["model_state_dict"])
-        except Exception as e:
+        except AstroMLError as e:
             raise RuntimeError(f"Model state dict does not match architecture: {e}")
 
         try:
             self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        except Exception as e:
+        except AstroMLError as e:
             raise RuntimeError(f"Optimizer state dict does not match: {e}")
 
         try:
             self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
-        except Exception as e:
+        except AstroMLError as e:
             raise RuntimeError(f"Scheduler state dict does not match: {e}")
 
         self.training_history = checkpoint["training_history"]
@@ -423,7 +424,7 @@ class TemporalTrainer:
 class TemporalHyperparameterSearch:
     """Hyperparameter search for temporal models."""
 
-    def __init__(self, search_space: dict[str, list[Any]]):
+    def __init__(self, search_space -> Any: dict[str, list[Any]]):
         self.search_space = search_space
         self.results = []
 
@@ -491,7 +492,7 @@ class TemporalHyperparameterSearch:
 class TemporalExperiment:
     """Experiment management for temporal models."""
 
-    def __init__(self, name: str, config: TemporalTrainingConfig):
+    def __init__(self, name -> Any: str, config: TemporalTrainingConfig):
         self.name = name
         self.config = config
         self.timestamp = datetime.now()
@@ -535,7 +536,7 @@ class TemporalExperiment:
 
         return self.results
 
-    def save_results(self, filepath: str):
+    def save_results(self, filepath -> Any: str):
         """Save experiment results."""
         import json
 

@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional, Union, Callable
 """
 Translation service for multilingual LLM support.
 
@@ -54,7 +55,7 @@ class TranslationService:
     Supports real-time translation via LLM and cached template translations.
     """
 
-    def __init__(self, cache_size: int = 10000):
+    def __init__(self, cache_size -> Any: int = 10000):
         """
         Initialize translation service.
 

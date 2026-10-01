@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Database session factory for AstroML.
 
 This module provides database connection management and session creation with:
@@ -55,8 +54,6 @@ class DatabaseConfig(BaseModel):
     name: str = Field(default="astroml", min_length=1, description="Database name")
     user: str = Field(default="astroml", min_length=1, description="Database user")
     password: str = Field(default="", description="Database password")
-    # Issue #989 — pool sizing drives connection cost; reject values that
-    # would disable pooling or make SQLAlchemy fail late at engine creation.
     pool_size: int = Field(default=10, ge=1, description="Connection pool size")
     max_overflow: int = Field(default=20, ge=0, description="Max overflow connections")
     pool_timeout: int = Field(default=30, ge=1, description="Pool timeout seconds")
@@ -93,6 +90,16 @@ class DatabaseConfig(BaseModel):
     def to_url(self) -> str:
         """Convert configuration to PostgreSQL URL."""
         return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+
+    @property
+    def masked_url(self) -> str:
+        """Connection URL with the password masked, safe for logs/diagnostics.
+
+        Unlike :meth:`to_url`, never emits credentials in clear text
+        (see CodeQL rule py/clear-text-logging-sensitive-data).
+        """
+        masked = "***" if self.password else ""
+        return f"postgresql://{self.user}:{masked}@{self.host}:{self.port}/{self.name}"
 
     @classmethod
     def from_dict(cls, data: dict) -> DatabaseConfig:
@@ -221,7 +228,7 @@ def get_engine() -> Engine:
         # pool settings with no trace of why. Log it with the original
         # error before falling back so misconfigurations are still visible.
         logger.warning(
-            "Failed to load database config (%s); falling back to default pool settings",
+            "Failed to load database config (%s). Falling back to default pool settings",
             e,
         )
         engine = create_engine(

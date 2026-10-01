@@ -51,7 +51,7 @@ def test_env_flag_sets_astroml_env_when_unset(monkeypatch: pytest.MonkeyPatch) -
     fake_db.name = "x"
     fake_db.user = "u"
     fake_db.password = ""
-    fake_db.to_url.return_value = "postgresql://u@localhost:5432/x"
+    fake_db.masked_url = "postgresql://u@localhost:5432/x"
     with mock.patch("astroml.cli.load_database_config", return_value=fake_db):
         with redirect_stdout(io.StringIO()):
             rc = cli.main(["--env", "production", "config", "--print-db"])
@@ -67,7 +67,7 @@ def test_env_flag_does_not_overwrite_existing_value(monkeypatch: pytest.MonkeyPa
     fake_db.name = "n"
     fake_db.user = "u"
     fake_db.password = ""
-    fake_db.to_url.return_value = "postgresql://u@h:5432/n"
+    fake_db.masked_url = "postgresql://u@h:5432/n"
     with mock.patch("astroml.cli.load_database_config", return_value=fake_db):
         with redirect_stdout(io.StringIO()):
             cli.main(["--env", "production", "config", "--print-db"])
@@ -82,12 +82,33 @@ def test_config_flag_passes_path_to_loader(monkeypatch: pytest.MonkeyPatch) -> N
     fake_db.name = "n"
     fake_db.user = "u"
     fake_db.password = ""
-    fake_db.to_url.return_value = "postgresql://u@h:5432/n"
+    fake_db.masked_url = "postgresql://u@h:5432/n"
     custom = pathlib.Path("custom/db.yaml")
     with mock.patch("astroml.cli.load_database_config", return_value=fake_db) as load_mock:
-        with redirect_stdout(io.StringIO()):
+        with redirect_stdout(io.StringIO()) as out:
             cli.main(["--config", str(custom), "config", "--print-db"])
     load_mock.assert_called_once_with(custom)
+    assert "postgresql://u@h:5432/n" in out.getvalue()
+
+
+def test_print_db_masks_password_and_never_prints_real_url() -> None:
+    """`config --print-db` must not emit the clear-text connection URL (CodeQL
+    py/clear-text-logging-sensitive-data): the password is masked and the raw
+    ``to_url()`` value never reaches stdout."""
+    fake_db = mock.Mock()
+    fake_db.host = "db.internal"
+    fake_db.port = 5432
+    fake_db.name = "ledger"
+    fake_db.user = "svc"
+    fake_db.password = "sup3r-s3cret"
+    fake_db.masked_url = "postgresql://svc:***@db.internal:5432/ledger"
+    with mock.patch("astroml.cli.load_database_config", return_value=fake_db):
+        with redirect_stdout(io.StringIO()) as out:
+            rc = cli.main(["config", "--print-db"])
+    assert rc == 0
+    printed = out.getvalue()
+    assert "sup3r-s3cret" not in printed
+    assert "postgresql://svc:***@db.internal:5432/ledger" in printed
 
 
 def test_help_lists_all_subcommands() -> None:

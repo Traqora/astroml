@@ -1,19 +1,7 @@
-from typing import Any, Dict, List, Optional, Union, Callable
-from astroml.utils.exceptions import AstroMLError
 from __future__ import annotations
 
 import argparse
 import json
-from typing import Optional
-
-from .ingestion.service import IngestionService
-from .ingestion.state import StateStore
-
-
-def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(prog="astroml", description="AstroML utilities CLI")
-    sub = parser.add_subparsers(dest="command", required=True)
-
 import os
 import pathlib
 
@@ -275,8 +263,6 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
-    args = parser.parse_args(argv)
-
     # Wire the top-level --env flag into ASTROML_ENV so downstream loaders
     # (see docs/api/configuration.md) see the requested environment.
     # Do not overwrite an env var the operator already set explicitly.
@@ -347,7 +333,7 @@ def main(argv: list[str] | None = None) -> int:
                             "name": db_config.name,
                             "user": db_config.user,
                             "password": "***" if db_config.password else "",
-                            "url": db_config.to_url(),
+                            "url": db_config.masked_url,
                         },
                         indent=2,
                     )
@@ -356,7 +342,7 @@ def main(argv: list[str] | None = None) -> int:
             except FileNotFoundError as e:
                 print(f"Error: {e}")
                 return 1
-            except AstroMLError as e:
+            except Exception as e:
                 print(f"Error loading config: {e}")
                 return 1
         else:

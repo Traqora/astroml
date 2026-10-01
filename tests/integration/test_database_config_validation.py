@@ -76,6 +76,26 @@ def test_valid_config_round_trips(tmp_path: pathlib.Path) -> None:
     assert cfg.to_url() == "postgresql://astroml:secret@db.example.com:5432/astroml"
 
 
+def test_masked_url_masks_password_keeps_to_url_intact() -> None:
+    """`masked_url` never leaks the password; `to_url` keeps its contract for
+    actual engine creation (CodeQL py/clear-text-logging-sensitive-data).
+    """
+    cfg = DatabaseConfig(
+        host="db.example.com", port=5432, name="astroml", user="astroml", password="secret"
+    )
+    assert cfg.masked_url == "postgresql://astroml:***@db.example.com:5432/astroml"
+    assert "secret" not in cfg.masked_url
+    # to_url still exposes the real password for engine creation.
+    assert cfg.to_url() == "postgresql://astroml:secret@db.example.com:5432/astroml"
+
+
+def test_masked_url_without_password_has_empty_segment() -> None:
+    cfg = DatabaseConfig(
+        host="db.example.com", port=5432, name="astroml", user="astroml", password=""
+    )
+    assert cfg.masked_url == "postgresql://astroml:@db.example.com:5432/astroml"
+
+
 def test_missing_file_raises_file_not_found(tmp_path: pathlib.Path) -> None:
     with pytest.raises(FileNotFoundError):
         load_database_config(tmp_path / "does-not-exist.yaml")

@@ -1,10 +1,25 @@
+# Credentials live in a Secret, never in the ConfigMap (#942).
+# The value below is a NON-FUNCTIONAL placeholder: before deploying, rotate
+# the real password and provision the Secret via `kubectl create secret
+# generic` or an external secrets operator (ExternalSecret/Vault) instead of
+# committing real credentials to git.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: astroml-db-secret
+  namespace: astroml
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql://astroml:REPLACE_WITH_ROTATED_PASSWORD@postgres:5432/astroml"
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: astroml-config
   namespace: astroml
 data:
-  DATABASE_URL: "postgresql://astroml:astroml_secure_password_change_me@postgres:5432/astroml"
+  # DATABASE_URL deliberately absent: it carries the DB password and is
+  # injected from the `astroml-db-secret` Secret via secretKeyRef (#942).
   REDIS_URL: "redis://redis:6379/0"
 ---
 apiVersion: apps/v1
@@ -32,8 +47,8 @@ spec:
         env:
         - name: DATABASE_URL
           valueFrom:
-            configMapKeyRef:
-              name: astroml-config
+            secretKeyRef:
+              name: astroml-db-secret
               key: DATABASE_URL
         - name: REDIS_URL
           valueFrom:
@@ -70,8 +85,8 @@ spec:
             env:
             - name: DATABASE_URL
               valueFrom:
-                configMapKeyRef:
-                  name: astroml-config
+                secretKeyRef:
+                  name: astroml-db-secret
                   key: DATABASE_URL
             - name: REDIS_URL
               valueFrom:
@@ -114,8 +129,8 @@ spec:
         env:
         - name: DATABASE_URL
           valueFrom:
-            configMapKeyRef:
-              name: astroml-config
+            secretKeyRef:
+              name: astroml-db-secret
               key: DATABASE_URL
         - name: REDIS_URL
           valueFrom:

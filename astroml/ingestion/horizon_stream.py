@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Async streaming client for Stellar Horizon transaction events."""
 
 from __future__ import annotations
@@ -12,6 +11,8 @@ from collections import OrderedDict
 from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlencode, urlparse
+
+from astroml.utils.exceptions import AstroMLError
 
 Transaction = dict[str, Any]
 TransactionHandler = Callable[[Transaction], Any]
@@ -223,7 +224,7 @@ class HorizonStreamingClient:
 
             self._logger.info("Connected to Horizon stream: %s", self._request_path())
 
-            data_lines = []
+            data_lines: list[str] = []
             while not self._stop_event.is_set():
                 line = await reader.readline()
                 if not line:

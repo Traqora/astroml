@@ -324,8 +324,8 @@ class RestoreService:
             logger.error(f"Backup file not found: {backup_file}")
             return False
 
-        base_allowed = Path(self.config.model_artifacts_dir)
-        target_path = Path(target_dir or self.config.model_artifacts_dir)
+        base_allowed = Path(self.config.model_artifacts_dir).resolve()
+        target_path = Path(target_dir or self.config.model_artifacts_dir).resolve()
         if not _is_within(target_path, base_allowed):
             logger.error(f"Invalid target directory: {target_dir}")
             return False
@@ -349,7 +349,10 @@ class RestoreService:
                         if not _is_within(member_path, target_path):
 
                             raise ValueError(f"Invalid archive member path: {member.name}")
-                    tar.extractall(path=target_path)
+                    # Defence in depth: the "data" filter (PEP 706) additionally
+                    # rejects symlink/hardlink members and special files that
+                    # could write outside target_path despite the checks above.
+                    tar.extractall(path=target_path, filter="data")
 
             logger.info(f"Model artifacts restored successfully from backup: {backup_id}")
             return True

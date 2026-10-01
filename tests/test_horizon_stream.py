@@ -26,6 +26,8 @@ def test_package_exports_horizon_streaming_client():
 
     assert ingestion_pkg.HorizonStreamingClient is DirectHorizonStreamingClient
     assert ingestion_pkg.HorizonStreamError is DirectHorizonStreamError
+    assert "HorizonStreamingClient" in ingestion_pkg.__all__
+    assert "HorizonStreamError" in ingestion_pkg.__all__
 
 
 def test_horizon_stream_ingests_transactions():

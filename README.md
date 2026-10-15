@@ -662,3 +662,9 @@ Please open issues for bugs or feature requests.
 ## 📜 License
 
 MIT License
+Implements rigorous goodness-of-fit testing methods to validate astrophysical models against noisy observational data.
+​Provides optimized matrix decomposition routines designed to handle massive, sparse astronomical covariance matrices.
+​Includes robust cross-matching algorithms for correlating multi-wavelength survey catalogs with varying astrometric accuracies.
+​Configured with flexible animation utilities to visualize temporal evolution in dynamic astronomical simulations.
+​Offers specialized Markov chain Monte Carlo (MCMC) helper wrappers for rigorous Bayesian parameter inference.
+​Integrates automated feature extraction pipelines tailored for morphological classification of galaxies.

@@ -662,3 +662,8 @@ Please open issues for bugs or feature requests.
 ## 📜 License
 
 MIT License
+Provides streamlined wrappers for downloading and caching large-scale spectroscopic datasets automatically.
+​Features high-performance density-based spatial clustering algorithms for identifying stellar clusters and associations.
+​Implements robust linear and non-linear regression models tailored for photometric redshift estimation.
+​Includes support for multi-band light curve periodograms using Lomb-Scargle and phase dispersion minimization techniques.
+​Employs optimized k-nearest neighbors query structures for rapid celestial object matching across catalogs.

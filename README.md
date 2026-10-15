@@ -662,3 +662,8 @@ Please open issues for bugs or feature requests.
 ## 📜 License
 
 MIT License
+Features advanced bootstrap and jackknife resampling utilities for robust error estimation in astrophysical measurements.
+​Implements principal component analysis (PCA) variants specifically optimized for gappy and unevenly sampled time series.
+​Provides standardized evaluation metrics for comparing clustering performance on multi-dimensional spatial distributions.
+​Includes robust estimators for mean and variance in the presence of heavy-tailed noise and observational outliers.
+​Configured with specialized plotting routines for visualizing color-magnitude diagrams and celestial density maps.

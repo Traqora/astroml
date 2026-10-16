@@ -140,6 +140,9 @@ def snapshot_transaction(tx: NormalizedTransaction) -> dict[str, Any]:
     """
     return {
         "transaction_hash": tx.transaction_hash,
+        "ledger_sequence": tx.ledger_sequence,
+        "operation_id": tx.operation_id,
+        "hop_index": tx.hop_index,
         "sender": tx.sender,
         "receiver": tx.receiver,
         "asset": tx.asset,
@@ -207,6 +210,9 @@ def restore_transaction(snapshot: dict[str, Any]) -> NormalizedTransaction:
     amount = snapshot["amount"]
     return NormalizedTransaction(
         transaction_hash=snapshot["transaction_hash"],
+        ledger_sequence=snapshot.get("ledger_sequence"),
+        operation_id=snapshot.get("operation_id"),
+        hop_index=snapshot.get("hop_index", 0),
         sender=snapshot["sender"],
         receiver=snapshot["receiver"],
         asset=snapshot["asset"],

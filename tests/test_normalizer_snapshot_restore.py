@@ -45,6 +45,23 @@ def test_round_trip_with_null_receiver_and_amount():
     assert _fields(restore_transaction(snapshot_transaction(tx))) == _fields(tx)
 
 
+def test_round_trip_preserves_natural_key_and_hop_index():
+    tx = _tx(ledger_sequence=123, operation_id=456, hop_index=2)
+    restored = restore_transaction(json.loads(json.dumps(snapshot_transaction(tx))))
+
+    assert (restored.ledger_sequence, restored.operation_id, restored.hop_index) == (123, 456, 2)
+
+
+def test_restore_accepts_legacy_snapshot_without_natural_key():
+    snapshot = snapshot_transaction(_tx())
+    for field in ("ledger_sequence", "operation_id", "hop_index"):
+        snapshot.pop(field)
+
+    restored = restore_transaction(snapshot)
+
+    assert (restored.ledger_sequence, restored.operation_id, restored.hop_index) == (None, None, 0)
+
+
 def test_restore_rejects_missing_fields():
     snap = snapshot_transaction(_tx())
     del snap["timestamp"]

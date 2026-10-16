@@ -126,7 +126,7 @@ def _invalid_day_count_error(days: int) -> SnapshotWindowError:
             type=f"{_PROBLEM_TYPE_BASE}/invalid-day-count",
             title="Invalid snapshot day count",
             status=400,
-            detail=f"days must be >= 1 (got days={days})",
+            detail=f"days must be a positive integer (got days={days})",
         )
     )
 
@@ -337,7 +337,7 @@ def snapshot_last_n_days(
     land exactly on the cutoff are included.
     Example: days=1 -> [now_ts-86400, now_ts].
     """
-    if days <= 0:
+    if isinstance(days, bool) or not isinstance(days, int) or days < 1:
         raise _invalid_day_count_error(days)
     seconds = days * 86400
     start_ts = now_ts - seconds

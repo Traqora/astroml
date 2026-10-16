@@ -107,11 +107,18 @@ def test_invalid_params():
     except ValueError:
         pass
 
+
     try:
         snapshot_last_n_days(edges, now_ts=100, days=0, presorted=True)
         assert False, "expected ValueError for non-positive days"
     except ValueError:
         pass
+
+
+@pytest.mark.parametrize("days", [0, -1, 1.5, True, "2"])
+def test_snapshot_last_n_days_rejects_invalid_horizons(days):
+    with pytest.raises(ValueError, match="positive integer"):
+        snapshot_last_n_days(make_edges(2), now_ts=100, days=days)
 
 
 # ---------------------------------------------------------------------------

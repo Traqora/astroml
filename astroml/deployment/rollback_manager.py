@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 from __future__ import annotations
 
 import logging
@@ -8,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Literal, Optional
 
 from astroml.deployment.state_snapshot import StateSnapshotManager
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

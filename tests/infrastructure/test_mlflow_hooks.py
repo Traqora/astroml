@@ -1,7 +1,10 @@
-import pytest
+from unittest.mock import Mock
+
 import mlflow
+import pytest
 import torch
 import torch.nn as nn
+
 from astroml.tracking.mlflow_tracker import MLflowTracker
 
 class DummyModel(nn.Module):
@@ -59,4 +62,21 @@ def test_mlflow_tracker_integration(tmp_path):
     assert len(runs) == 2
     assert runs.iloc[0]["params.learning_rate"] == "0.01"
     assert runs.iloc[1]["params.learning_rate"] == "0.02"
+
+
+def test_mlflow_tracker_falls_back_when_tracking_server_is_offline(monkeypatch):
+    monkeypatch.setattr(mlflow, "set_tracking_uri", Mock())
+    monkeypatch.setattr(mlflow, "set_experiment", Mock())
+    monkeypatch.setattr(
+        mlflow,
+        "start_run",
+        Mock(side_effect=ConnectionError("tracking server is unreachable")),
+    )
+
+    tracker = MLflowTracker(enabled=True, tracking_uri="http://unreachable")
+
+    assert tracker.enabled is False
+    assert tracker._run is None
+    tracker.log_params({"epochs": 2})
+    tracker.log_metric("loss", 0.25)
 

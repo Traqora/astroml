@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Canary deployment strategy for safe model rollouts.
 
 Gradually shifts traffic from the current (stable) model to a new (canary)
@@ -16,6 +15,7 @@ from enum import Enum
 from typing import Any, Callable
 
 from astroml.deployment.rollback_manager import RollbackManager, RollbackSeverity
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

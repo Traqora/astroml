@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Enriched artifact metadata for model registry entries — issue #765.
 
 Attaches useful metadata on registration: framework and torch versions,
@@ -19,6 +18,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

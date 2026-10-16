@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Blue-green deployment strategy for zero-downtime model rollouts.
 
 Maintains two identical environments (blue = current, green = new).
@@ -16,6 +15,7 @@ from enum import Enum
 from typing import Any, Callable
 
 from astroml.deployment.rollback_manager import RollbackManager
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

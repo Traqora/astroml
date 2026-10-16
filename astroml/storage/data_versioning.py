@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Data versioning integration with DVC for dataset reproducibility.
 
 Provides versioned dataset management, snapshots, tagging, annotation,
@@ -16,6 +15,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Dedicated model storage backend for saving, loading, and verifying ML model artifacts.
 
 Provides serialization, checksum calculation, and storage management for PyTorch,
@@ -20,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from astroml.storage.artifact_store import ArtifactStore, LocalArtifactStore
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -129,10 +129,7 @@ class ModelStore:
 
         enriched = collect_metadata(
             model=model_object,
-            dataset=dataset,
-            training_duration=training_duration,
-            training_config=training_config,
-            sample_input=sample_input,
+            training_duration=training_duration_secs,
         )
 
         # Save metadata sidecar

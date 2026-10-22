@@ -27,7 +27,7 @@ mypy>=1.7.0
 ruff>=0.4.0
 isort>=5.13.0
 pre-commit>=3.7.0
-detect-secrets>=1.4.0
+detect-secrets>=1.5.0
 interrogate>=1.7.0,<2.0
 
 # ── mypy stub packages (issue #862: strict mode needs these to type-check

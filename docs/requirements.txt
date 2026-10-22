@@ -9,7 +9,7 @@ myst-parser>=0.18.0
 # Code documentation and examples
 jupyter>=1.0.0
 jupyterlab>=3.6.0
-ipython>=8.10.0
+ipython>=8.39.0
 nbconvert>=7.2.0
 nbsphinx>=0.8.0
 

@@ -15,7 +15,7 @@ structural = "astroml.features.structural_importance"
 [project.optional-dependencies]
 gpu = ["torch>=2.0.0", "torch-geometric>=2.3.0"]
 viz = ["matplotlib>=3.7.0", "seaborn>=0.12.0"]
-dev = ["pytest>=7.4.0", "black>=23.11.0", "mypy>=1.7.0", "ruff>=0.4.0", "pytest-asyncio>=0.23", "pytest-cov>=4.1.0", "pytest-mock>=3.12.0", "hypothesis>=6.100.0", "flake8>=6.1.0", "pre-commit>=3.7.0", "isort>=5.13.0", "radon>=6.0.1", "xenon>=0.9.1", "interrogate>=1.7.0,<2.0"]
+dev = ["pytest>=7.4.0", "black>=23.11.0", "mypy>=1.7.0", "ruff>=0.4.0", "pytest-asyncio>=1.4.0", "pytest-cov>=4.1.0", "pytest-mock>=3.12.0", "hypothesis>=6.100.0", "flake8>=6.1.0", "pre-commit>=3.7.0", "isort>=5.13.0", "radon>=6.0.1", "xenon>=0.9.1", "interrogate>=1.7.0,<2.0"]
 notebook = ["jupyter>=1.0.0", "notebook>=7.0.0", "ipykernel>=6.26.0"]
 dask = ["dask[complete]>=2024.1.0"]
 

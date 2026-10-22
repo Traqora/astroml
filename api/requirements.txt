@@ -27,7 +27,7 @@ python-multipart>=0.0.7
 httpx==0.25.2
 
 # Observability - OpenTelemetry (issue #336)
-opentelemetry-api==1.21.0
+opentelemetry-api==1.45.1
 opentelemetry-sdk==1.21.0
 opentelemetry-instrumentation-fastapi==0.42b0
 opentelemetry-instrumentation-sqlalchemy==0.42b0

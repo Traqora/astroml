@@ -646,3 +646,20 @@ AstroML emphasizes:
 - [ ] Docker deployment
 
 ---
+
+## 🤝 Contributing
+
+Contributions are welcome!
+
+```bash
+fork → branch → commit → PR
+```
+
+Please open issues for bugs or feature requests.
+
+---
+
+## 📜 License
+
+MIT License
+<<<<<<

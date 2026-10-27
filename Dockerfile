@@ -8,7 +8,7 @@
 # Pin the Python base image to an exact patch + distro (#196) so a rebuild
 # six months from now produces the same intermediate layers. The slim
 # bookworm tag is roughly 60% smaller than the default `python:3.11` image.
-FROM python:3.11.9-slim-bookworm AS base
+FROM python:3.11.15-alpine3.24 AS base
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -87,7 +87,7 @@ CMD ["python", "-m", "astroml.ingestion"]
 # ============================================================================
 # TRAINING STAGE - Optimized for ML training with GPU support
 # ============================================================================
-FROM nvidia/cuda:12.1-runtime-base-ubuntu22.04 AS training-base
+FROM nvidia/cuda:12.4.0-base-ubuntu20.04 AS training-base
 
 # Install Python and system dependencies.
 RUN apt-get update && apt-get install -y --no-install-recommends \

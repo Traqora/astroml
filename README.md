@@ -662,4 +662,4 @@ Please open issues for bugs or feature requests.
 ## 📜 License
 
 MIT License
-<<<<<
+<<

@@ -52,6 +52,17 @@ class TestModelStore:
         assert store.verify_checksum("tree_model", "2.0.0", "model.pkl", info["checksum_sha256"])
         assert not store.verify_checksum("tree_model", "2.0.0", "model.pkl", "invalid_hash_1234")
 
+    def test_checksum_verification_detects_artifact_tampering(self, store):
+        path = Path(store.save_bytes("tampered_model", "1.0.0", b"original", "weights.bin"))
+        expected_checksum = store.get_artifact_info(
+            "tampered_model", "1.0.0", "weights.bin"
+        )["checksum_sha256"]
+        path.write_bytes(b"modified")
+
+        assert not store.verify_checksum(
+            "tampered_model", "1.0.0", "weights.bin", expected_checksum
+        )
+
     def test_delete_version_artifacts(self, store):
         store.save_model("to_delete", "1.0.0", {"a": 1})
         assert store.exists("to_delete", "1.0.0")

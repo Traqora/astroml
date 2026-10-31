@@ -317,6 +317,34 @@ def test_traffic_router_honours_canary_weights_under_a_mock_load() -> None:
     assert sum(hits.values()) == 2000
 
 
+def test_blue_green_switch_moves_all_routed_traffic_to_green() -> None:
+    manager = BlueGreenManager()
+    router = TrafficRouter(seed=17)
+    green = MockModelService("v2.0.0")
+    dep = manager.prepare("fraud-graph", "v2.0.0", "v1.9.0")
+    rule = router.add_rule(
+        "fraud-graph",
+        [
+            RouteTarget("blue", "v1.9.0", weight=1.0),
+            RouteTarget("green", "v2.0.0", weight=0.0),
+        ],
+    )
+
+    assert {router.route(rule.rule_id, strategy="weighted").name for _ in range(20)} == {
+        "blue"
+    }
+    dep = manager.test_green(dep.deployment_id, green.health)
+    assert dep.phase is BGPhase.TESTING
+
+    dep = manager.switch(dep.deployment_id)
+    assert dep.phase is BGPhase.COMPLETED
+    router.update_weights(rule.rule_id, {"blue": 0.0, "green": 1.0})
+
+    assert {router.route(rule.rule_id, strategy="weighted").name for _ in range(100)} == {
+        "green"
+    }
+
+
 def test_traffic_router_canary_strategy_falls_back_to_stable_at_zero_weight() -> None:
     """A canary at 0% must receive nothing — no stray traffic."""
     router = TrafficRouter(seed=7)

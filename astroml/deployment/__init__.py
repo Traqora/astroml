@@ -7,15 +7,7 @@ rollback management, and state snapshots.
 from __future__ import annotations
 
 from importlib import import_module
-
-from .blue_green import BlueGreenConfig, BlueGreenDeployment, BlueGreenManager
-from .canary import CanaryConfig, CanaryDeployment, CanaryManager, CanaryPhase
-from .disaster_recovery import DisasterRecoveryManager
-from .gitops_manager import GitOpsManager
-from .recovery_procedures import RecoveryProcedure
-from .rollback_manager import RollbackManager
-from .state_snapshot import StateSnapshotManager
-from .traffic_router import RouteTarget, RoutingRule, TrafficRouter
+from typing import Any
 
 __all__ = [
     "BlueGreenConfig",
@@ -34,3 +26,32 @@ __all__ = [
     "StateSnapshotManager",
     "TrafficRouter",
 ]
+
+_LAZY: dict[str, tuple[str, str]] = {
+    "BlueGreenConfig": ("blue_green", "BlueGreenConfig"),
+    "BlueGreenDeployment": ("blue_green", "BlueGreenDeployment"),
+    "BlueGreenManager": ("blue_green", "BlueGreenManager"),
+    "CanaryConfig": ("canary", "CanaryConfig"),
+    "CanaryDeployment": ("canary", "CanaryDeployment"),
+    "CanaryManager": ("canary", "CanaryManager"),
+    "CanaryPhase": ("canary", "CanaryPhase"),
+    "DisasterRecoveryManager": ("disaster_recovery", "DisasterRecoveryManager"),
+    "GitOpsManager": ("gitops_manager", "GitOpsManager"),
+    "RecoveryProcedure": ("recovery_procedures", "RecoveryProcedure"),
+    "RollbackManager": ("rollback_manager", "RollbackManager"),
+    "RouteTarget": ("traffic_router", "RouteTarget"),
+    "RoutingRule": ("traffic_router", "RoutingRule"),
+    "StateSnapshotManager": ("state_snapshot", "StateSnapshotManager"),
+    "TrafficRouter": ("traffic_router", "TrafficRouter"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name not in _LAZY:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    module_name, attribute_name = _LAZY[name]
+    module = import_module(f".{module_name}", __name__)
+    value = getattr(module, attribute_name)
+    globals()[name] = value
+    return value

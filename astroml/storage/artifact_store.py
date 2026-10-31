@@ -6,10 +6,11 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, Callable
 
 import fsspec
 from fsspec.spec import AbstractFileSystem
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

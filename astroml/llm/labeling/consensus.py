@@ -1,5 +1,5 @@
-from astroml.utils.exceptions import AstroMLError
 """Multi-LLM consensus for LLM-based data labeling (issue #475)."""
+
 from __future__ import annotations
 
 import logging
@@ -7,6 +7,8 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+
+from astroml.utils.exceptions import AstroMLError
 
 from .labeler import DataLabeler
 from .schemas import Label, LabelDefinition
@@ -46,7 +48,7 @@ class ConsensusResult:
 class ConsensusLabeler:
     """Multi-LLM consensus labeling for improved accuracy."""
 
-    def __init__(self, min_agreement -> Any: float = 0.7):
+    def __init__(self, min_agreement: float = 0.7) -> None:
         """Initialize consensus labeler.
 
         Args:
@@ -101,17 +103,21 @@ class ConsensusLabeler:
         for client_name, client in self.llm_clients.items():
             try:
                 result = self.labeler.label_item(item_id, data, definition.name, client)
-                individual_results.append({
-                    "client": client_name,
-                    "result": result.to_dict(),
-                })
+                individual_results.append(
+                    {
+                        "client": client_name,
+                        "result": result.to_dict(),
+                    }
+                )
                 all_labels.extend(result.labels)
             except AstroMLError as e:
                 logger.error(f"Error from client {client_name}: {e}")
-                individual_results.append({
-                    "client": client_name,
-                    "error": str(e),
-                })
+                individual_results.append(
+                    {
+                        "client": client_name,
+                        "error": str(e),
+                    }
+                )
 
         # Compute consensus
         consensus_labels = self._compute_consensus(all_labels, definition)

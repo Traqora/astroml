@@ -1,4 +1,3 @@
-from typing import Any, Dict, List, Optional, Union, Callable
 """Chat service for real-time messaging (issue #306)."""
 
 from __future__ import annotations
@@ -7,6 +6,7 @@ import logging
 import uuid
 from collections import defaultdict
 from datetime import datetime
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from .models import (
     Agent,

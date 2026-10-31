@@ -1,4 +1,3 @@
-from typing import Any, Dict, List, Optional, Union, Callable
 """Memory-efficient state tracking for large-range backfills — issue #766.
 
 Provides compact alternatives to ``IngestionState`` that avoid holding the
@@ -16,7 +15,7 @@ import logging
 import math
 import os
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, avoids an import cycle
     from astroml.ingestion.state import IngestionState
@@ -175,9 +174,7 @@ class MemoryEfficientState:
     """
 
     last_processed_ledger: int | None = None
-    _processed: _CompactLedgerSet | _BloomFilterSet = field(
-        default_factory=_CompactLedgerSet
-    )
+    _processed: _CompactLedgerSet | _BloomFilterSet = field(default_factory=_CompactLedgerSet)
     mode: str = "compact"
 
     @classmethod
@@ -205,9 +202,7 @@ class MemoryEfficientState:
         """
         n = len(state.processed_ledgers)
         if n > 100_000:
-            logger.info(
-                "Large processed set (%d ledgers) — using bloom filter mode", n
-            )
+            logger.info("Large processed set (%d ledgers) — using bloom filter mode", n)
             bloom = _BloomFilterSet(expected_items=max(n * 2, 1_000_000))
             for lid in state.processed_ledgers:
                 bloom.add(lid)

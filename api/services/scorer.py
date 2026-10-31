@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def _load_scorer_from_path(checkpoint: str):
     """Load InductiveAnomalyScorer from a checkpoint path."""
     try:
-        import torch  # noqa: PLC0415
+        import torch  # noqa: PLC0415 # type: ignore[import-not-found]
 
         from astroml.models.deep_svdd import DeepSVDD  # noqa: PLC0415
         from astroml.pipeline.inductive import InductiveGraphSAGE  # noqa: PLC0415

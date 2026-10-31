@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Feature computation engine for the Feature Store.
 
 This module provides the core computation engine that orchestrates feature
@@ -25,6 +24,8 @@ from typing import (
 )
 
 import pandas as pd
+
+from astroml.utils.exceptions import AstroMLError
 
 from ..cache import cached_feature
 from ..core.abstracts import FeatureComputer as CoreFeatureComputer
@@ -162,7 +163,7 @@ class BaseFeatureComputer(CoreFeatureComputer):
     Implements the core FeatureComputer ABC for dependency injection (issue #573).
     """
 
-    def __init__(self, name -> Any: str):
+    def __init__(self, name: str) -> None:
         """Initialize feature computer.
 
         Args:
@@ -463,7 +464,7 @@ class ComputationEngine:
     dependency resolution, and error handling.
     """
 
-    def __init__(self, max_workers -> Any: int = 4):
+    def __init__(self, max_workers: int = 4) -> None:
         """Initialize computation engine.
 
         Args:

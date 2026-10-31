@@ -1,0 +1,45 @@
+{
+  "summary": {
+    "original_transactions": 1,
+    "sybil_transactions": 2,
+    "wash_loop_transactions": 0,
+    "injected_transactions": 2,
+    "total_transactions": 3
+  },
+  "augmented": [
+    {
+      "source": "A",
+      "destination": "B",
+      "amount": 10.0,
+      "timestamp": "2024-01-01T00:00:00Z"
+    },
+    {
+      "synthetic_tx_id": 1,
+      "source": "sybil_controller_0",
+      "destination": "sybil_0_0",
+      "amount": 4.9047591,
+      "timestamp": "2024-01-01T00:00:01Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "sybil_cluster",
+      "fraud_metadata": {
+        "cluster": 0,
+        "controller": "sybil_controller_0",
+        "member": "sybil_0_0"
+      }
+    },
+    {
+      "synthetic_tx_id": 2,
+      "source": "sybil_controller_0",
+      "destination": "sybil_0_1",
+      "amount": 5.1195448,
+      "timestamp": "2024-01-01T00:00:02Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "sybil_cluster",
+      "fraud_metadata": {
+        "cluster": 0,
+        "controller": "sybil_controller_0",
+        "member": "sybil_0_1"
+      }
+    }
+  ]
+}

@@ -1,11 +1,12 @@
-from astroml.utils.exceptions import AstroMLError
 import glob
 import os
 from typing import Any
 
+from astroml.utils.exceptions import AstroMLError
+
 
 class BaseSourceConnector:
-    def __init__(self, name -> Any: str):
+    def __init__(self, name: str) -> None:
         self.name = name
 
     def fetch_documents(self) -> list[dict[str, Any]]:
@@ -13,7 +14,7 @@ class BaseSourceConnector:
 
 
 class DocsConnector(BaseSourceConnector):
-    def __init__(self, docs_dir -> Any: str = "docs"):
+    def __init__(self, docs_dir: str = "docs") -> None:
         super().__init__("documentation")
         self.docs_dir = docs_dir
 

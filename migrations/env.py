@@ -1,9 +1,23 @@
 """Alembic environment configuration for AstroML.
 
 Resolves the database URL from (in priority order):
-1. ``ASTROML_DATABASE_URL`` environment variable
-2. ``config/database.yaml``
-3. ``sqlalchemy.url`` in ``alembic.ini``
+1. A ``sqlalchemy.url`` explicitly set on the Alembic ``Config`` object
+   (e.g. via ``Config.set_main_option`` before calling ``command.upgrade``/
+   ``command.downgrade`` programmatically) — the caller said exactly which
+   database to use, so nothing below should override that.
+2. ``ASTROML_DATABASE_URL`` environment variable
+3. ``config/database.yaml``
+4. The ``sqlalchemy.url`` loaded from ``alembic.ini`` on disk
+
+Steps 1 and 4 both read ``sqlalchemy.url`` off the same ``Config`` object;
+they're distinguished by comparing against the value freshly parsed from
+``alembic.ini`` on disk (step 4's own fallback) — if the ``Config`` holds
+something different, a caller must have set it programmatically, so it
+takes priority over the environment and the YAML file (issue #857: a test
+pointing this ``Config`` at an ephemeral SQLite database for an isolated
+up/down cycle was previously always overridden by ``config/database.yaml``,
+so it silently exercised the real development Postgres database instead of
+the ephemeral one it asked for).
 """
 
 import os
@@ -24,14 +38,43 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+def _ini_file_url() -> str:
+    """Return ``sqlalchemy.url`` as written in ``alembic.ini`` on disk,
+    independent of anything a caller may have set on ``config`` at
+    runtime.
+    """
+    ini_path = config.config_file_name
+    if not ini_path or not pathlib.Path(ini_path).exists():
+        return ""
+    from configparser import ConfigParser
+
+    parser = ConfigParser()
+    parser.read(ini_path)
+    section = config.config_ini_section
+    if parser.has_option(section, "sqlalchemy.url"):
+        return parser.get(section, "sqlalchemy.url")
+    return ""
+
+
 def _resolve_url() -> str:
-    """Return the database URL, preferring env var over config file."""
-    # 1. Environment variable
+    """Return the database URL, honoring an explicit programmatic override
+    first, then falling back through the environment, the YAML config, and
+    finally ``alembic.ini``.
+    """
+    # 1. A caller set sqlalchemy.url on `config` directly (e.g.
+    #    `Config.set_main_option(...)` before `command.upgrade`/
+    #    `command.downgrade`), which reads back differently from the value
+    #    `alembic.ini` would otherwise supply.
+    configured_url = config.get_main_option("sqlalchemy.url", "")
+    if configured_url and configured_url != _ini_file_url():
+        return configured_url
+
+    # 2. Environment variable
     env_url = os.environ.get("ASTROML_DATABASE_URL")
     if env_url:
         return env_url
 
-    # 2. config/database.yaml
+    # 3. config/database.yaml
     config_path = pathlib.Path("config/database.yaml")
     if config_path.exists():
         import yaml
@@ -47,8 +90,8 @@ def _resolve_url() -> str:
         password = db.get("password", "")
         return f"postgresql://{user}:{password}@{host}:{port}/{name}"
 
-    # 3. Fall back to alembic.ini
-    return config.get_main_option("sqlalchemy.url", "")
+    # 4. Fall back to alembic.ini
+    return configured_url
 
 
 def run_migrations_offline() -> None:

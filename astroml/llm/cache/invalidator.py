@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Optional, Union, Callable
+from typing import Any, Callable, Dict, List, Optional, Union
+
 """Cache invalidation logic."""
 
 import logging
@@ -10,7 +11,7 @@ logger = logging.getLogger(__name__)
 class CacheInvalidator:
     """Manages cache invalidation with pattern matching and expiration."""
 
-    def __init__(self, cache_manager -> Any: "CacheManager"):
+    def __init__(self, cache_manager: "CacheManager") -> None:
         """Initialize invalidator.
 
         Args:

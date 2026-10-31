@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Wrapper-based feature selection methods.
 
 Implements Recursive Feature Elimination (RFE), forward selection,
@@ -15,6 +14,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from astroml.preprocessing.feature_selection.filter import SelectionResult
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +48,7 @@ class WrapperSelector:
     ) -> None:
         if method not in self.SUPPORTED_METHODS:
             raise ValueError(
-                f"Unsupported wrapper method '{method}'. "
-                f"Choose from: {self.SUPPORTED_METHODS}"
+                f"Unsupported wrapper method '{method}'. " f"Choose from: {self.SUPPORTED_METHODS}"
             )
 
         self.estimator = estimator
@@ -165,9 +164,7 @@ class WrapperSelector:
             selected_indices=indices.tolist(),
             scores=scores,
             feature_names=(
-                [self._feature_names[i] for i in indices]
-                if self._feature_names
-                else None
+                [self._feature_names[i] for i in indices] if self._feature_names else None
             ),
             metadata={
                 "method": self.method,
@@ -195,9 +192,7 @@ class WrapperSelector:
             )
             selector.fit(X, y)
             self._support = selector.support_
-            self._feature_importances = np.array(
-                selector.ranking_.astype(np.float64)
-            )
+            self._feature_importances = np.array(selector.ranking_.astype(np.float64))
             # Invert ranking so higher = better for scores
             self._feature_importances = (
                 self._feature_importances.max() + 1 - self._feature_importances
@@ -234,7 +229,7 @@ class WrapperSelector:
                         X_sub,
                         y,
                         cv=min(self.cv or 3, len(y) // 2) or 3,
-                        scoring=self.scoring
+                        scoring=self.scoring,
                     )
                     score = float(np.mean(cv_scores))
                 except AstroMLError:

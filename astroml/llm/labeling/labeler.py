@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Core labeling logic for LLM-based data labeling (issue #475)."""
 
 from __future__ import annotations
@@ -7,6 +6,8 @@ import logging
 import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
+
+from astroml.utils.exceptions import AstroMLError
 
 from .schemas import Label, LabelDefinition, LabelSchema
 

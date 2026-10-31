@@ -1,4 +1,5 @@
 from astroml.utils.exceptions import AstroMLError
+
 """OpenAI Provider implementation."""
 
 import json
@@ -9,7 +10,7 @@ from .base import LLMProvider
 
 
 class OpenAIProvider(LLMProvider):
-    def __init__(self, api_key -> Any: str, model: str = "gpt-4"):
+    def __init__(self, api_key: str, model: str = "gpt-4") -> None:
         super().__init__(api_key, model)
 
     def _generate_raw(self, prompt: str, tools: list[dict] | None = None, **kwargs: Any) -> str:

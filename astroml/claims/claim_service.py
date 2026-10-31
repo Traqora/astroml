@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Claim submission service with background retry mechanism.
 
 This module provides functionality for submitting claims and automatically
@@ -17,6 +16,8 @@ from enum import Enum
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
+
+from astroml.utils.exceptions import AstroMLError
 
 from ..db.schema import GraphClaimDetail, GraphEdge
 from ..db.session import get_engine

@@ -1,5 +1,3 @@
-from typing import Any, Dict, List, Optional, Union, Callable
-from astroml.utils.exceptions import AstroMLError
 """Test quality reviewer.
 
 Reviews generated tests for correctness, coverage, and best practices.
@@ -11,6 +9,9 @@ from __future__ import annotations
 import ast
 import logging
 from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Optional, Union
+
+from astroml.utils.exceptions import AstroMLError
 
 from .generator import GeneratedTest
 
@@ -42,7 +43,7 @@ class TestReviewer:
     - Mock usage
     """
 
-    def __init__(self, source_code -> Any: str | None = None):
+    def __init__(self, source_code: str | None = None) -> None:
         self.source_code = source_code
 
     def review_test(self, test: GeneratedTest) -> ReviewResult:

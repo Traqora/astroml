@@ -2,12 +2,23 @@
 
 from __future__ import annotations
 
+import logging
+import os
 from typing import List, Optional
 
 import strawberry
 from strawberry import ID
+from strawberry.extensions import QueryDepthLimiter
 from strawberry.tools import merge_types
 from strawberry.types import Info
+
+#: Maximum nesting depth a GraphQL query/mutation may have. The schema's
+#: Connection/edges/node pattern (and relations like Transaction -> Account
+#: -> transactions -> ...) lets a client nest arbitrarily deep, which costs
+#: the server resolver work and DB queries proportional to depth -- an
+#: unauthenticated or low-privilege client could otherwise submit a single
+#: deeply nested query as a cheap denial-of-service vector.
+GRAPHQL_MAX_QUERY_DEPTH = int(os.environ.get("GRAPHQL_MAX_QUERY_DEPTH", "10"))
 
 from api.database import _sync_session_factory
 from api.graphql.context import GraphQLContext, get_graphql_context
@@ -41,7 +52,6 @@ from api.models.orm import (
     ApiKey,
     ApiTransaction,
     AuditLog,
-    FraudAlert as FraudAlertModel,
     LoyaltyPoints,
     Mentee,
     Mentor,
@@ -51,6 +61,11 @@ from api.models.orm import (
     PointsTransaction,
     User,
 )
+from api.models.orm import (
+    FraudAlert as FraudAlertModel,
+)
+
+logger = logging.getLogger(__name__)
 
 
 # Query resolvers
@@ -199,7 +214,9 @@ class Query:
         if resolved is not None:
             query = query.filter_by(resolved=resolved)
         total = query.count()
-        alerts = query.order_by(FraudAlertModel.detected_at.desc()).offset(offset).limit(limit).all()
+        alerts = (
+            query.order_by(FraudAlertModel.detected_at.desc()).offset(offset).limit(limit).all()
+        )
 
         return FraudAlertConnection(
             edges=[
@@ -522,7 +539,11 @@ class Subscription:
         """Subscribe to new transactions."""
         import asyncio
 
-        from api.graphql.subscriptions import transaction_queue
+        from api.graphql.subscriptions import transaction_queue  # type: ignore[import-not-found]
+
+        # api/graphql/subscriptions.py (the pub/sub queue backing this
+        # subscription) does not exist yet; tracked separately from this
+        # mypy-batch fix.
 
         while True:
             try:
@@ -543,7 +564,10 @@ class Subscription:
                 )
             except asyncio.CancelledError:
                 break
-            except Exception:
+            except (
+                Exception
+            ) as exc:  # noqa: BLE001 - one bad queue item must not kill the subscription
+                logger.warning("GraphQL subscription poll failed: %s", exc, exc_info=True)
                 await asyncio.sleep(0.1)
 
     @strawberry.subscription
@@ -568,7 +592,10 @@ class Subscription:
                 )
             except asyncio.CancelledError:
                 break
-            except Exception:
+            except (
+                Exception
+            ) as exc:  # noqa: BLE001 - one bad queue item must not kill the subscription
+                logger.warning("GraphQL subscription poll failed: %s", exc, exc_info=True)
                 await asyncio.sleep(0.1)
 
     @strawberry.subscription
@@ -591,7 +618,10 @@ class Subscription:
                 )
             except asyncio.CancelledError:
                 break
-            except Exception:
+            except (
+                Exception
+            ) as exc:  # noqa: BLE001 - one bad queue item must not kill the subscription
+                logger.warning("GraphQL subscription poll failed: %s", exc, exc_info=True)
                 await asyncio.sleep(0.1)
 
 
@@ -600,4 +630,5 @@ schema = strawberry.Schema(
     query=Query,
     mutation=Mutation,
     subscription=Subscription,
+    extensions=[lambda: QueryDepthLimiter(max_depth=GRAPHQL_MAX_QUERY_DEPTH)],
 )

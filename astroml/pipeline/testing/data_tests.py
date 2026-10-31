@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Data quality assertions and testing framework for pipeline data.
 
 Issue #638 Step 1 & 6: Implements data quality assertion library,
@@ -16,6 +15,8 @@ from enum import Enum, auto
 from typing import Any, TypeVar
 
 import numpy as np
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -116,12 +117,16 @@ class DataAssertion:
         import pandas as pd
 
         if not isinstance(data, pd.DataFrame):
-            return self._record(f"assert_not_null({column})", False, severity, "Data is not a DataFrame")
+            return self._record(
+                f"assert_not_null({column})", False, severity, "Data is not a DataFrame"
+            )
 
         null_count = int(data[column].isnull().sum())
         passed = null_count == 0
         msg = f"Column '{column}' has {null_count} null values" if not passed else ""
-        return self._record(f"assert_not_null({column})", passed, severity, msg, {"null_count": null_count})
+        return self._record(
+            f"assert_not_null({column})", passed, severity, msg, {"null_count": null_count}
+        )
 
     def assert_max_null_fraction(
         self,
@@ -134,12 +139,24 @@ class DataAssertion:
         import pandas as pd
 
         if not isinstance(data, pd.DataFrame):
-            return self._record(f"assert_max_null_fraction({column})", False, severity, "Data is not a DataFrame")
+            return self._record(
+                f"assert_max_null_fraction({column})", False, severity, "Data is not a DataFrame"
+            )
 
         null_frac = float(data[column].isnull().mean())
         passed = null_frac <= max_fraction
-        msg = f"Column '{column}' null fraction {null_frac:.4f} exceeds max {max_fraction:.4f}" if not passed else ""
-        return self._record(f"assert_max_null_fraction({column})", passed, severity, msg, {"null_fraction": null_frac})
+        msg = (
+            f"Column '{column}' null fraction {null_frac:.4f} exceeds max {max_fraction:.4f}"
+            if not passed
+            else ""
+        )
+        return self._record(
+            f"assert_max_null_fraction({column})",
+            passed,
+            severity,
+            msg,
+            {"null_fraction": null_frac},
+        )
 
     # ── Uniqueness ──────────────────────────────────────────────────────
 
@@ -153,12 +170,16 @@ class DataAssertion:
         import pandas as pd
 
         if not isinstance(data, pd.DataFrame):
-            return self._record(f"assert_unique({column})", False, severity, "Data is not a DataFrame")
+            return self._record(
+                f"assert_unique({column})", False, severity, "Data is not a DataFrame"
+            )
 
         dupes = int(data[column].duplicated().sum())
         passed = dupes == 0
         msg = f"Column '{column}' has {dupes} duplicate values" if not passed else ""
-        return self._record(f"assert_unique({column})", passed, severity, msg, {"duplicate_count": dupes})
+        return self._record(
+            f"assert_unique({column})", passed, severity, msg, {"duplicate_count": dupes}
+        )
 
     # ── Value sets ──────────────────────────────────────────────────────
 
@@ -173,16 +194,24 @@ class DataAssertion:
         import pandas as pd
 
         if not isinstance(data, pd.DataFrame):
-            return self._record(f"assert_column_values_in_set({column})", False, severity, "Data is not a DataFrame")
+            return self._record(
+                f"assert_column_values_in_set({column})", False, severity, "Data is not a DataFrame"
+            )
 
         mask = data[column].notna()
         invalid = data.loc[mask, column].apply(lambda v: v not in allowed_set)
         invalid_count = int(invalid.sum())
         passed = invalid_count == 0
-        msg = f"Column '{column}' has {invalid_count} values outside allowed set" if not passed else ""
+        msg = (
+            f"Column '{column}' has {invalid_count} values outside allowed set"
+            if not passed
+            else ""
+        )
         return self._record(
             f"assert_column_values_in_set({column})",
-            passed, severity, msg,
+            passed,
+            severity,
+            msg,
             {"invalid_count": invalid_count, "allowed_set": sorted(allowed_set)},
         )
 
@@ -202,7 +231,9 @@ class DataAssertion:
             if isinstance(data, list):
                 count = len(data)
             else:
-                return self._record("assert_row_count", False, severity, "Data is not a DataFrame or list")
+                return self._record(
+                    "assert_row_count", False, severity, "Data is not a DataFrame or list"
+                )
         else:
             count = len(data)
 
@@ -210,9 +241,16 @@ class DataAssertion:
         if max_rows is not None:
             passed = passed and count <= max_rows
 
-        msg = f"Row count {count} outside bounds [{min_rows}, {max_rows or '∞'}]" if not passed else ""
+        msg = (
+            f"Row count {count} outside bounds [{min_rows}, {max_rows or '∞'}]"
+            if not passed
+            else ""
+        )
         return self._record(
-            "assert_row_count", passed, severity, msg,
+            "assert_row_count",
+            passed,
+            severity,
+            msg,
             {"row_count": count, "min_rows": min_rows, "max_rows": max_rows},
         )
 
@@ -230,13 +268,22 @@ class DataAssertion:
         import pandas as pd
 
         if not isinstance(data, pd.DataFrame):
-            return self._record(f"assert_column_mean_between({column})", False, severity, "Data is not a DataFrame")
+            return self._record(
+                f"assert_column_mean_between({column})", False, severity, "Data is not a DataFrame"
+            )
 
         mean_val = float(data[column].mean())
         passed = lower <= mean_val <= upper
-        msg = f"Column '{column}' mean {mean_val:.4f} outside [{lower:.4f}, {upper:.4f}]" if not passed else ""
+        msg = (
+            f"Column '{column}' mean {mean_val:.4f} outside [{lower:.4f}, {upper:.4f}]"
+            if not passed
+            else ""
+        )
         return self._record(
-            f"assert_column_mean_between({column})", passed, severity, msg,
+            f"assert_column_mean_between({column})",
+            passed,
+            severity,
+            msg,
             {"mean": mean_val, "lower": lower, "upper": upper},
         )
 
@@ -252,13 +299,22 @@ class DataAssertion:
         import pandas as pd
 
         if not isinstance(data, pd.DataFrame):
-            return self._record(f"assert_column_std_between({column})", False, severity, "Data is not a DataFrame")
+            return self._record(
+                f"assert_column_std_between({column})", False, severity, "Data is not a DataFrame"
+            )
 
         std_val = float(data[column].std())
         passed = lower <= std_val <= upper
-        msg = f"Column '{column}' std {std_val:.4f} outside [{lower:.4f}, {upper:.4f}]" if not passed else ""
+        msg = (
+            f"Column '{column}' std {std_val:.4f} outside [{lower:.4f}, {upper:.4f}]"
+            if not passed
+            else ""
+        )
         return self._record(
-            f"assert_column_std_between({column})", passed, severity, msg,
+            f"assert_column_std_between({column})",
+            passed,
+            severity,
+            msg,
             {"std": std_val, "lower": lower, "upper": upper},
         )
 
@@ -277,7 +333,12 @@ class DataAssertion:
         from scipy import stats
 
         if not isinstance(data, pd.DataFrame) or not isinstance(reference, pd.DataFrame):
-            return self._record(f"assert_column_distribution_change({column})", False, severity, "Data is not a DataFrame")
+            return self._record(
+                f"assert_column_distribution_change({column})",
+                False,
+                severity,
+                "Data is not a DataFrame",
+            )
 
         try:
             ks_stat, p_value = stats.ks_2samp(
@@ -285,13 +346,26 @@ class DataAssertion:
                 reference[column].dropna().values,
             )
             passed = float(ks_stat) <= max_ks_statistic
-            msg = f"KS statistic {ks_stat:.4f} exceeds threshold {max_ks_statistic}" if not passed else ""
+            msg = (
+                f"KS statistic {ks_stat:.4f} exceeds threshold {max_ks_statistic}"
+                if not passed
+                else ""
+            )
             return self._record(
-                f"assert_column_distribution_change({column})", passed, severity, msg,
-                {"ks_statistic": float(ks_stat), "p_value": float(p_value), "threshold": max_ks_statistic},
+                f"assert_column_distribution_change({column})",
+                passed,
+                severity,
+                msg,
+                {
+                    "ks_statistic": float(ks_stat),
+                    "p_value": float(p_value),
+                    "threshold": max_ks_statistic,
+                },
             )
         except AstroMLError as e:
-            return self._record(f"assert_column_distribution_change({column})", False, severity, str(e))
+            return self._record(
+                f"assert_column_distribution_change({column})", False, severity, str(e)
+            )
 
     def clear(self) -> None:
         """Clear all recorded results."""
@@ -434,10 +508,16 @@ class DataDiffReport:
         report.columns_unchanged = sorted(curr_cols & ref_cols)
 
         # Numeric drift
-        numeric = list(numeric_columns) if numeric_columns else [
-            c for c in report.columns_unchanged
-            if pd.api.types.is_numeric_dtype(current[c]) and pd.api.types.is_numeric_dtype(reference[c])
-        ]
+        numeric = (
+            list(numeric_columns)
+            if numeric_columns
+            else [
+                c
+                for c in report.columns_unchanged
+                if pd.api.types.is_numeric_dtype(current[c])
+                and pd.api.types.is_numeric_dtype(reference[c])
+            ]
+        )
 
         for col in numeric[:50]:  # Limit to 50 columns for performance
             try:
@@ -555,9 +635,9 @@ class RegressionTest:
                     )
                 numeric_cols = self.baseline.select_dtypes(include=[np.number]).columns
                 if len(numeric_cols) > 0:
-                    diff = np.max(np.abs(
-                        self.baseline[numeric_cols].values - current[numeric_cols].values
-                    ))
+                    diff = np.max(
+                        np.abs(self.baseline[numeric_cols].values - current[numeric_cols].values)
+                    )
                     passed = diff <= self.tolerance
                     return DataTestResult(
                         test_name=f"regression:{self.name}",

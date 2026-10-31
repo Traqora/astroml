@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Feature caching and storage optimization for the Feature Store.
 
 This module provides advanced caching mechanisms, storage optimization,
@@ -24,6 +23,8 @@ from typing import Any
 import pandas as pd
 import redis
 from cachetools import LRUCache, TTLCache
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +127,7 @@ class CacheEntry:
 class MemoryCache:
     """In-memory cache implementation."""
 
-    def __init__(self, config -> Any: CacheConfig):
+    def __init__(self, config: CacheConfig) -> None:
         """Initialize memory cache.
 
         Args:
@@ -218,7 +219,7 @@ class MemoryCache:
 class RedisCache:
     """Redis-based distributed cache implementation."""
 
-    def __init__(self, config -> Any: CacheConfig):
+    def __init__(self, config: CacheConfig) -> None:
         """Initialize Redis cache.
 
         Args:
@@ -308,7 +309,7 @@ class RedisCache:
 class DiskCache:
     """Disk-based cache implementation."""
 
-    def __init__(self, config -> Any: CacheConfig):
+    def __init__(self, config: CacheConfig) -> None:
         """Initialize disk cache.
 
         Args:
@@ -537,7 +538,7 @@ class DiskCache:
 class FeatureCache:
     """Unified feature cache interface."""
 
-    def __init__(self, config -> Any: CacheConfig):
+    def __init__(self, config: CacheConfig) -> None:
         """Initialize feature cache.
 
         Args:
@@ -700,7 +701,7 @@ class FeatureCache:
 class FeatureStorageOptimizer:
     """Optimizes feature storage for efficient access."""
 
-    def __init__(self, storage_config -> Any: StorageConfig):
+    def __init__(self, storage_config: StorageConfig) -> None:
         """Initialize storage optimizer.
 
         Args:

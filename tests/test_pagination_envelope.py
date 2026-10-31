@@ -1,7 +1,7 @@
-"""Tests for the standard pagination envelope — issue #948.
+"""Tests for the standard pagination envelope — issue #948, wired up in #953.
 
 `astroml/api/routers/accounts.py` and `astroml/api/routers/fraud.py` each
-hand-roll the same `(items, total, page, page_size)` response shape and the
+hand-rolled the same `(items, total, page, page_size)` response shape and the
 same `offset = (page - 1) * page_size` math for every paginated endpoint.
 `PageParams`/`Page`/`paginate_offset` in `astroml.db.session` give call
 sites one canonical envelope and one canonical offset computation instead.
@@ -9,9 +9,12 @@ sites one canonical envelope and one canonical offset computation instead.
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 from pydantic import ValidationError
 
+from astroml.api.routers import accounts, fraud
 from astroml.db.session import Page, PageParams, paginate_offset
 
 # ---------------------------------------------------------------------------
@@ -164,3 +167,33 @@ def test_paginate_offset_preserves_item_order() -> None:
     ordered = ["e", "d", "c", "b", "a"]
     page = paginate_offset(ordered, total=5, params=params)
     assert page.items == ordered
+
+
+# ---------------------------------------------------------------------------
+# Router wiring (issue #953) — accounts.py/fraud.py must actually use the
+# shared envelope rather than re-deriving offset/page/page_size themselves.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [accounts.list_accounts, accounts.get_account_transactions, fraud.list_fraud_alerts],
+)
+def test_paginated_endpoints_take_page_params_as_a_dependency(endpoint) -> None:
+    signature = inspect.signature(endpoint)
+    page_params = signature.parameters["page_params"]
+    # `from __future__ import annotations` stringifies annotations, so this
+    # compares the name rather than the resolved type.
+    assert page_params.annotation == PageParams.__name__
+
+
+@pytest.mark.parametrize(
+    "module",
+    [accounts, fraud],
+)
+def test_router_modules_import_the_shared_envelope(module) -> None:
+    source = inspect.getsource(module)
+    assert "paginate_offset" in source
+    # The old hand-rolled formula must be gone, not just unused alongside the
+    # new helper.
+    assert "(page - 1) * page_size" not in source

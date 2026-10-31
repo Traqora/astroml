@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Optional, Union, Callable
+from typing import Any, Callable, Dict, List, Optional, Union
+
 """Exact match cache using hash-based lookups."""
 
 import hashlib
@@ -10,7 +11,7 @@ logger = logging.getLogger(__name__)
 class ExactMatchCache:
     """Fast exact-match cache using SHA256 hashing."""
 
-    def __init__(self, store -> Any: "CacheStore"):
+    def __init__(self, store: "CacheStore") -> None:
         """Initialize exact match cache.
 
         Args:

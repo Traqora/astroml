@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Data lineage API router for AstroML.
 
 Provides REST endpoints for querying and recording lineage and provenance
@@ -16,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from astroml.tracking.lineage.data_lineage import DataLineageTracker
 from astroml.tracking.lineage.provenance import ProvenanceTracker
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

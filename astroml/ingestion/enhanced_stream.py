@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Enhanced Stellar SDK-based streaming service with robust error handling.
 
 Uses the Stellar SDK for improved reliability and provides comprehensive
@@ -39,11 +38,13 @@ from astroml.ingestion.metrics import (
     STREAM_CONNECTION_HEALTH,
     STREAM_CURSOR,
     STREAM_ERRORS,
+    STREAM_LAG_SECONDS,
     STREAM_PROCESSING_LATENCY,
     STREAM_RATE_LIMIT_BACKOFF,
     STREAM_RECORDS_PROCESSED,
 )
 from astroml.ingestion.parsers import parse_effect, parse_operation
+from astroml.utils.exceptions import AstroMLError
 
 try:
     from api.routers.streaming import update_stream_state
@@ -198,14 +199,27 @@ class EnhancedStellarStream:
         self._batch_buffer: BatchBuffer | None = None
 
     def _update_stream_state(self) -> None:
-        """Update the stream state in the API router."""
-        if not _stream_state_available:
-            return
+        """Update the stream state in the API router and the
+        ``astroml_ingestion_lag_seconds`` Prometheus gauge (issue #858).
 
+        The gauge update runs unconditionally, ahead of the
+        ``_stream_state_available`` guard below: that guard is about
+        whether the optional ``api.routers.streaming`` module is
+        importable, not about Prometheus, so the gauge this metric's
+        ``IngestionLagHigh`` alert depends on was previously never
+        populated at all when that module wasn't present -- and even when
+        it was, nothing ever called ``.set()`` on it.
+        """
         # Calculate lag
         lag_seconds = None
         if self._last_record_created_at:
             lag_seconds = time.time() - self._last_record_created_at
+            STREAM_LAG_SECONDS.labels(
+                stream_type=self.config.stream_type, horizon_url=self.config.horizon_url
+            ).set(lag_seconds)
+
+        if not _stream_state_available:
+            return
 
         # Determine status
         if self.health_monitor.is_healthy and self._running:
@@ -258,8 +272,11 @@ class EnhancedStellarStream:
             try:
                 flushed = self._batch_buffer.total_flushed
                 self._batch_buffer.close()
-                logger.info("Batch buffer closed | total_flushed=%d flush_count=%d",
-                    flushed, self._batch_buffer.flush_count)
+                logger.info(
+                    "Batch buffer closed | total_flushed=%d flush_count=%d",
+                    flushed,
+                    self._batch_buffer.flush_count,
+                )
             except AstroMLError:
                 logger.exception("Error closing batch buffer")
             finally:
@@ -513,7 +530,7 @@ class EnhancedStellarStream:
 
                 delay = min(
                     self.config.base_retry_delay * (2 ** (retry_count - 1)),
-                    self.config.max_retry_delay
+                    self.config.max_retry_delay,
                 )
                 await asyncio.sleep(delay)
 

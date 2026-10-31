@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Label validation for LLM-based data labeling (issue #475)."""
 
 from __future__ import annotations
@@ -6,6 +5,8 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
+
+from astroml.utils.exceptions import AstroMLError
 
 from .schemas import Label, LabelDefinition
 

@@ -78,9 +78,7 @@ class BlueGreenDeployment:
     error: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     health_check_results: list[dict[str, Any]] = field(default_factory=list)
-    created_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 class BlueGreenManager:
@@ -217,18 +215,14 @@ class BlueGreenManager:
         """
         dep = self._get(deployment_id)
         if dep.phase not in (BGPhase.TESTING, BGPhase.PREPARING):
-            raise ValueError(
-                f"Deployment {deployment_id} cannot switch in phase {dep.phase}"
-            )
+            raise ValueError(f"Deployment {deployment_id} cannot switch in phase {dep.phase}")
 
         dep.phase = BGPhase.SWITCHING
 
         # Swap environments
         dep.blue_version, dep.green_version = dep.green_version, dep.blue_version
         dep.active_env = (
-            DeploymentEnv.GREEN
-            if dep.active_env == DeploymentEnv.BLUE
-            else DeploymentEnv.BLUE
+            DeploymentEnv.GREEN if dep.active_env == DeploymentEnv.BLUE else DeploymentEnv.BLUE
         )
         dep.switched_at = datetime.now(timezone.utc).isoformat()
 
@@ -257,9 +251,7 @@ class BlueGreenManager:
         # Swap back
         dep.blue_version, dep.green_version = dep.green_version, dep.blue_version
         dep.active_env = (
-            DeploymentEnv.GREEN
-            if dep.active_env == DeploymentEnv.BLUE
-            else DeploymentEnv.BLUE
+            DeploymentEnv.GREEN if dep.active_env == DeploymentEnv.BLUE else DeploymentEnv.BLUE
         )
         dep.rollback_count += 1
         dep.phase = BGPhase.ROLLED_BACK
@@ -295,9 +287,7 @@ class BlueGreenManager:
         """
         dep = self._get(deployment_id)
         if dep.phase not in (BGPhase.COMPLETED, BGPhase.MONITORING):
-            raise ValueError(
-                f"Deployment {deployment_id} not in monitorable phase: {dep.phase}"
-            )
+            raise ValueError(f"Deployment {deployment_id} not in monitorable phase: {dep.phase}")
 
         dep.phase = BGPhase.MONITORING
 
@@ -306,17 +296,18 @@ class BlueGreenManager:
         except Exception as exc:
             result = {"healthy": False, "error": str(exc)}
 
-        dep.health_check_results.append({
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            **result,
-        })
+        dep.health_check_results.append(
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                **result,
+            }
+        )
 
         if not result.get("healthy", False):
             if dep.config.auto_rollback:
                 self._rollback_manager.trigger_rollback(
                     reason=(
-                        f"Blue-green monitor failure: {dep.model_name} "
-                        f"v={dep.blue_version}"
+                        f"Blue-green monitor failure: {dep.model_name} " f"v={dep.blue_version}"
                     ),
                     target_version=dep.green_version,
                     requested_by="blue-green-monitor",
@@ -345,9 +336,7 @@ class BlueGreenManager:
         """
         return self._deployments.get(deployment_id)
 
-    def list_deployments(
-        self, model_name: str | None = None
-    ) -> list[BlueGreenDeployment]:
+    def list_deployments(self, model_name: str | None = None) -> list[BlueGreenDeployment]:
         """List deployments, optionally filtered by model name.
 
         Args:

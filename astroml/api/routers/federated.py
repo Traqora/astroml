@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """FastAPI router for federated learning orchestration and client coordination."""
 
 from __future__ import annotations
@@ -24,6 +23,7 @@ from astroml.training.federated.server import (
     RandomClientSelector,
     RoundRobinSelector,
 )
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

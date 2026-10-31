@@ -55,6 +55,16 @@ class ComplianceLogger:
         prompt_redacted, prompt_pii = pii_redactor.redact(prompt)
         response_redacted, response_pii = pii_redactor.redact(response)
 
+        # error_message often interpolates caller-provided or exception
+        # content (e.g. "failed to process input: <raw prompt or payload
+        # snippet>"), so it must go through the same redaction as the
+        # prompt/response rather than being persisted verbatim — otherwise
+        # a future caller that logs raw context on failure would create an
+        # un-redacted PII leak into this audit table.
+        error_message_redacted, error_pii = (
+            pii_redactor.redact(error_message) if error_message else (error_message, {})
+        )
+
         pii_types = {}
         for pii_type, detected in prompt_pii.items():
             if detected:
@@ -62,6 +72,9 @@ class ComplianceLogger:
         for pii_type, detected in response_pii.items():
             if detected:
                 pii_types.setdefault(pii_type, []).append("response")
+        for pii_type, detected in error_pii.items():
+            if detected:
+                pii_types.setdefault(pii_type, []).append("error_message")
 
         pii_detected = bool(pii_types)
 
@@ -76,7 +89,7 @@ class ComplianceLogger:
             tokens_used=tokens_used,
             latency_ms=latency_ms,
             status=status,
-            error_message=error_message,
+            error_message=error_message_redacted,
             pii_detected=pii_detected,
             pii_types=pii_types if pii_types else None,
             ip_address=ip_address,

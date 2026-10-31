@@ -241,7 +241,7 @@ class PythonAnalyzer:
         class ComplexityVisitor(ast.NodeVisitor):
             """AST visitor to check complexity issues."""
 
-            def __init__(self, suggestions -> Any: list[Suggestion], file_path: str):
+            def __init__(self, suggestions: list[Suggestion], file_path: str) -> None:
                 self.suggestions = suggestions
                 self.file_path = file_path
 

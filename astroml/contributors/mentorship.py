@@ -1,4 +1,3 @@
-from typing import Any, Dict, List, Optional, Union, Callable
 """Mentorship program core logic — matching, tracking, and metrics.
 
 Features:
@@ -12,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -32,7 +32,7 @@ class SkillScore:
 class MentorshipMatcher:
     """Matches mentees with mentors using skill-based algorithm."""
 
-    def __init__(self, db -> Any: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     def find_matches(
@@ -140,7 +140,7 @@ class MentorshipMatcher:
 class MentorshipTracking:
     """Tracks mentorship sessions and generates metrics."""
 
-    def __init__(self, db -> Any: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     def record_session(

@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Configuration management for benchmarking.
 
 See ADR-004 (docs/adr/004-hydra-config-management.md) for Hydra configuration strategy.
@@ -10,6 +9,8 @@ import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+
+from astroml.utils.exceptions import AstroMLError
 
 
 @dataclass
@@ -164,7 +165,7 @@ class BenchmarkConfig:
 class ConfigManager:
     """Manages multiple benchmark configurations."""
 
-    def __init__(self, config_dir -> Any: str | Path = "./configs"):
+    def __init__(self, config_dir: str | Path = "./configs") -> None:
         self.config_dir = Path(config_dir)
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self._configs: dict[str, BenchmarkConfig] = {}

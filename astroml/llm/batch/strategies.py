@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Optional, Union, Callable
+from typing import Any, Callable, Dict, List, Optional, Union
+
 """Batching strategies for backfill processing."""
 
 from abc import ABC, abstractmethod
@@ -31,7 +32,7 @@ class BatchingStrategy(ABC):
 class FixedSizeStrategy(BatchingStrategy):
     """Always use the same batch size."""
 
-    def __init__(self, size -> Any: int = 100):
+    def __init__(self, size: int = 100) -> None:
         self._size = size
 
     def get_batch_size(self) -> int:

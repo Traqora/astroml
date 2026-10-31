@@ -153,8 +153,11 @@ class TestFeatureStoreServingIntegration:
 
         # Online serving lookup
         online_res = feature_store.get_online_features(["acc_101", "acc_102"], ["risk_score"])
-        assert online_res["acc_101"]["risk_score"] == 0.85
-        assert online_res["acc_102"]["risk_score"] == 0.12
+        offline_res = feature_store.get_historical_features(
+            batch_df[["entity_id", "timestamp"]], ["risk_score"]
+        )
+        for row in offline_res.itertuples(index=False):
+            assert online_res[row.entity_id]["risk_score"] == pytest.approx(row.risk_score)
 
 
 class TestFeaturesRouter:

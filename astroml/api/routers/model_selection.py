@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """FastAPI router for automated model selection and architecture search."""
 
 from __future__ import annotations
@@ -13,6 +12,7 @@ from pydantic import BaseModel, ConfigDict
 from astroml.training.model_selection.automl import AutoMLConfig, AutoMLPipeline
 from astroml.training.model_selection.meta_learning import MetaLearningRecommender
 from astroml.training.model_selection.nas import NeuralArchitectureSearch
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

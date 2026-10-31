@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 import torch
 import torch.nn as nn
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from torch.utils.data import DataLoader, TensorDataset
 
-from astroml.api.app import app
 from astroml.training.compression.distillation import (
     DistillationConfig,
     DistillationLoss,
@@ -158,12 +158,28 @@ class TestCompressionPipeline:
         assert Path(out_path).exists()
         Path(tmp_path).unlink(missing_ok=True)
 
+    def test_accuracy_guard_reverts_to_original_when_drop_exceeds_limit(self, monkeypatch):
+        model = SimpleMLP(hidden=16)
+        config = CompressionConfig(enable_pruning=False, enable_quantization=False, max_accuracy_drop_pct=0.5)
+        pipeline = CompressionPipeline(config)
+        validation_data = [(torch.randn(8, 32), torch.randint(0, 2, (8,)))]
+
+        monkeypatch.setattr(pipeline, "_classification_accuracy", lambda model_obj, batches: 100.0 if model_obj is model else 0.0)
+
+        compressed, bench = pipeline.compress(model, validation_data=validation_data, sample_input=torch.randn(1, 32))
+
+        assert compressed is model
+        assert bench.original_accuracy_pct == 100.0
+        assert bench.compressed_accuracy_pct == 100.0
+        assert bench.accuracy_drop_pct == 0.0
+
 
 class TestCompressionRouter:
     @pytest.fixture
     def client(self):
         from astroml.api.routers import compression
 
+        app = FastAPI()
         app.include_router(compression.router)
         return TestClient(app)
 

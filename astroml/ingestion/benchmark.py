@@ -1,5 +1,6 @@
-from astroml.utils.exceptions import AstroMLError
 from __future__ import annotations
+
+from astroml.utils.exceptions import AstroMLError
 
 """
 Ingestion benchmark utility.

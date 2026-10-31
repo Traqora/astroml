@@ -1,5 +1,3 @@
-from typing import Any, Dict, List, Optional, Union, Callable
-from astroml.utils.exceptions import AstroMLError
 """Slack integration for chat support (issue #306)."""
 
 from __future__ import annotations
@@ -8,6 +6,8 @@ import logging
 from dataclasses import dataclass
 
 import requests
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class SlackConfig:
 class SlackIntegration:
     """Integration with Slack for agent notifications."""
 
-    def __init__(self, config -> Any: SlackConfig):
+    def __init__(self, config: SlackConfig) -> None:
         """Initialize Slack integration.
 
         Args:

@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Chunked UPSERT batching for ingestion writes.
 
 Provides batch accumulation and chunked persistence of ORM models
@@ -11,6 +10,8 @@ Key components:
 """
 
 from __future__ import annotations
+
+from astroml.utils.exceptions import AstroMLError
 
 import logging
 import time
@@ -25,6 +26,7 @@ from astroml.ingestion.metrics import (
     BATCH_FLUSH_DURATION,
     BATCH_FLUSH_TOTAL,
 )
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger("astroml.ingestion.batch")
 

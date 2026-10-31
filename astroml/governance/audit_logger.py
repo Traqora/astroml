@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Audit logging for model operations.
 
 Issue #637 Step 1: Implements comprehensive audit logging for all model operations,
@@ -20,6 +19,8 @@ from enum import Enum, auto
 from functools import wraps
 from pathlib import Path
 from typing import Any
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

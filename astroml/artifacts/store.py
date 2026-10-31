@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Artifact storage management using fsspec for multi-backend support.
 
 This module provides a unified interface for saving and loading artifacts
@@ -24,13 +23,15 @@ import fsspec
 import torch
 import torch.nn as nn
 
+from astroml.utils.exceptions import AstroMLError
+
 logger = logging.getLogger(__name__)
 
 
 class ArtifactStore:
     """Unified artifact storage using fsspec for multi-backend support."""
 
-    def __init__(self, artifact_uri -> Any: str | None = None):
+    def __init__(self, artifact_uri: str | None = None) -> None:
         """Initialize artifact store with optional URI override.
 
         Args:
@@ -39,13 +40,10 @@ class ArtifactStore:
                          Can also be set via ASTROML_ARTIFACT_URI environment variable.
         """
         # Determine artifact URI from parameter, environment, or default
-        self.artifact_uri = (
-            artifact_uri
-            or os.environ.get('ASTROML_ARTIFACT_URI', './artifacts')
-        )
+        self.artifact_uri = artifact_uri or os.environ.get("ASTROML_ARTIFACT_URI", "./artifacts")
 
         # Normalize local paths
-        if not self.artifact_uri.startswith(('s3://', 'gs://', 'http://', 'http://')):
+        if not self.artifact_uri.startswith(("s3://", "gs://", "http://", "http://")):
             self.artifact_uri = str(Path(self.artifact_uri).resolve())
 
         logger.info(f"Initialized artifact store: {self.artifact_uri}")
@@ -54,39 +52,36 @@ class ArtifactStore:
         self.fs = fsspec.filesystem(self._get_protocol())
 
         # Create directory if it's local filesystem
-        if self._get_protocol() == 'file':
+        if self._get_protocol() == "file":
             os.makedirs(self.artifact_uri, exist_ok=True)
 
     def _get_protocol(self) -> str:
         """Extract protocol from URI."""
-        if self.artifact_uri.startswith('s3://'):
-            return 's3'
-        elif self.artifact_uri.startswith('gs://'):
-            return 'gs'
-        elif self.artifact_uri.startswith('http://'):
-            return 'http'
-        elif self.artifact_uri.startswith('https://'):
-            return 'https'
+        if self.artifact_uri.startswith("s3://"):
+            return "s3"
+        elif self.artifact_uri.startswith("gs://"):
+            return "gs"
+        elif self.artifact_uri.startswith("http://"):
+            return "http"
+        elif self.artifact_uri.startswith("https://"):
+            return "https"
         else:
-            return 'file'
+            return "file"
 
     def _normalize_path(self, relative_path: str) -> str:
         """Normalize and combine artifact URI with relative path."""
         # Remove leading slashes from relative path
-        relative_path = relative_path.lstrip('/')
+        relative_path = relative_path.lstrip("/")
 
         # Use appropriate separator for protocol
-        if self._get_protocol() == 'file':
+        if self._get_protocol() == "file":
             return os.path.join(self.artifact_uri, relative_path)
         else:
             # For cloud storage, use forward slashes
             return f"{self.artifact_uri.rstrip('/')}/{relative_path}"
 
     def save_model(
-        self,
-        model: nn.Module | Dict[str, Any],
-        path: str,
-        metadata: Dict[str, Any] | None = None
+        self, model: nn.Module | Dict[str, Any], path: str, metadata: Dict[str, Any] | None = None
     ) -> str:
         """Save model to artifact store.
 
@@ -108,18 +103,19 @@ class ArtifactStore:
                 state_dict = model
 
             # For local filesystem, use direct torch.save
-            if self._get_protocol() == 'file':
+            if self._get_protocol() == "file":
                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
                 torch.save(state_dict, full_path)
             else:
                 # For cloud storage, save to temporary location and upload
                 import tempfile
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.pt') as tmp:
+
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pt") as tmp:
                     tmp_path = tmp.name
                     torch.save(state_dict, tmp_path)
 
                 try:
-                    with open(tmp_path, 'rb') as f:
+                    with open(tmp_path, "rb") as f:
                         self.fs.upload(tmp_path, full_path)
                 finally:
                     os.remove(tmp_path)
@@ -128,7 +124,7 @@ class ArtifactStore:
 
             # Save metadata if provided
             if metadata:
-                self.save_metadata(metadata, path.replace('.pt', '_metadata.json'))
+                self.save_metadata(metadata, path.replace(".pt", "_metadata.json"))
 
             return full_path
 
@@ -137,10 +133,7 @@ class ArtifactStore:
             raise
 
     def load_model(
-        self,
-        path: str,
-        model: nn.Module | None = None,
-        device: str = 'cpu'
+        self, path: str, model: nn.Module | None = None, device: str = "cpu"
     ) -> nn.Module | Dict[str, Any]:
         """Load model from artifact store.
 
@@ -156,12 +149,13 @@ class ArtifactStore:
 
         try:
             # For local filesystem, use direct torch.load
-            if self._get_protocol() == 'file':
+            if self._get_protocol() == "file":
                 state_dict = torch.load(full_path, map_location=device)
             else:
                 # For cloud storage, download to temporary location
                 import tempfile
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.pt') as tmp:
+
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pt") as tmp:
                     tmp_path = tmp.name
 
                 try:
@@ -184,11 +178,7 @@ class ArtifactStore:
             logger.error(f"Failed to load model from {full_path}: {e}")
             raise
 
-    def save_metadata(
-        self,
-        metadata: Dict[str, Any],
-        path: str
-    ) -> str:
+    def save_metadata(self, metadata: Dict[str, Any], path: str) -> str:
         """Save metadata JSON file.
 
         Args:
@@ -204,13 +194,13 @@ class ArtifactStore:
             # Convert metadata to JSON-serializable format
             json_data = json.dumps(metadata, indent=2, default=str)
 
-            if self._get_protocol() == 'file':
+            if self._get_protocol() == "file":
                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
-                with open(full_path, 'w') as f:
+                with open(full_path, "w") as f:
                     f.write(json_data)
             else:
                 # For cloud storage
-                with self.fs.open(full_path, 'w') as f:
+                with self.fs.open(full_path, "w") as f:
                     f.write(json_data)
 
             logger.info(f"Saved metadata to {full_path}")
@@ -232,22 +222,18 @@ class ArtifactStore:
         full_path = self._normalize_path(path)
 
         try:
-            if self._get_protocol() == 'file':
-                with open(full_path, 'r') as f:
+            if self._get_protocol() == "file":
+                with open(full_path, "r") as f:
                     return json.load(f)
             else:
-                with self.fs.open(full_path, 'r') as f:
+                with self.fs.open(full_path, "r") as f:
                     return json.load(f)
 
         except AstroMLError as e:
             logger.error(f"Failed to load metadata from {full_path}: {e}")
             raise
 
-    def save_checkpoint(
-        self,
-        checkpoint: Dict[str, Any],
-        path: str
-    ) -> str:
+    def save_checkpoint(self, checkpoint: Dict[str, Any], path: str) -> str:
         """Save a complete checkpoint (model, optimizer, metadata, etc.).
 
         Args:
@@ -260,12 +246,13 @@ class ArtifactStore:
         full_path = self._normalize_path(path)
 
         try:
-            if self._get_protocol() == 'file':
+            if self._get_protocol() == "file":
                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
                 torch.save(checkpoint, full_path)
             else:
                 import tempfile
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.pth') as tmp:
+
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pth") as tmp:
                     tmp_path = tmp.name
                     torch.save(checkpoint, tmp_path)
 
@@ -281,11 +268,7 @@ class ArtifactStore:
             logger.error(f"Failed to save checkpoint to {full_path}: {e}")
             raise
 
-    def load_checkpoint(
-        self,
-        path: str,
-        device: str = 'cpu'
-    ) -> Dict[str, Any]:
+    def load_checkpoint(self, path: str, device: str = "cpu") -> Dict[str, Any]:
         """Load a complete checkpoint.
 
         Args:
@@ -298,11 +281,12 @@ class ArtifactStore:
         full_path = self._normalize_path(path)
 
         try:
-            if self._get_protocol() == 'file':
+            if self._get_protocol() == "file":
                 return torch.load(full_path, map_location=device)
             else:
                 import tempfile
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.pth') as tmp:
+
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pth") as tmp:
                     tmp_path = tmp.name
 
                 try:
@@ -316,7 +300,7 @@ class ArtifactStore:
             logger.error(f"Failed to load checkpoint from {full_path}: {e}")
             raise
 
-    def list_artifacts(self, prefix: str = '') -> list[str]:
+    def list_artifacts(self, prefix: str = "") -> list[str]:
         """List artifacts in storage.
 
         Args:
@@ -328,7 +312,7 @@ class ArtifactStore:
         search_path = self._normalize_path(prefix) if prefix else self.artifact_uri
 
         try:
-            if self._get_protocol() == 'file':
+            if self._get_protocol() == "file":
                 if not os.path.exists(search_path):
                     return []
                 artifacts = []
@@ -356,7 +340,7 @@ class ArtifactStore:
         full_path = self._normalize_path(path)
 
         try:
-            if self._get_protocol() == 'file':
+            if self._get_protocol() == "file":
                 if os.path.exists(full_path):
                     os.remove(full_path)
                     logger.info(f"Deleted artifact {full_path}")

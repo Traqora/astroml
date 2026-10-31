@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Core benchmarking framework for GNN models on Stellar data."""
 
 from __future__ import annotations
@@ -11,6 +10,8 @@ from typing import Any
 
 import torch
 import torch.nn as nn
+
+from astroml.utils.exceptions import AstroMLError
 
 from ..artifacts import get_artifact_store
 from ..models import GCN, DeepSVDD, InductiveSAGEEncoder, LinkPredictor
@@ -101,7 +102,7 @@ class BenchmarkResult:
 class ModelBenchmark:
     """Main benchmarking class for GNN models."""
 
-    def __init__(self, config -> Any: BenchmarkConfig):
+    def __init__(self, config: BenchmarkConfig) -> None:
         """Initialize benchmark with configuration."""
         self.config = config
         self.device = torch.device(config.device)
@@ -156,8 +157,8 @@ class ModelBenchmark:
         val_size = int(self.config.data.val_ratio * num_nodes)
 
         train_indices = indices[:train_size]
-        val_indices = indices[train_size: train_size + val_size]
-        test_indices = indices[train_size + val_size:]
+        val_indices = indices[train_size : train_size + val_size]
+        test_indices = indices[train_size + val_size :]
 
         train_mask = torch.zeros(num_nodes, dtype=torch.bool)
         val_mask = torch.zeros(num_nodes, dtype=torch.bool)
@@ -392,7 +393,7 @@ class ModelBenchmark:
 
         return result
 
-    def _save_results(self, result -> Any: BenchmarkResult):
+    def _save_results(self, result: BenchmarkResult):
         """Save benchmark results and configuration to file for reproducibility.
 
         Saves:

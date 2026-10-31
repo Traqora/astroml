@@ -21,15 +21,24 @@ groups:
           summary: "High error rate for {{ $labels.stream_type }} on {{ $labels.horizon_url }}"
           description: "The error rate for {{ $labels.stream_type }} ingestion is {{ $value | humanizePercentage }} (threshold: <1%)."
 
+      # Issue #858 — this previously read `astroml_ingestion_lag_ledgers`,
+      # a metric name nothing in the codebase ever emitted (the real gauge
+      # is `astroml_ingestion_lag_seconds`, time since the last processed
+      # record's own `created_at`, not a ledger count), so the alert could
+      # never fire: a nonexistent metric's Prometheus query evaluates to no
+      # series at all, which `>` treats as simply no result. 300s gives
+      # this a materially tighter window than IngestionDataStale's 900s
+      # heartbeat check below, since this fires per-stream from live
+      # record timestamps rather than from a separately-tracked heartbeat.
       - alert: IngestionLagHigh
-        expr: astroml_ingestion_lag_ledgers > 1000
+        expr: astroml_ingestion_lag_seconds > 300
         for: 5m
         labels:
           severity: critical
           runbook: "docs/runbooks/ingestion_lag.md"
         annotations:
-          summary: "Ingestion lag > 1000 ledgers (issue #570)"
-          description: "Ingestion is lagging by {{ $value }} ledgers, exceeding the 1000 ledger threshold."
+          summary: "Ingestion lag for {{ $labels.stream_type }} exceeds 300s (issue #570)"
+          description: "Ingestion for {{ $labels.stream_type }} on {{ $labels.horizon_url }} is lagging by {{ $value | humanizeDuration }}, exceeding the 300s threshold."
 
       - alert: IngestionStalled
         expr: rate(astroml_ingestion_records_total[10m]) == 0

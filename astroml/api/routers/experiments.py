@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Experiments API router for AstroML.
 
 Provides REST endpoints for experiment management, run comparison,
@@ -15,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from astroml.tracking.experiment_dashboard import ExperimentDashboard
 from astroml.tracking.run_comparator import RunComparator, RunMetrics
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -294,8 +294,7 @@ async def compare_runs(request: CompareRequest) -> dict[str, Any]:
             },
             "correlation_scores": result.correlation_scores,
             "param_importance": [
-                {"parameter": p, "importance": round(s, 6)}
-                for p, s in result.param_importance
+                {"parameter": p, "importance": round(s, 6)} for p, s in result.param_importance
             ],
             "summary": result.summary,
         }
@@ -321,9 +320,7 @@ async def hyperparameter_importance(
             target_metric=target_metric,
             top_k=top_k,
         )
-        return [
-            {"parameter": p, "importance": round(s, 6)} for p, s in scores
-        ]
+        return [{"parameter": p, "importance": round(s, 6)} for p, s in scores]
     except AstroMLError as e:
         logger.exception("Error computing hyperparameter importance")
         raise HTTPException(status_code=500, detail=str(e))

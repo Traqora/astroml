@@ -229,7 +229,7 @@ class IngestionService(Ingestor):
                     processed.append(ledger_id)
                 else:
                     skipped.append(ledger_id)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - caller callbacks can raise any exception type
             # ``fetch_fn`` and ``process_fn`` are caller-provided callbacks,
             # so failures are not limited to AstroML's exception hierarchy.
             # Preserve ``ingest``'s result-returning contract for all callback
@@ -613,6 +613,54 @@ class IngestionService(Ingestor):
         if chunk_size < 1:
             raise ValueError("chunk_size must be >= 1")
 
+        inherited_correlation_id = get_correlation_id()
+        with CorrelationId(inherited_correlation_id):
+            yield from self._ingest_backfill_chunked_impl(
+                start_ledger=start_ledger,
+                end_ledger=end_ledger,
+                chunk_size=chunk_size,
+                fetch_fn=fetch_fn,
+                process_fn=process_fn,
+                batch_size=batch_size,
+                resume_from_checkpoint=resume_from_checkpoint,
+                checkpoint_path=checkpoint_path,
+            )
+
+    def _ingest_backfill_chunked_impl(
+        self,
+        start_ledger: int,
+        end_ledger: int,
+        chunk_size: int,
+        fetch_fn: Callable[[int], object] | None,
+        process_fn: Callable[[int, object], None] | None,
+        batch_size: int,
+        resume_from_checkpoint: bool,
+        checkpoint_path: str | None,
+    ) -> Generator[dict[str, Any], None, None]:
+        """Body of :meth:`ingest_backfill_chunked`, run inside its correlation-id scope."""
+        checkpoint_mgr = None
+        if resume_from_checkpoint:
+            checkpoint_mgr = BackfillCheckpointManager(checkpoint_path)
+            last_checkpoint = checkpoint_mgr.load()
+            if last_checkpoint is not None:
+                if last_checkpoint >= end_ledger:
+                    logger.info(
+                        "Checkpoint at ledger %d already at or beyond end_ledger %d, nothing to do",
+                        last_checkpoint,
+                        end_ledger,
+                    )
+                    return
+                current = last_checkpoint + 1
+                logger.info(
+                    "Resuming from checkpoint: ledger %d (target: %d)",
+                    current,
+                    end_ledger,
+                )
+            else:
+                logger.info("No checkpoint found, starting from ledger %d", start_ledger)
+                current = start_ledger
+        else:
+            current = start_ledger
 
         while current <= end_ledger:
             chunk_end = min(current + chunk_size - 1, end_ledger)
@@ -632,7 +680,7 @@ class IngestionService(Ingestor):
                         n_processed += 1
                     else:
                         n_skipped += 1
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - per-chunk failure must not abort the backfill
                 logger.error(
                     "Backfill chunk %d-%d failed: %s",
                     current,

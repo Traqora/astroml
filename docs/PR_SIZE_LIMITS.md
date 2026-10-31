@@ -35,15 +35,36 @@ feature is usually lower when it is split.
 - **Isolate generated content.** Lockfiles, migrations, vendored code, and
   fixtures belong in their own PR.
 
-## Exceptions
+## Exceptions and Exemption Policy
 
-| Escape hatch | Effect |
-| --- | --- |
-| `refactor:large` label | Raises the file ceiling to 50 files |
-| `[large PR]` in the PR title | Skips the check entirely |
+AstroML recognizes that certain structural changes cannot realistically be kept under the 10-file or 1000-line limits without breaking atomic correctness. Two escape hatches exist to handle these cases cleanly:
 
-Use `[large PR]` sparingly, and explain in the description why the change cannot
-be split.
+| Escape hatch | Mechanism | Effect |
+| --- | --- | --- |
+| Planned Large Refactor | `refactor:large` label | Raises the file ceiling from 10 to 50 files (line count limit still applies) |
+| Title Exemption | `[large PR]` in PR title | Completely skips the automated PR size check comment |
+
+### Acceptable Justifications for Exemption
+
+The `[large PR]` exemption token must be used sparingly. Acceptable scenarios include:
+
+1. **Vendoring or Dependency Ingestion**: Adding or upgrading third-party vendored packages, generated client stubs, or pinned schemas.
+2. **Repository-Wide Mechanical Refactors**: Global renames, import organization across the entire project, or framework version upgrades touching dozens of modules without semantic logic changes.
+3. **Comprehensive New Architectural Subsystems**: Introducing complete, cohesive components (such as the autonomous LLM agent framework, multi-provider integrations, or major pipeline additions) where partial delivery would leave the codebase broken or untestable.
+4. **Data Schemas, Migrations & Test Fixtures**: Comprehensive database schema baselines, Alembic migrations, or golden test datasets (JSON/CSV) that naturally exceed line count thresholds.
+
+### PR Description & Justification Requirement
+
+Whenever using the `[large PR]` title token or requesting the `refactor:large` label, the author must explicitly document in the PR description:
+- **Why the change cannot be split**: A clear architectural explanation detailing why intermediate splits would break backwards compatibility, pipeline integrity, or CI verification.
+- **Review Strategy / Reading Guide**: Suggested order of review (e.g., core abstractions first, followed by concrete implementations, then tests/configs) to reduce cognitive load on reviewers.
+- **Verification Evidence**: Comprehensive local test results and static checks demonstrating zero regressions across unaffected subsystems.
+
+### Review Expectations for Oversized PRs
+
+Because review quality naturally declines with diff size, oversized PRs are subject to:
+- **Extended Review Latency**: Maintainers prioritize review-friendly PRs first; large PRs require dedicated multi-hour review slots.
+- **Enhanced Verification Rigor**: Reviewers will require 100% green CI passes, rigorous docstring coverage, and full unit/regression test suites.
 
 ## Implementation
 

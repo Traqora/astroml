@@ -455,6 +455,7 @@ from astroml.features.feature_versioning import create_version_manager
 
 # Create version manager
 version_manager = create_version_manager("./feature_versions")
+balance_computer_code = "def compute_balance(data): return data"
 
 # Create new version of a feature
 version = version_manager.create_version(
@@ -472,6 +473,8 @@ print(f"Created version {version.version} for {version.feature_name}")
 ### Managing Version Status
 
 ```python
+from astroml.features.feature_versioning import VersionStatus
+
 # Update version status
 version_manager.update_version_status(
     version_id=version.version_id,

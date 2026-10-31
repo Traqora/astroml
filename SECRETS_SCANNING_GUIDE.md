@@ -27,7 +27,18 @@ The `.secrets.baseline` file stores known secrets that have been reviewed and wh
 
 ### CI Integration
 
-Secrets scanning runs in CI via the pre-commit workflow (`.github/workflows/pre-commit.yml`). The CI job will fail if new secrets are detected that aren't in the baseline.
+Secrets scanning runs automatically in CI through two independent paths:
+
+| Path | Workflow | What it does |
+| --- | --- | --- |
+| Pre-commit gate | `.github/workflows/pre-commit.yml` | Runs every hook (including `detect-secrets` and the `secrets-gate`) on every push and pull request. The workflow also invokes `python -m astroml.ci.secrets_gate` explicitly, so a skipped local hook cannot silently disable enforcement. |
+| Full-history scan | `.github/workflows/security.yml` (`secret-scan`) | Runs `gitleaks` on every push, pull request, and the weekly schedule (`0 6 * * 1`), catching credentials already committed to history. |
+
+The CI job fails when a new secret is detected that the baseline does not
+whitelist, when a baseline entry is unaudited, or when the scanner itself
+fails. Do **not** replace the gate with a raw
+`detect-secrets scan --baseline .secrets.baseline --all-files` step: that
+command mutates the baseline and exits successfully even when it finds a leak.
 
 #### The secrets gate (#720)
 

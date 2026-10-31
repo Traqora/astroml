@@ -85,7 +85,7 @@ def train_epoch(
     num_batches = 0
 
     for start in range(0, train_nodes.size(0), batch_size):
-        batch_indices = perm[start: start + batch_size]
+        batch_indices = perm[start : start + batch_size]
         batch_nodes = train_nodes[batch_indices]
 
         # Sample neighborhoods
@@ -94,10 +94,10 @@ def train_epoch(
         # Slice features for sampled nodes
         x = features[sampled_node_ids].to(device)
 
-        # Forward — sampler returns adjs innermost-first; encoder expects outermost-first.
-        # After encoding, slice to the number of target nodes (sampled_node_ids places
-        # target nodes at indices [0..len(batch_nodes)-1]).
-        embeddings = encoder(x, list(reversed(adjs)))
+        # Forward — sampler returns adjs outermost-first, which is what the encoder
+        # expects. After encoding, slice to the number of target nodes
+        # (sampled_node_ids places target nodes at indices [0..len(batch_nodes)-1]).
+        embeddings = encoder(x, adjs)
         embeddings = embeddings[: batch_nodes.size(0)]
 
         # Reconstruction target: mean of neighbors' raw features

@@ -70,7 +70,7 @@ class TransformationConfig:
 class LogTransformer(BaseEstimator, TransformerMixin):
     """Custom log transformer with handling of zeros and negative values."""
 
-    def __init__(self, offset -> Any: float = 1.0, handle_negative: str = "error"):
+    def __init__(self, offset: float = 1.0, handle_negative: str = "error") -> None:
         """Initialize log transformer.
 
         Args:
@@ -418,7 +418,7 @@ class FeatureEngineering:
         result = data.copy()
 
         for i, col1 in enumerate(columns):
-            for j, col2 in enumerate(columns[i + 1:], i + 1):
+            for j, col2 in enumerate(columns[i + 1 :], i + 1):
                 if col1 not in data.columns or col2 not in data.columns:
                     continue
 

@@ -48,7 +48,7 @@ line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["I", "N"]
+select = ["I", "N", "BLE"]
 ignore = [
     "N803",   # argument-name: X, y are standard in sklearn/ML
     "N805",   # first-arg-name: cls is correct for Pydantic @validator classmethods
@@ -83,6 +83,15 @@ exclude_lines = [
 strict = true
 python_version = "3.10"
 
+# torch ships no type stubs (and no py.typed marker) for the CPU-only
+# wheel used by CI/local dev; ~27 modules across astroml/ import it
+# directly. Per-import `# type: ignore` comments don't help here since
+# mypy still walks into and type-checks each imported torch submodule,
+# so this is a module-level override rather than a one-off suppression.
+[[tool.mypy.overrides]]
+module = ["torch", "torch.*"]
+ignore_missing_imports = true
+
 [tool.interrogate]
 fail-under = 68.0
 ignore-init-method = true
@@ -95,10 +104,3 @@ ignore-private = true
 ignore-property-decorators = true
 ignore-semiprivate = true
 verbose = 1
-exclude = [
-    # Existing syntax errors prevent AST parsing; remove these exclusions when
-    # their owning issues repair the files.
-    "astroml/llm/labeling/consensus.py",
-    "astroml/models/deep_svdd_trainer.py",
-    "api/routers/query.py",
-]

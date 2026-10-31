@@ -282,6 +282,167 @@ class TestPublicRateLimitMiddleware:
             assert response.status_code == 200
 
 
+class TestAuthMiddlewareLockout:
+    """End-to-end lockout enforcement through AuthMiddleware.dispatch.
+
+    TestBruteForceProtector above covers the counter in isolation; nothing
+    exercised the middleware actually consulting it on the request path, so
+    a wiring bug (wrong lock key, lockout check skipped, success not
+    clearing it) could ship unnoticed.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _isolated_protector(self, monkeypatch):
+        import api.auth.hardening as hardening_module
+        import api.auth.middleware as middleware_module
+
+        protector = BruteForceProtector(max_failed_attempts=3, lockout_seconds=900)
+        monkeypatch.setattr(hardening_module, "_brute_force_protector", protector)
+        monkeypatch.setattr(middleware_module, "_brute_force_protector", protector)
+        return protector
+
+    def _make_middleware(self, monkeypatch, *, auth_succeeds: bool):
+        import api.auth.middleware as middleware_module
+
+        monkeypatch.setattr(middleware_module, "is_auth_enabled", lambda: True)
+        monkeypatch.setattr(middleware_module, "PUBLIC_PATHS", frozenset())
+
+        def fake_authenticate_token(token, session):
+            if auth_succeeds:
+
+                class _Auth:
+                    auth_type = "jwt"
+                    subject = "user1"
+
+                return _Auth()
+            raise ValueError("bad token")
+
+        monkeypatch.setattr(middleware_module, "authenticate_token", fake_authenticate_token)
+        monkeypatch.setattr(
+            middleware_module, "_sync_session_factory", lambda: (lambda: _NullSession())
+        )
+        return middleware_module.AuthMiddleware(None)
+
+    def _request(self, *, client_ip: str = "10.0.0.1") -> "Request":
+        from starlette.requests import Request
+
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/protected",
+            "headers": [(b"authorization", b"Bearer sometoken123456")],
+            "query_string": b"",
+            "client": (client_ip, 8000),
+        }
+        return Request(scope)
+
+    @pytest.mark.asyncio
+    async def test_locks_out_after_repeated_failures(self, monkeypatch):
+        from starlette.responses import PlainTextResponse
+
+        middleware = self._make_middleware(monkeypatch, auth_succeeds=False)
+
+        async def call_next(request):
+            return PlainTextResponse("ok")
+
+        responses = [await middleware.dispatch(self._request(), call_next) for _ in range(3)]
+        assert [r.status_code for r in responses] == [401, 401, 401]
+
+        locked_response = await middleware.dispatch(self._request(), call_next)
+        assert locked_response.status_code == 429
+        assert "Retry-After" in locked_response.headers
+
+    @pytest.mark.asyncio
+    async def test_successful_auth_clears_the_failure_count(self, monkeypatch):
+        from starlette.responses import PlainTextResponse
+
+        middleware = self._make_middleware(monkeypatch, auth_succeeds=False)
+
+        async def call_next(request):
+            return PlainTextResponse("ok")
+
+        await middleware.dispatch(self._request(), call_next)
+        await middleware.dispatch(self._request(), call_next)
+
+        # Switch the same identifier (ip:token prefix) to a successful auth.
+        import api.auth.middleware as middleware_module
+
+        def fake_authenticate_token_ok(token, session):
+            class _Auth:
+                auth_type = "jwt"
+                subject = "user1"
+
+            return _Auth()
+
+        monkeypatch.setattr(middleware_module, "authenticate_token", fake_authenticate_token_ok)
+
+        response = await middleware.dispatch(self._request(), call_next)
+        assert response.status_code == 200
+
+        # The prior two failures must have been cleared by the success, so a
+        # fresh pair of failures should not yet trigger the 3-strike lockout.
+        monkeypatch.setattr(middleware_module, "authenticate_token", fake_authenticate_token_ok)
+        middleware2 = self._make_middleware(monkeypatch, auth_succeeds=False)
+
+        async def call_next2(request):
+            return PlainTextResponse("ok")
+
+        r1 = await middleware2.dispatch(self._request(), call_next2)
+        r2 = await middleware2.dispatch(self._request(), call_next2)
+        assert r1.status_code == 401
+        assert r2.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_locked_out_identifier_is_rejected_before_auth_is_attempted(self, monkeypatch):
+        from starlette.responses import PlainTextResponse
+
+        import api.auth.middleware as middleware_module
+
+        middleware = self._make_middleware(monkeypatch, auth_succeeds=False)
+
+        async def call_next(request):
+            return PlainTextResponse("ok")
+
+        for _ in range(3):
+            await middleware.dispatch(self._request(), call_next)
+
+        calls = {"count": 0}
+
+        def counting_authenticate_token(token, session):
+            calls["count"] += 1
+            raise ValueError("should not be reached while locked out")
+
+        monkeypatch.setattr(middleware_module, "authenticate_token", counting_authenticate_token)
+
+        response = await middleware.dispatch(self._request(), call_next)
+
+        assert response.status_code == 429
+        assert calls["count"] == 0
+
+    @pytest.mark.asyncio
+    async def test_different_client_ips_are_locked_out_independently(self, monkeypatch):
+        from starlette.responses import PlainTextResponse
+
+        middleware = self._make_middleware(monkeypatch, auth_succeeds=False)
+
+        async def call_next(request):
+            return PlainTextResponse("ok")
+
+        for _ in range(3):
+            await middleware.dispatch(self._request(client_ip="10.0.0.1"), call_next)
+
+        locked = await middleware.dispatch(self._request(client_ip="10.0.0.1"), call_next)
+        still_open = await middleware.dispatch(self._request(client_ip="10.0.0.2"), call_next)
+
+        assert locked.status_code == 429
+        assert still_open.status_code == 401
+
+
+class _NullSession:
+    def close(self) -> None:
+        pass
+
+
 class TestMiddlewareStackBuilds:
     def test_starlette_can_construct_and_run_both(self):
         """Regression: Starlette builds the stack lazily, on the first request,

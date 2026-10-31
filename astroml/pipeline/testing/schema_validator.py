@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Schema validation for data pipeline testing.
 
 Issue #638 Step 2: Implements schema validation for pipeline stages,
@@ -16,6 +15,8 @@ from datetime import datetime, timezone
 from enum import Enum, auto
 from pathlib import Path
 from typing import Any, Literal, Union
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +71,12 @@ class ColumnExpectation:
         return cls(column=column, expectation_type="in_set", kwargs={"values": list(values)})
 
     @classmethod
-    def range(cls, column: str, min_value: float | None = None, max_value: float | None = None) -> ColumnExpectation:
-        return cls(column=column, expectation_type="range", kwargs={"min": min_value, "max": max_value})
+    def range(
+        cls, column: str, min_value: float | None = None, max_value: float | None = None
+    ) -> ColumnExpectation:
+        return cls(
+            column=column, expectation_type="range", kwargs={"min": min_value, "max": max_value}
+        )
 
     @classmethod
     def regex_match(cls, column: str, pattern: str) -> ColumnExpectation:
@@ -288,11 +293,13 @@ class SchemaValidator:
                 return SchemaValidationResult(
                     schema_name=schema,
                     status=ValidationStatus.FAILED,
-                    results=[ExpectationResult(
-                        expectation=ColumnExpectation("schema", "exists"),
-                        status=ValidationStatus.FAILED,
-                        message=f"Schema '{schema}' not registered",
-                    )],
+                    results=[
+                        ExpectationResult(
+                            expectation=ColumnExpectation("schema", "exists"),
+                            status=ValidationStatus.FAILED,
+                            message=f"Schema '{schema}' not registered",
+                        )
+                    ],
                 )
             schema = resolved
 
@@ -300,11 +307,13 @@ class SchemaValidator:
             return SchemaValidationResult(
                 schema_name=schema.name,
                 status=ValidationStatus.FAILED,
-                results=[ExpectationResult(
-                    expectation=ColumnExpectation("data", "is_dataframe"),
-                    status=ValidationStatus.FAILED,
-                    message="Data must be a pandas DataFrame",
-                )],
+                results=[
+                    ExpectationResult(
+                        expectation=ColumnExpectation("data", "is_dataframe"),
+                        status=ValidationStatus.FAILED,
+                        message="Data must be a pandas DataFrame",
+                    )
+                ],
             )
 
         result = SchemaValidationResult(schema_name=schema.name)
@@ -314,38 +323,48 @@ class SchemaValidator:
         for col in sorted(schema.required_columns):
             exp = ColumnExpectation(column=col, expectation_type="column_exists")
             if col not in observed_columns:
-                result.results.append(ExpectationResult(
-                    expectation=exp,
-                    status=ValidationStatus.FAILED,
-                    message=f"Required column '{col}' is missing",
-                ))
+                result.results.append(
+                    ExpectationResult(
+                        expectation=exp,
+                        status=ValidationStatus.FAILED,
+                        message=f"Required column '{col}' is missing",
+                    )
+                )
             else:
-                result.results.append(ExpectationResult(
-                    expectation=exp,
-                    status=ValidationStatus.PASSED,
-                    message=f"Column '{col}' exists",
-                ))
+                result.results.append(
+                    ExpectationResult(
+                        expectation=exp,
+                        status=ValidationStatus.PASSED,
+                        message=f"Column '{col}' exists",
+                    )
+                )
 
         # Check optional columns (warn if missing)
         for col in sorted(schema.optional_columns):
             exp = ColumnExpectation(column=col, expectation_type="column_exists")
             if col not in observed_columns:
-                result.results.append(ExpectationResult(
-                    expectation=exp,
-                    status=ValidationStatus.WARNING,
-                    message=f"Optional column '{col}' is missing",
-                ))
+                result.results.append(
+                    ExpectationResult(
+                        expectation=exp,
+                        status=ValidationStatus.WARNING,
+                        message=f"Optional column '{col}' is missing",
+                    )
+                )
 
         # Check unexpected columns (strict mode)
         if strict:
             expected_cols = schema.required_columns | schema.optional_columns
             extra_cols = observed_columns - expected_cols
             for col in sorted(extra_cols):
-                result.results.append(ExpectationResult(
-                    expectation=ColumnExpectation(column=col, expectation_type="no_extra_columns"),
-                    status=ValidationStatus.FAILED,
-                    message=f"Unexpected column '{col}' (strict mode)",
-                ))
+                result.results.append(
+                    ExpectationResult(
+                        expectation=ColumnExpectation(
+                            column=col, expectation_type="no_extra_columns"
+                        ),
+                        status=ValidationStatus.FAILED,
+                        message=f"Unexpected column '{col}' (strict mode)",
+                    )
+                )
 
         # Validate column types for present columns
         common_cols = observed_columns & schema.columns.keys()
@@ -356,28 +375,34 @@ class SchemaValidator:
 
             exp = ColumnExpectation.column_type(col, expected_type)
             if is_valid:
-                result.results.append(ExpectationResult(
-                    expectation=exp,
-                    status=ValidationStatus.PASSED,
-                    observed_value=actual_dtype,
-                ))
+                result.results.append(
+                    ExpectationResult(
+                        expectation=exp,
+                        status=ValidationStatus.PASSED,
+                        observed_value=actual_dtype,
+                    )
+                )
             else:
-                result.results.append(ExpectationResult(
-                    expectation=exp,
-                    status=ValidationStatus.FAILED,
-                    message=f"Column '{col}' expected type {expected_type.value}, got {actual_dtype}",
-                    observed_value=actual_dtype,
-                    details={"expected": expected_type.value, "actual": actual_dtype},
-                ))
+                result.results.append(
+                    ExpectationResult(
+                        expectation=exp,
+                        status=ValidationStatus.FAILED,
+                        message=f"Column '{col}' expected type {expected_type.value}, got {actual_dtype}",
+                        observed_value=actual_dtype,
+                        details={"expected": expected_type.value, "actual": actual_dtype},
+                    )
+                )
 
         # Run expectations
         for expectation in schema.expectations:
             if expectation.column not in observed_columns:
-                result.results.append(ExpectationResult(
-                    expectation=expectation,
-                    status=ValidationStatus.WARNING,
-                    message=f"Cannot validate expectation on missing column '{expectation.column}'",
-                ))
+                result.results.append(
+                    ExpectationResult(
+                        expectation=expectation,
+                        status=ValidationStatus.WARNING,
+                        message=f"Cannot validate expectation on missing column '{expectation.column}'",
+                    )
+                )
                 continue
 
             series = data[expectation.column]
@@ -413,7 +438,9 @@ class SchemaValidator:
             elif expected == ColumnType.DATETIME:
                 return pd.api.types.is_datetime64_any_dtype(series)
             elif expected == ColumnType.CATEGORICAL:
-                return isinstance(series.dtype, pd.CategoricalDtype) or pd.api.types.is_object_dtype(series)
+                return isinstance(
+                    series.dtype, pd.CategoricalDtype
+                ) or pd.api.types.is_object_dtype(series)
             return True
         except AstroMLError:
             return False
@@ -491,6 +518,7 @@ class SchemaValidator:
 
             elif expectation.expectation_type == "regex_match":
                 import re
+
                 pattern = expectation.kwargs["pattern"]
                 mask = series.notna()
                 non_matching = series[mask].apply(lambda v: not re.match(pattern, str(v)))

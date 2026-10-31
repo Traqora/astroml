@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from api.models.orm import FraudAlert  # noqa: F401 — registers ORM on Base
+from astroml.api.models import ASSET_RISK_THRESHOLDS, DEFAULT_RISK_THRESHOLDS
 from astroml.api.scheduler import (
     ALERT_RETENTION_DAYS,
     run_batch_scoring_job,
@@ -56,6 +57,61 @@ class TestFraudAlertModel:
     def test_risk_level_high(self):
         assert FraudAlert.risk_level_for_score(0.8) == "high"
         assert FraudAlert.risk_level_for_score(1.0) == "high"
+
+
+class TestFraudAlertPerAssetThreshold:
+    """Issue #838 — per-asset anomaly-score thresholds.
+
+    A fixed 0.8/0.5 threshold is wrong for assets whose normal activity
+    looks nothing alike (a thinly-traded custom asset vs. a stablecoin used
+    for routine, large, regular transfers), so an asset can override its
+    own high/medium cut points without affecting any other asset or any
+    caller that does not pass ``asset`` at all.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clean_overrides(self):
+        """Isolate each test from any override another test registers."""
+        saved = dict(ASSET_RISK_THRESHOLDS)
+        ASSET_RISK_THRESHOLDS.clear()
+        yield
+        ASSET_RISK_THRESHOLDS.clear()
+        ASSET_RISK_THRESHOLDS.update(saved)
+
+    def test_no_asset_argument_uses_the_global_thresholds_unchanged(self):
+        """Every pre-existing call site omits ``asset`` and must keep
+        scoring exactly as before this parameter was added."""
+        assert FraudAlert.risk_level_for_score(0.49) == "low"
+        assert FraudAlert.risk_level_for_score(0.5) == "medium"
+        assert FraudAlert.risk_level_for_score(0.8) == "high"
+
+    def test_an_asset_with_no_override_uses_the_global_thresholds(self):
+        assert FraudAlert.risk_level_for_score(0.6, asset="XLM") == "medium"
+        assert FraudAlert.risk_level_for_score(0.9, asset="XLM") == "high"
+
+    def test_an_asset_override_changes_its_own_bucketing(self):
+        ASSET_RISK_THRESHOLDS["USDC"] = {"high": 0.9, "medium": 0.6}
+
+        # Below the override's medium cutoff -> low, where the global
+        # thresholds would have called this "medium".
+        assert FraudAlert.risk_level_for_score(0.55, asset="USDC") == "low"
+        # Between the override's medium and high cutoffs -> medium, where
+        # the global thresholds would have called this "high".
+        assert FraudAlert.risk_level_for_score(0.85, asset="USDC") == "medium"
+        assert FraudAlert.risk_level_for_score(0.95, asset="USDC") == "high"
+
+    def test_an_asset_override_does_not_affect_other_assets(self):
+        ASSET_RISK_THRESHOLDS["USDC"] = {"high": 0.9, "medium": 0.6}
+
+        # Same score, different asset: still the unmodified global buckets.
+        assert FraudAlert.risk_level_for_score(0.55, asset="XLM") == "medium"
+        assert FraudAlert.risk_level_for_score(0.55) == "medium"
+
+    def test_default_thresholds_constant_matches_the_no_override_behavior(self):
+        """DEFAULT_RISK_THRESHOLDS is the single source of truth for the
+        global cut points; this pins its values so a change there is a
+        deliberate, visible diff rather than a silent behavior change."""
+        assert DEFAULT_RISK_THRESHOLDS == {"high": 0.8, "medium": 0.5}
 
 
 # ─── Batch job tests ─────────────────────────────────────────────────────────

@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """ONNX model converter for PyTorch and scikit-learn models."""
 
 from __future__ import annotations
@@ -6,6 +5,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Any
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

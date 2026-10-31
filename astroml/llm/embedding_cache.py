@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Semantic embedding cache for LLM embedding computations.
 
 Reduces embedding API costs by:
@@ -41,6 +40,8 @@ from typing import Any
 
 import numpy as np
 
+from astroml.utils.exceptions import AstroMLError
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -62,7 +63,7 @@ class _TFIDFEncoder:
     that ``dot(a, b) == cosine_similarity(a, b)``.
     """
 
-    def __init__(self, max_vocab -> Any: int = 4096):
+    def __init__(self, max_vocab: int = 4096) -> None:
         self._max_vocab = max_vocab
         self._vocab: dict[str, int] = {}  # token → column index
         self._df: dict[str, int] = {}  # token → document frequency
@@ -455,7 +456,7 @@ class EmbeddingCache:
 
         # Evict oldest entries if index is full.
         if len(index) >= self.max_index_size:
-            index = index[-(self.max_index_size - 1):]
+            index = index[-(self.max_index_size - 1) :]
 
         index.append({"hash": text_hash, "vector": vector})
         self._write_index(index)

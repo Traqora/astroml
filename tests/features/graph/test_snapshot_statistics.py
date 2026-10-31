@@ -93,6 +93,36 @@ class TestGraphShape:
         assert stats.isolated_sinks == 1  # b never sends
         assert stats.isolated_sources == 1  # a never receives
 
+    def test_a_self_loop_only_node_is_still_reported_isolated(self):
+        """Issue #835 — a node whose only edge is a self-loop has no real
+        connection to the rest of the graph and must be reported as both an
+        isolated sink and an isolated source, the same as a node with no
+        edges at all. Before the fix, the self-loop gave the node in_degree
+        == out_degree == 1 (from itself), so it was silently excluded from
+        both counts."""
+        stats = compute_snapshot_stats([{"src": "a", "dst": "a", "timestamp": 1}])
+
+        assert stats.num_self_loops == 1
+        assert stats.isolated_sinks == 1
+        assert stats.isolated_sources == 1
+
+    def test_a_self_loop_does_not_mask_a_nodes_real_edges(self):
+        """A node with both a self-loop and a real edge to another node is
+        not isolated — only the self-loop itself must be ignored when
+        deciding isolation, not the node's other edges."""
+        stats = compute_snapshot_stats(
+            [
+                {"src": "a", "dst": "a", "timestamp": 1},
+                {"src": "a", "dst": "b", "timestamp": 2},
+            ]
+        )
+
+        # a sends to b, so a is not an isolated sink; b never sends, so b is.
+        assert stats.isolated_sinks == 1
+        # b receives from a, so b is not an isolated source; a never
+        # receives from anyone but itself, so a is.
+        assert stats.isolated_sources == 1
+
     def test_an_empty_snapshot_reports_zeroes(self):
         stats = compute_snapshot_stats([], index=3)
 

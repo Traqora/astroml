@@ -6,6 +6,7 @@ import os
 import pathlib
 
 from sqlalchemy import func, select, update
+from sqlalchemy.orm import Session
 
 from api.database import _sync_session_factory
 from api.models.orm import ModelRegistry
@@ -49,7 +50,200 @@ Environment variables:
 """
 
 
-def main(argv: list[str] | None = None) -> int:
+def _add_models_subcommands(sub: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
+    """Register the ``models`` subcommand and its own sub-subcommands."""
+    models_parser = sub.add_parser("models", help="Model registry commands")
+    models_sub = models_parser.add_subparsers(dest="subcommand", required=True)
+
+    register_parser = models_sub.add_parser("register", help="Register a new model")
+    register_parser.add_argument("--name", required=True, help="Model name")
+    register_parser.add_argument("--version", required=True, help="Model version")
+    register_parser.add_argument("--path", required=True, help="Path to model file")
+    register_parser.add_argument("--owner", help="Model owner")
+    register_parser.add_argument("--tags", nargs="*", help="Model tags (space-separated)")
+    register_parser.add_argument("--mlflow-run-id", help="MLflow run ID to associate")
+    register_parser.add_argument("--metrics", help="Model metrics (JSON string)")
+    register_parser.add_argument(
+        "--status",
+        default="inactive",
+        choices=["inactive", "active", "deprecated"],
+        help="Model status",
+    )
+
+    version_parser = models_sub.add_parser("version", help="Add a new version to a model")
+    version_parser.add_argument("--model-name", required=True, help="Model name")
+    version_parser.add_argument("--version", required=True, help="New version number")
+    version_parser.add_argument("--path", required=True, help="Path to model file")
+    version_parser.add_argument("--owner", help="Model owner")
+    version_parser.add_argument("--tags", nargs="*", help="Model tags (space-separated)")
+    version_parser.add_argument("--mlflow-run-id", help="MLflow run ID to associate")
+    version_parser.add_argument("--metrics", help="Model metrics (JSON string)")
+    version_parser.add_argument(
+        "--status",
+        default="inactive",
+        choices=["inactive", "active", "deprecated"],
+        help="Model status",
+    )
+
+    load_parser = models_sub.add_parser(
+        "load-metadata", help="Load MLflow run metadata for a model version"
+    )
+    load_parser.add_argument("--model-name", required=True, help="Model name")
+    load_parser.add_argument("--version", required=True, help="Model version")
+
+    transition_parser = models_sub.add_parser(
+        "transition", help="Transition a model version status"
+    )
+    transition_parser.add_argument("--model-name", required=True, help="Model name")
+    transition_parser.add_argument("--version", required=True, help="Model version")
+    transition_parser.add_argument(
+        "--stage",
+        required=True,
+        choices=["inactive", "active", "deprecated"],
+        help="Target status/stage",
+    )
+
+    list_parser = models_sub.add_parser("list", help="List registered models")
+    list_parser.add_argument("--owner", help="Filter by owner")
+    list_parser.add_argument("--tags", nargs="*", help="Filter by tags (space-separated)")
+    list_parser.add_argument("--name", help="Filter by model name")
+    list_parser.add_argument("--status", help="Filter by status")
+    list_parser.add_argument("--page", type=int, default=1, help="Page number")
+    list_parser.add_argument("--page-size", type=int, default=20, help="Items per page")
+
+    compare_parser = models_sub.add_parser("compare", help="Compare model versions")
+    compare_parser.add_argument("--model-name", required=True, help="Model name")
+    compare_parser.add_argument("--version1", required=True, help="First version to compare")
+    compare_parser.add_argument("--version2", required=True, help="Second version to compare")
+
+
+def _add_ingest_subcommand(sub: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
+    ingest = sub.add_parser("ingest", help="Incremental ingestion of ledgers")
+    ingest.add_argument("--start", type=int, default=None, help="Start ledger id (inclusive)")
+    ingest.add_argument("--end", type=int, default=None, help="End ledger id (inclusive)")
+    ingest.add_argument(
+        "--state-file",
+        type=str,
+        default=None,
+        help="Path to state file (defaults to ./.astroml_state/ingestion_state.json)",
+    )
+
+
+def _add_config_subcommand(
+    sub: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> argparse.ArgumentParser:
+    config = sub.add_parser("config", help="Configuration management")
+    config.add_argument(
+        "--print-db",
+        action="store_true",
+        help="Print effective database configuration",
+    )
+    config.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate all configuration without starting services",
+    )
+    config.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show detailed validation output (use with --dry-run)",
+    )
+    return config
+
+
+def _add_quickstart_subcommand(
+    sub: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
+    quickstart = sub.add_parser(
+        "quickstart",
+        help="Run quick start: ingestion → graph → train pipeline with sample data",
+    )
+    quickstart.add_argument(
+        "--num-ledgers",
+        type=int,
+        default=100,
+        help="Number of sample ledgers to generate (default: 100)",
+    )
+    quickstart.add_argument(
+        "--num-accounts",
+        type=int,
+        default=50,
+        help="Number of sample accounts (default: 50)",
+    )
+    quickstart.add_argument(
+        "--epochs",
+        type=int,
+        default=10,
+        help="Training epochs (default: 10)",
+    )
+    quickstart.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for reproducibility (default: 42)",
+    )
+
+
+def _add_preprocess_backfill_subcommand(
+    sub: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
+    preprocess = sub.add_parser(
+        "preprocess-backfill",
+        help="Preprocess large ledger backfill datasets using Polars",
+    )
+    preprocess.add_argument(
+        "--input",
+        required=True,
+        help="Input file or directory (csv, parquet, ndjson/jsonl).",
+    )
+    preprocess.add_argument(
+        "--output",
+        required=True,
+        help="Output Parquet path.",
+    )
+    preprocess.add_argument(
+        "--input-format",
+        choices=["parquet", "csv", "ndjson", "jsonl"],
+        default=None,
+        help="Optional explicit input format.",
+    )
+
+
+def _add_agent_subcommand(sub: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
+    agent = sub.add_parser("agent", help="LLM Agent Framework for autonomous task execution")
+    agent_sub = agent.add_subparsers(dest="agent_command", required=True)
+
+    agent_interactive = agent_sub.add_parser("interactive", help="Run agent in interactive mode")
+    agent_interactive.add_argument(
+        "--agent-type",
+        choices=["fraud-detection", "model-training", "generic"],
+        default="generic",
+        help="Type of agent to use",
+    )
+
+    agent_run = agent_sub.add_parser("run", help="Run agent on a single task")
+    agent_run.add_argument(
+        "--agent-type",
+        choices=["fraud-detection", "model-training", "generic"],
+        default="generic",
+        help="Type of agent to use",
+    )
+    agent_run.add_argument("--task", required=True, help="Task description")
+    agent_run.add_argument("--context", help="Context as JSON string")
+    agent_run.add_argument("--verbose", action="store_true", help="Enable verbose output")
+
+    agent_sub.add_parser("list-tools", help="List available tools")
+
+
+def _build_parser() -> (
+    tuple[argparse.ArgumentParser, argparse.ArgumentParser, argparse.ArgumentParser]
+):
+    """Build the full argparse tree.
+
+    Returns the top-level parser alongside the ``config`` and ``llm`` sub-parsers,
+    which the dispatch functions need directly (to call ``print_help()`` on a bare
+    ``config``/``llm`` invocation with no further action flag).
+    """
     parser = argparse.ArgumentParser(
         prog="astroml",
         description=CLI_DESCRIPTION,
@@ -80,7 +274,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    # LLM subcommand
     llm_parser = sub.add_parser(
         "llm", help="LLM operations (generate, chat, rag, prompts, eval, models, cost, cache)"
     )
@@ -89,178 +282,355 @@ def main(argv: list[str] | None = None) -> int:
 
     register_llm_subcommands(llm_sub)
 
-    # Models subcommand
-    models_parser = sub.add_parser("models", help="Model registry commands")
-    models_sub = models_parser.add_subparsers(dest="subcommand", required=True)
+    _add_models_subcommands(sub)
+    _add_ingest_subcommand(sub)
+    config_parser = _add_config_subcommand(sub)
+    _add_quickstart_subcommand(sub)
+    _add_preprocess_backfill_subcommand(sub)
+    _add_agent_subcommand(sub)
 
-    # Register a model
-    register_parser = models_sub.add_parser("register", help="Register a new model")
-    register_parser.add_argument("--name", required=True, help="Model name")
-    register_parser.add_argument("--version", required=True, help="Model version")
-    register_parser.add_argument("--path", required=True, help="Path to model file")
-    register_parser.add_argument("--owner", help="Model owner")
-    register_parser.add_argument("--tags", nargs="*", help="Model tags (space-separated)")
-    register_parser.add_argument("--mlflow-run-id", help="MLflow run ID to associate")
-    register_parser.add_argument("--metrics", help="Model metrics (JSON string)")
-    register_parser.add_argument(
-        "--status",
-        default="inactive",
-        choices=["inactive", "active", "deprecated"],
-        help="Model status",
+    return parser, config_parser, llm_parser
+
+
+def _cmd_ingest(args: argparse.Namespace) -> int:
+    store = StateStore(path=args.state_file) if args.state_file else StateStore()
+    service = IngestionService(state_store=store)
+
+    # Example fetch/process functions; in real usage, users would customize/import
+    def fetch_fn(ledger_id: int):
+        # Placeholder fetch, replace with real data retrieval
+        return {"ledger": ledger_id, "data": f"payload-{ledger_id}"}
+
+    def process_fn(ledger_id: int, payload: dict):
+        # Placeholder processing; replace with DB writes or other side effects
+        # For CLI visibility we do minimal printing; real apps would use logging
+        print(f"processed ledger {ledger_id}")
+
+    result = service.ingest(
+        start_ledger=args.start,
+        end_ledger=args.end,
+        fetch_fn=fetch_fn,
+        process_fn=process_fn,
+    )
+    print(
+        json.dumps(
+            {
+                "attempted": result.attempted,
+                "processed": result.processed,
+                "skipped": result.skipped,
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
+def _cmd_config_dry_run(args: argparse.Namespace) -> int:
+    from astroml.config_dry_run import run_dry_run
+
+    result = run_dry_run(config_path=args.config, verbose=args.verbose)
+    if not args.verbose:
+        if result["valid"]:
+            print("Configuration validation: PASS")
+        else:
+            print("Configuration validation: FAIL")
+            for r in result["results"]:
+                for error in r.errors:
+                    print(f"  ERROR: {error}")
+                for warning in r.warnings:
+                    print(f"  WARN: {warning}")
+    return result["exit_code"]
+
+
+def _cmd_config_print_db(args: argparse.Namespace) -> int:
+    try:
+        db_config = load_database_config(args.config)
+        print("Effective database configuration:")
+        print(
+            json.dumps(
+                {
+                    "host": db_config.host,
+                    "port": db_config.port,
+                    "name": db_config.name,
+                    "user": db_config.user,
+                    "password": "***" if db_config.password else "",
+                    "url": db_config.masked_url,
+                },
+                indent=2,
+            )
+        )
+        return 0
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        return 1
+    except Exception as e:
+        print(f"Error loading config: {e}")
+        return 1
+
+
+def _cmd_config(args: argparse.Namespace, config_parser: argparse.ArgumentParser) -> int:
+    if args.dry_run:
+        return _cmd_config_dry_run(args)
+    if args.print_db:
+        return _cmd_config_print_db(args)
+    config_parser.print_help()
+    return 1
+
+
+def _cmd_quickstart(args: argparse.Namespace) -> int:
+    from .quick_start import QuickStartConfig, run_quickstart
+
+    QuickStartConfig.NUM_SAMPLE_LEDGERS = args.num_ledgers
+    QuickStartConfig.NUM_ACCOUNTS = args.num_accounts
+    QuickStartConfig.TRAIN_EPOCHS = args.epochs
+    QuickStartConfig.RANDOM_SEED = args.seed
+
+    return run_quickstart()
+
+
+def _cmd_preprocess_backfill(args: argparse.Namespace) -> int:
+    from .preprocessing.ledger_backfill import preprocess_to_parquet
+
+    output_path = preprocess_to_parquet(
+        input_path=args.input,
+        output_path=args.output,
+        input_format=args.input_format,
+    )
+    print(json.dumps({"output": str(output_path)}, indent=2))
+    return 0
+
+
+def _cmd_models_register_or_version(db: Session, args: argparse.Namespace) -> int:
+    name = args.name if args.subcommand == "register" else args.model_name
+    metrics = json.loads(args.metrics) if args.metrics else None
+    existing = db.scalar(
+        select(ModelRegistry).where(
+            ModelRegistry.name == name, ModelRegistry.version == args.version
+        )
+    )
+    if existing:
+        print(f"Error: Model '{name}' version '{args.version}' already exists")
+        return 1
+
+    entry = ModelRegistry(
+        name=name,
+        version=args.version,
+        path=args.path,
+        owner=args.owner,
+        tags=args.tags,
+        mlflow_run_id=args.mlflow_run_id,
+        metrics=metrics,
+        status=args.status,
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    print(
+        json.dumps(
+            {
+                "id": entry.id,
+                "name": entry.name,
+                "version": entry.version,
+                "path": entry.path,
+                "owner": entry.owner,
+                "tags": entry.tags,
+                "mlflow_run_id": entry.mlflow_run_id,
+                "status": entry.status,
+                "created_at": entry.created_at.isoformat(),
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
+def _cmd_models_transition(db: Session, args: argparse.Namespace) -> int:
+    entry = db.scalar(
+        select(ModelRegistry).where(
+            ModelRegistry.name == args.model_name, ModelRegistry.version == args.version
+        )
+    )
+    if not entry:
+        print(f"Error: Model '{args.model_name}' version '{args.version}' not found")
+        return 1
+
+    if args.stage == "active":
+        db.execute(
+            update(ModelRegistry)
+            .where(ModelRegistry.name == args.model_name, ModelRegistry.id != entry.id)
+            .values(status="inactive")
+        )
+
+    entry.status = args.stage
+    db.commit()
+    db.refresh(entry)
+    print(
+        json.dumps(
+            {
+                "id": entry.id,
+                "name": entry.name,
+                "version": entry.version,
+                "status": entry.status,
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
+def _cmd_models_list(db: Session, args: argparse.Namespace) -> int:
+    query = select(ModelRegistry)
+    if args.name:
+        query = query.where(ModelRegistry.name == args.name)
+    if args.status:
+        query = query.where(ModelRegistry.status == args.status)
+    if args.owner:
+        query = query.where(ModelRegistry.owner == args.owner)
+    if args.tags:
+        for tag in args.tags:
+            query = query.where(ModelRegistry.tags.contains([tag]))
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total = db.scalar(count_query) or 0
+
+    offset = (args.page - 1) * args.page_size
+    query = query.order_by(ModelRegistry.created_at.desc()).offset(offset).limit(args.page_size)
+    rows = db.scalars(query).all()
+
+    result = {
+        "page": args.page,
+        "page_size": args.page_size,
+        "total": total,
+        "data": [
+            {
+                "id": row.id,
+                "name": row.name,
+                "version": row.version,
+                "path": row.path,
+                "owner": row.owner,
+                "tags": row.tags,
+                "mlflow_run_id": row.mlflow_run_id,
+                "status": row.status,
+                "created_at": row.created_at.isoformat(),
+            }
+            for row in rows
+        ],
+    }
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+def _cmd_models_compare(db: Session, args: argparse.Namespace) -> int:
+    v1 = db.scalar(
+        select(ModelRegistry).where(
+            ModelRegistry.name == args.model_name, ModelRegistry.version == args.version1
+        )
+    )
+    v2 = db.scalar(
+        select(ModelRegistry).where(
+            ModelRegistry.name == args.model_name, ModelRegistry.version == args.version2
+        )
     )
 
-    # Add a version
-    version_parser = models_sub.add_parser("version", help="Add a new version to a model")
-    version_parser.add_argument("--model-name", required=True, help="Model name")
-    version_parser.add_argument("--version", required=True, help="New version number")
-    version_parser.add_argument("--path", required=True, help="Path to model file")
-    version_parser.add_argument("--owner", help="Model owner")
-    version_parser.add_argument("--tags", nargs="*", help="Model tags (space-separated)")
-    version_parser.add_argument("--mlflow-run-id", help="MLflow run ID to associate")
-    version_parser.add_argument("--metrics", help="Model metrics (JSON string)")
-    version_parser.add_argument(
-        "--status",
-        default="inactive",
-        choices=["inactive", "active", "deprecated"],
-        help="Model status",
-    )
+    if not v1:
+        print(f"Error: Model '{args.model_name}' version '{args.version1}' not found")
+        return 1
+    if not v2:
+        print(f"Error: Model '{args.model_name}' version '{args.version2}' not found")
+        return 1
 
-    # Load run metadata
-    load_parser = models_sub.add_parser(
-        "load-metadata", help="Load MLflow run metadata for a model version"
-    )
-    load_parser.add_argument("--model-name", required=True, help="Model name")
-    load_parser.add_argument("--version", required=True, help="Model version")
+    comparison = {
+        "models": [
+            {
+                "id": v1.id,
+                "name": v1.name,
+                "version": v1.version,
+                "mlflow_run_id": v1.mlflow_run_id,
+                "metrics": v1.metrics,
+            },
+            {
+                "id": v2.id,
+                "name": v2.name,
+                "version": v2.version,
+                "mlflow_run_id": v2.mlflow_run_id,
+                "metrics": v2.metrics,
+            },
+        ],
+        "metrics_diff": {},
+    }
 
-    # Transition version status
-    transition_parser = models_sub.add_parser(
-        "transition", help="Transition a model version status"
-    )
-    transition_parser.add_argument("--model-name", required=True, help="Model name")
-    transition_parser.add_argument("--version", required=True, help="Model version")
-    transition_parser.add_argument(
-        "--stage",
-        required=True,
-        choices=["inactive", "active", "deprecated"],
-        help="Target status/stage",
-    )
+    all_metrics = set()
+    if v1.metrics:
+        all_metrics.update(v1.metrics.keys())
+    if v2.metrics:
+        all_metrics.update(v2.metrics.keys())
 
-    # List models
-    list_parser = models_sub.add_parser("list", help="List registered models")
-    list_parser.add_argument("--owner", help="Filter by owner")
-    list_parser.add_argument("--tags", nargs="*", help="Filter by tags (space-separated)")
-    list_parser.add_argument("--name", help="Filter by model name")
-    list_parser.add_argument("--status", help="Filter by status")
-    list_parser.add_argument("--page", type=int, default=1, help="Page number")
-    list_parser.add_argument("--page-size", type=int, default=20, help="Items per page")
+    for key in all_metrics:
+        val1 = v1.metrics.get(key) if v1.metrics else None
+        val2 = v2.metrics.get(key) if v2.metrics else None
+        comparison["metrics_diff"][key] = {"version1": val1, "version2": val2}
 
-    # Compare models
-    compare_parser = models_sub.add_parser("compare", help="Compare model versions")
-    compare_parser.add_argument("--model-name", required=True, help="Model name")
-    compare_parser.add_argument("--version1", required=True, help="First version to compare")
-    compare_parser.add_argument("--version2", required=True, help="Second version to compare")
+    print(json.dumps(comparison, indent=2))
+    return 0
 
-    ingest = sub.add_parser("ingest", help="Incremental ingestion of ledgers")
-    ingest.add_argument("--start", type=int, default=None, help="Start ledger id (inclusive)")
-    ingest.add_argument("--end", type=int, default=None, help="End ledger id (inclusive)")
-    ingest.add_argument(
-        "--state-file",
-        type=str,
-        default=None,
-        help="Path to state file (defaults to ./.astroml_state/ingestion_state.json)",
-    )
 
-    config = sub.add_parser("config", help="Configuration management")
-    config.add_argument(
-        "--print-db",
-        action="store_true",
-        help="Print effective database configuration",
-    )
-    config.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Validate all configuration without starting services",
-    )
-    config.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Show detailed validation output (use with --dry-run)",
-    )
+def _cmd_models_load_metadata(args: argparse.Namespace) -> int:
+    try:
+        from .tracking.mlflow_tracker import MLflowTracker
 
-    quickstart = sub.add_parser(
-        "quickstart",
-        help="Run quick start: ingestion → graph → train pipeline with sample data",
-    )
-    quickstart.add_argument(
-        "--num-ledgers",
-        type=int,
-        default=100,
-        help="Number of sample ledgers to generate (default: 100)",
-    )
-    quickstart.add_argument(
-        "--num-accounts",
-        type=int,
-        default=50,
-        help="Number of sample accounts (default: 50)",
-    )
-    quickstart.add_argument(
-        "--epochs",
-        type=int,
-        default=10,
-        help="Training epochs (default: 10)",
-    )
-    quickstart.add_argument(
-        "--seed",
-        type=int,
-        default=42,
-        help="Random seed for reproducibility (default: 42)",
-    )
+        tracker = MLflowTracker(enabled=True)
+        metadata = tracker.load_run_metadata(args.model_name, args.version)
+        if metadata:
+            print(json.dumps(metadata, indent=2, default=str))
+            return 0
+        print("No metadata found")
+        return 1
+    except ImportError as e:
+        print(f"Error: MLflow not available: {e}")
+        return 1
 
-    preprocess = sub.add_parser(
-        "preprocess-backfill",
-        help="Preprocess large ledger backfill datasets using Polars",
-    )
-    preprocess.add_argument(
-        "--input",
-        required=True,
-        help="Input file or directory (csv, parquet, ndjson/jsonl).",
-    )
-    preprocess.add_argument(
-        "--output",
-        required=True,
-        help="Output Parquet path.",
-    )
-    preprocess.add_argument(
-        "--input-format",
-        choices=["parquet", "csv", "ndjson", "jsonl"],
-        default=None,
-        help="Optional explicit input format.",
-    )
 
-    agent = sub.add_parser("agent", help="LLM Agent Framework for autonomous task execution")
-    agent_sub = agent.add_subparsers(dest="agent_command", required=True)
+_MODELS_SUBCOMMANDS_WITH_DB = {
+    "register": _cmd_models_register_or_version,
+    "version": _cmd_models_register_or_version,
+    "transition": _cmd_models_transition,
+    "list": _cmd_models_list,
+    "compare": _cmd_models_compare,
+}
 
-    agent_interactive = agent_sub.add_parser("interactive", help="Run agent in interactive mode")
-    agent_interactive.add_argument(
-        "--agent-type",
-        choices=["fraud-detection", "model-training", "generic"],
-        default="generic",
-        help="Type of agent to use",
-    )
 
-    agent_run = agent_sub.add_parser("run", help="Run agent on a single task")
-    agent_run.add_argument(
-        "--agent-type",
-        choices=["fraud-detection", "model-training", "generic"],
-        default="generic",
-        help="Type of agent to use",
-    )
-    agent_run.add_argument("--task", required=True, help="Task description")
-    agent_run.add_argument("--context", help="Context as JSON string")
-    agent_run.add_argument("--verbose", action="store_true", help="Enable verbose output")
+def _cmd_models(args: argparse.Namespace) -> int:
+    handler_with_db = _MODELS_SUBCOMMANDS_WITH_DB.get(args.subcommand)
+    if handler_with_db is not None:
+        db = _sync_session_factory()()
+        return handler_with_db(db, args)
 
-    agent_sub.add_parser("list-tools", help="List available tools")
+    if args.subcommand == "load-metadata":
+        return _cmd_models_load_metadata(args)
 
+    return 1
+
+
+def _cmd_llm(args: argparse.Namespace, llm_parser: argparse.ArgumentParser) -> int:
+    if hasattr(args, "func"):
+        args.func(args)
+        return 0
+    llm_parser.print_help()
+    return 1
+
+
+_COMMAND_DISPATCH = {
+    "ingest": lambda args, config_parser, llm_parser: _cmd_ingest(args),
+    "config": lambda args, config_parser, llm_parser: _cmd_config(args, config_parser),
+    "quickstart": lambda args, config_parser, llm_parser: _cmd_quickstart(args),
+    "preprocess-backfill": lambda args, config_parser, llm_parser: _cmd_preprocess_backfill(args),
+    "models": lambda args, config_parser, llm_parser: _cmd_models(args),
+    "llm": lambda args, config_parser, llm_parser: _cmd_llm(args, llm_parser),
+}
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser, config_parser, llm_parser = _build_parser()
     args = parser.parse_args(argv)
 
     # Wire the top-level --env flag into ASTROML_ENV so downstream loaders
@@ -269,309 +639,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.env and "ASTROML_ENV" not in os.environ:
         os.environ["ASTROML_ENV"] = args.env
 
-    if args.command == "ingest":
-        store = StateStore(path=args.state_file) if args.state_file else StateStore()
-        service = IngestionService(state_store=store)
-
-        # Example fetch/process functions; in real usage, users would customize/import
-        def fetch_fn(ledger_id: int):
-            # Placeholder fetch, replace with real data retrieval
-            return {"ledger": ledger_id, "data": f"payload-{ledger_id}"}
-
-        def process_fn(ledger_id: int, payload: dict):
-            # Placeholder processing; replace with DB writes or other side effects
-            # For CLI visibility we do minimal printing; real apps would use logging
-            print(f"processed ledger {ledger_id}")
-
-        result = service.ingest(
-            start_ledger=args.start,
-            end_ledger=args.end,
-            fetch_fn=fetch_fn,
-            process_fn=process_fn,
-        )
-        print(
-            json.dumps(
-                {
-                    "attempted": result.attempted,
-                    "processed": result.processed,
-                    "skipped": result.skipped,
-                },
-                indent=2,
-            )
-        )
-        return 0
-
-    if args.command == "config":
-        if args.dry_run:
-            from astroml.config_dry_run import run_dry_run
-
-            result = run_dry_run(
-                config_path=args.config,
-                verbose=args.verbose,
-            )
-            if not args.verbose:
-                if result["valid"]:
-                    print("Configuration validation: PASS")
-                else:
-                    print("Configuration validation: FAIL")
-                    for r in result["results"]:
-                        for error in r.errors:
-                            print(f"  ERROR: {error}")
-                        for warning in r.warnings:
-                            print(f"  WARN: {warning}")
-            return result["exit_code"]
-
-        if args.print_db:
-            try:
-                db_config = load_database_config(args.config)
-                print("Effective database configuration:")
-                print(
-                    json.dumps(
-                        {
-                            "host": db_config.host,
-                            "port": db_config.port,
-                            "name": db_config.name,
-                            "user": db_config.user,
-                            "password": "***" if db_config.password else "",
-                            "url": db_config.masked_url,
-                        },
-                        indent=2,
-                    )
-                )
-                return 0
-            except FileNotFoundError as e:
-                print(f"Error: {e}")
-                return 1
-            except Exception as e:
-                print(f"Error loading config: {e}")
-                return 1
-        else:
-            config.print_help()
-            return 1
-
-    if args.command == "quickstart":
-        from .quick_start import QuickStartConfig, run_quickstart
-
-        # Update config with CLI arguments
-        QuickStartConfig.NUM_SAMPLE_LEDGERS = args.num_ledgers
-        QuickStartConfig.NUM_ACCOUNTS = args.num_accounts
-        QuickStartConfig.TRAIN_EPOCHS = args.epochs
-        QuickStartConfig.RANDOM_SEED = args.seed
-
-        return run_quickstart()
-
-    if args.command == "preprocess-backfill":
-        from .preprocessing.ledger_backfill import preprocess_to_parquet
-
-        output_path = preprocess_to_parquet(
-            input_path=args.input,
-            output_path=args.output,
-            input_format=args.input_format,
-        )
-        print(json.dumps({"output": str(output_path)}, indent=2))
-        return 0
-
-    if args.command == "models":
-        db = _sync_session_factory()()
-
-        if args.subcommand == "register" or args.subcommand == "version":
-            name = args.name if args.subcommand == "register" else args.model_name
-            metrics = json.loads(args.metrics) if args.metrics else None
-            existing = db.scalar(
-                select(ModelRegistry).where(
-                    ModelRegistry.name == name, ModelRegistry.version == args.version
-                )
-            )
-            if existing:
-                print(f"Error: Model '{name}' version '{args.version}' already exists")
-                return 1
-
-            entry = ModelRegistry(
-                name=name,
-                version=args.version,
-                path=args.path,
-                owner=args.owner,
-                tags=args.tags,
-                mlflow_run_id=args.mlflow_run_id,
-                metrics=metrics,
-                status=args.status,
-            )
-            db.add(entry)
-            db.commit()
-            db.refresh(entry)
-            print(
-                json.dumps(
-                    {
-                        "id": entry.id,
-                        "name": entry.name,
-                        "version": entry.version,
-                        "path": entry.path,
-                        "owner": entry.owner,
-                        "tags": entry.tags,
-                        "mlflow_run_id": entry.mlflow_run_id,
-                        "status": entry.status,
-                        "created_at": entry.created_at.isoformat(),
-                    },
-                    indent=2,
-                )
-            )
-            return 0
-
-        elif args.subcommand == "transition":
-            entry = db.scalar(
-                select(ModelRegistry).where(
-                    ModelRegistry.name == args.model_name, ModelRegistry.version == args.version
-                )
-            )
-            if not entry:
-                print(f"Error: Model '{args.model_name}' version '{args.version}' not found")
-                return 1
-
-            if args.stage == "active":
-                db.execute(
-                    update(ModelRegistry)
-                    .where(ModelRegistry.name == args.model_name, ModelRegistry.id != entry.id)
-                    .values(status="inactive")
-                )
-
-            entry.status = args.stage
-            db.commit()
-            db.refresh(entry)
-            print(
-                json.dumps(
-                    {
-                        "id": entry.id,
-                        "name": entry.name,
-                        "version": entry.version,
-                        "status": entry.status,
-                    },
-                    indent=2,
-                )
-            )
-            return 0
-
-        elif args.subcommand == "list":
-            query = select(ModelRegistry)
-            if args.name:
-                query = query.where(ModelRegistry.name == args.name)
-            if args.status:
-                query = query.where(ModelRegistry.status == args.status)
-            if args.owner:
-                query = query.where(ModelRegistry.owner == args.owner)
-            if args.tags:
-                for tag in args.tags:
-                    query = query.where(ModelRegistry.tags.contains([tag]))
-
-            # Count total
-            count_query = select(func.count()).select_from(query.subquery())
-            total = db.scalar(count_query) or 0
-
-            # Paginate
-            offset = (args.page - 1) * args.page_size
-            query = (
-                query.order_by(ModelRegistry.created_at.desc()).offset(offset).limit(args.page_size)
-            )
-            rows = db.scalars(query).all()
-
-            result = {
-                "page": args.page,
-                "page_size": args.page_size,
-                "total": total,
-                "data": [
-                    {
-                        "id": row.id,
-                        "name": row.name,
-                        "version": row.version,
-                        "path": row.path,
-                        "owner": row.owner,
-                        "tags": row.tags,
-                        "mlflow_run_id": row.mlflow_run_id,
-                        "status": row.status,
-                        "created_at": row.created_at.isoformat(),
-                    }
-                    for row in rows
-                ],
-            }
-            print(json.dumps(result, indent=2))
-            return 0
-
-        elif args.subcommand == "compare":
-            v1 = db.scalar(
-                select(ModelRegistry).where(
-                    ModelRegistry.name == args.model_name, ModelRegistry.version == args.version1
-                )
-            )
-            v2 = db.scalar(
-                select(ModelRegistry).where(
-                    ModelRegistry.name == args.model_name, ModelRegistry.version == args.version2
-                )
-            )
-
-            if not v1:
-                print(f"Error: Model '{args.model_name}' version '{args.version1}' not found")
-                return 1
-            if not v2:
-                print(f"Error: Model '{args.model_name}' version '{args.version2}' not found")
-                return 1
-
-            comparison = {
-                "models": [
-                    {
-                        "id": v1.id,
-                        "name": v1.name,
-                        "version": v1.version,
-                        "mlflow_run_id": v1.mlflow_run_id,
-                        "metrics": v1.metrics,
-                    },
-                    {
-                        "id": v2.id,
-                        "name": v2.name,
-                        "version": v2.version,
-                        "mlflow_run_id": v2.mlflow_run_id,
-                        "metrics": v2.metrics,
-                    },
-                ],
-                "metrics_diff": {},
-            }
-
-            # Show metric differences
-            all_metrics = set()
-            if v1.metrics:
-                all_metrics.update(v1.metrics.keys())
-            if v2.metrics:
-                all_metrics.update(v2.metrics.keys())
-
-            for key in all_metrics:
-                val1 = v1.metrics.get(key) if v1.metrics else None
-                val2 = v2.metrics.get(key) if v2.metrics else None
-                comparison["metrics_diff"][key] = {"version1": val1, "version2": val2}
-
-            print(json.dumps(comparison, indent=2))
-            return 0
-
-        elif args.subcommand == "load-metadata":
-            # Use MLflowTracker to load metadata
-            try:
-                from .tracking.mlflow_tracker import MLflowTracker
-
-                tracker = MLflowTracker(enabled=True)
-                metadata = tracker.load_run_metadata(args.model_name, args.version)
-                if metadata:
-                    print(json.dumps(metadata, indent=2, default=str))
-                    return 0
-                else:
-                    print("No metadata found")
-                    return 1
-            except ImportError as e:
-                print(f"Error: MLflow not available: {e}")
-                return 1
-
-    if args.command == "llm":
-        if hasattr(args, "func"):
-            args.func(args)
-            return 0
-        llm_parser.print_help()
-        return 1
+    handler = _COMMAND_DISPATCH.get(args.command)
+    if handler is not None:
+        return handler(args, config_parser, llm_parser)
 
     parser.print_help()
     return 1

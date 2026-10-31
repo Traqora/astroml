@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Optional, Union, Callable
+from typing import Any, Callable, Dict, List, Optional, Union
+
 """
 Image preprocessing and format conversion for multimodal LLM inputs.
 
@@ -39,7 +40,7 @@ class ImagePreprocessor:
     Handles resizing, format conversion, quality optimization.
     """
 
-    def __init__(self, config -> Any: ImageConfig | None = None):
+    def __init__(self, config: ImageConfig | None = None) -> None:
         """Initialize image preprocessor."""
         self.config = config or ImageConfig()
 

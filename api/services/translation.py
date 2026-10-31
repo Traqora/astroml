@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import threading
 import time
@@ -25,6 +26,8 @@ try:
 except ImportError:
     babel = None
     Locale = None
+
+logger = logging.getLogger(__name__)
 
 
 SUPPORTED_LANGUAGES: Dict[str, Dict[str, str]] = {
@@ -84,7 +87,12 @@ class TranslationCache:
             try:
                 self._redis_client = redis.Redis.from_url(redis_url, decode_responses=True)
                 self._redis_client.ping()
-            except Exception:
+            except Exception:  # noqa: BLE001 - Redis is an optional cache layer
+                logger.warning(
+                    "Redis unavailable for translation cache (%s); using in-memory cache only",
+                    redis_url,
+                    exc_info=True,
+                )
                 self._redis_client = None
 
     def _make_key(self, source_text: str, target_lang: str, source_lang: str = "auto") -> str:
@@ -112,8 +120,8 @@ class TranslationCache:
                         self._enforce_memory_limit()
                     self._stats.hits += 1
                     return value
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001 - Redis is best-effort; fall through to a cache miss
+                logger.warning("Redis cache read failed for key %s", key, exc_info=True)
 
         self._stats.misses += 1
         return None
@@ -132,8 +140,8 @@ class TranslationCache:
         if self._redis_client:
             try:
                 self._redis_client.setex(key, self.ttl, translation)
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001 - Redis is best-effort; memory cache already has it
+                logger.warning("Redis cache write failed for key %s", key, exc_info=True)
 
     def _enforce_memory_limit(self) -> None:
         if len(self._memory_cache) > self.max_memory_entries:
@@ -158,8 +166,10 @@ class TranslationCache:
                 keys = self._redis_client.keys("trans:*")
                 if keys:
                     self._redis_client.delete(*keys)
-            except Exception:
-                pass
+            except (
+                Exception
+            ):  # noqa: BLE001 - Redis is best-effort; memory cache is already cleared
+                logger.warning("Redis cache clear failed", exc_info=True)
         return count
 
 
@@ -172,7 +182,10 @@ class LocaleFormatter:
         if babel and Locale:
             try:
                 self._locale = Locale.parse(locale_code)
-            except Exception:
+            except Exception:  # noqa: BLE001 - invalid locale code falls back to en_US
+                logger.warning(
+                    "Invalid locale code %r; falling back to en_US", locale_code, exc_info=True
+                )
                 self._locale = Locale.parse("en_US")
 
     @property
@@ -186,7 +199,8 @@ class LocaleFormatter:
             return dt.strftime("%Y-%m-%d")
         try:
             return babel.dates.format_date(dt, format=format, locale=self.locale)
-        except Exception:
+        except Exception:  # noqa: BLE001 - fall back to ISO formatting on any babel failure
+            logger.debug("babel format_date failed for locale %s", self.locale, exc_info=True)
             return dt.strftime("%Y-%m-%d")
 
     def format_datetime(self, dt: datetime, format: str = "medium") -> str:
@@ -194,7 +208,8 @@ class LocaleFormatter:
             return dt.strftime("%Y-%m-%d %H:%M:%S")
         try:
             return babel.dates.format_datetime(dt, format=format, locale=self.locale)
-        except Exception:
+        except Exception:  # noqa: BLE001 - fall back to ISO formatting on any babel failure
+            logger.debug("babel format_datetime failed for locale %s", self.locale, exc_info=True)
             return dt.strftime("%Y-%m-%d %H:%M:%S")
 
     def format_number(self, value: float, decimals: int = 2) -> str:
@@ -202,7 +217,8 @@ class LocaleFormatter:
             return f"{value:,.{decimals}f}"
         try:
             return babel.numbers.format_number(value, locale=self.locale)
-        except Exception:
+        except Exception:  # noqa: BLE001 - fall back to plain formatting on any babel failure
+            logger.debug("babel format_number failed for locale %s", self.locale, exc_info=True)
             return f"{value:,.{decimals}f}"
 
     def format_currency(self, amount: float, currency: str = "USD") -> str:
@@ -210,7 +226,13 @@ class LocaleFormatter:
             return f"{currency} {amount:,.2f}"
         try:
             return babel.numbers.format_currency(amount, currency, locale=self.locale)
-        except Exception:
+        except Exception:  # noqa: BLE001 - fall back to plain formatting on any babel failure
+            logger.warning(
+                "babel format_currency failed for currency=%s locale=%s",
+                currency,
+                self.locale,
+                exc_info=True,
+            )
             return f"{currency} {amount:,.2f}"
 
     def format_percent(self, value: float, decimals: int = 1) -> str:
@@ -218,7 +240,8 @@ class LocaleFormatter:
             return f"{value * 100:.{decimals}f}%"
         try:
             return babel.numbers.format_percent(value, locale=self.locale)
-        except Exception:
+        except Exception:  # noqa: BLE001 - fall back to plain formatting on any babel failure
+            logger.debug("babel format_percent failed for locale %s", self.locale, exc_info=True)
             return f"{value * 100:.{decimals}f}%"
 
 
@@ -435,7 +458,10 @@ Return ONLY the translated text, no explanations or metadata."""
                     if cursor == 0:
                         break
                 return deleted_count > 0
-            except Exception:
+            except (
+                Exception
+            ):  # noqa: BLE001 - Redis is best-effort; memory cache is already cleared
+                logger.warning("Redis cache invalidation failed for key hash", exc_info=True)
                 return False
         return len(keys_to_delete) > 0 if "keys_to_delete" in locals() else False
 

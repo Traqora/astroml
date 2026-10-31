@@ -1,0 +1,95 @@
+{
+  "summary": {
+    "original_transactions": 1,
+    "sybil_transactions": 0,
+    "wash_loop_transactions": 6,
+    "injected_transactions": 6,
+    "total_transactions": 7
+  },
+  "augmented": [
+    {
+      "source": "A",
+      "destination": "B",
+      "amount": 10.0,
+      "timestamp": "2024-01-01T00:00:00Z"
+    },
+    {
+      "synthetic_tx_id": 1,
+      "source": "wash_0_0",
+      "destination": "wash_0_1",
+      "amount": 76.9118936,
+      "timestamp": "2024-01-01T00:00:01Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "wash_trading_loop",
+      "fraud_metadata": {
+        "loop": 0,
+        "round": 0
+      }
+    },
+    {
+      "synthetic_tx_id": 2,
+      "source": "wash_0_1",
+      "destination": "wash_0_2",
+      "amount": 77.018726,
+      "timestamp": "2024-01-01T00:00:02Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "wash_trading_loop",
+      "fraud_metadata": {
+        "loop": 0,
+        "round": 0
+      }
+    },
+    {
+      "synthetic_tx_id": 3,
+      "source": "wash_0_2",
+      "destination": "wash_0_0",
+      "amount": 76.76595,
+      "timestamp": "2024-01-01T00:00:03Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "wash_trading_loop",
+      "fraud_metadata": {
+        "loop": 0,
+        "round": 0
+      }
+    },
+    {
+      "synthetic_tx_id": 4,
+      "source": "wash_0_0",
+      "destination": "wash_0_1",
+      "amount": 73.125978,
+      "timestamp": "2024-01-01T00:00:04Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "wash_trading_loop",
+      "fraud_metadata": {
+        "loop": 0,
+        "round": 1
+      }
+    },
+    {
+      "synthetic_tx_id": 5,
+      "source": "wash_0_1",
+      "destination": "wash_0_2",
+      "amount": 75.4141225,
+      "timestamp": "2024-01-01T00:00:05Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "wash_trading_loop",
+      "fraud_metadata": {
+        "loop": 0,
+        "round": 1
+      }
+    },
+    {
+      "synthetic_tx_id": 6,
+      "source": "wash_0_2",
+      "destination": "wash_0_0",
+      "amount": 74.6568633,
+      "timestamp": "2024-01-01T00:00:06Z",
+      "synthetic_fraud": true,
+      "fraud_pattern": "wash_trading_loop",
+      "fraud_metadata": {
+        "loop": 0,
+        "round": 1
+      }
+    }
+  ]
+}

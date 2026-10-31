@@ -101,3 +101,11 @@ Snapshots record `recovery_objective_seconds` and automatically compute whether 
 ## Testing recovery scenarios
 
 The `DisasterRecoveryManager.test_recovery_scenario` method helps validate an incident plan against a snapshot before executing the recovery in production.
+
+## Drills
+
+The database half of this plan is only trustworthy if it is rehearsed.
+Follow the [Disaster-Recovery Drill Runbook](runbooks/disaster_recovery_drill.md)
+to take a backup, restore it into a scratch database, verify it, and record
+the achieved RTO/RPO. The step-by-step restore commands live in the
+[PostgreSQL Disaster-Recovery Runbook](runbooks/postgres_disaster_recovery.md).

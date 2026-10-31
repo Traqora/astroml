@@ -6,6 +6,7 @@ import time
 
 from fastapi.testclient import TestClient
 
+from astroml.llm.cost.optimizer import select_optimal_model
 from astroml.llm.metrics import (
     LLM_COST_USD_TOTAL,
     LLM_REQUEST_LATENCY_SECONDS,
@@ -16,6 +17,10 @@ from astroml.llm.tracker import global_tracker
 
 class TestLLMCostAware:
     """Tests to ensure LLM usage stays within cost and latency budgets."""
+
+    def test_budget_routing_switches_at_eighty_percent(self) -> None:
+        assert select_optimal_model(8.0, 10.0, "gpt-4", 500, "medium") == "gpt-3.5-turbo"
+        assert select_optimal_model(7.9, 10.0, "gpt-4", 500, "medium") == "gpt-4"
 
     def test_cost_threshold_not_exceeded(self, client: TestClient):
         baseline_cost = global_tracker.total_cost

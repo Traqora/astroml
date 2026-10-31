@@ -332,3 +332,119 @@ class TestGraphValidation:
         """Test validate_graph failure when checks fail."""
         with pytest.raises(GraphValidationError):
             validate_graph(graph_with_self_loops, allow_self_loops=False, verbose=False)
+
+
+class TestValidateGraphVerboseLogging:
+    """Tests for validate_graph(verbose=True)'s structured logging output.
+
+    These cover the regression this module is prone to: the verbose report
+    must go through the standard library logger (so callers can control or
+    suppress it) and never leak to stdout via print().
+    """
+
+    @pytest.fixture
+    def valid_graph_edges(self):
+        return pd.DataFrame(
+            {
+                "source": ["A", "B", "C", "D"],
+                "target": ["B", "C", "D", "A"],
+                "weight": [1.0, 2.0, 3.0, 4.0],
+            }
+        )
+
+    def test_verbose_emits_no_stdout(self, valid_graph_edges, capsys):
+        """verbose=True must not print anything to stdout."""
+        validate_graph(valid_graph_edges, weight_col="weight", verbose=True)
+        captured = capsys.readouterr()
+        assert captured.out == ""
+
+    def test_verbose_logs_report_at_info(self, valid_graph_edges, caplog):
+        """The full validation report is logged at INFO with the same content
+        the old print()-based report carried."""
+        with caplog.at_level("INFO", logger="astroml.features.graph_validation"):
+            report = validate_graph(valid_graph_edges, weight_col="weight", verbose=True)
+
+        info_records = [r for r in caplog.records if r.levelname == "INFO"]
+        assert len(info_records) == 1
+        message = info_records[0].getMessage()
+
+        assert "GRAPH VALIDATION REPORT" in message
+        summary = report["summary"]
+        assert f"Nodes: {summary['num_nodes']}" in message
+        assert f"Edges: {summary['num_edges']}" in message
+        assert f"Density: {summary['density']:.6f}" in message
+        assert "Weight Statistics:" in message
+        assert "Edge Checks:" in message
+        assert "Validation Status: PASSED" in message
+
+    def test_verbose_omits_weight_stats_without_weight_col(self, valid_graph_edges, caplog):
+        """Without weight_col, the report must not mention weight statistics."""
+        with caplog.at_level("INFO", logger="astroml.features.graph_validation"):
+            validate_graph(valid_graph_edges, verbose=True)
+
+        info_records = [r for r in caplog.records if r.levelname == "INFO"]
+        assert len(info_records) == 1
+        assert "Weight Statistics:" not in info_records[0].getMessage()
+
+    def test_verbose_warns_on_isolated_nodes(self, valid_graph_edges, caplog):
+        """Isolated nodes must produce a WARNING in addition to the INFO report."""
+        all_nodes = {"A", "B", "C", "D", "E", "F"}
+        with caplog.at_level("INFO", logger="astroml.features.graph_validation"):
+            validate_graph(
+                valid_graph_edges,
+                all_nodes=all_nodes,
+                allow_isolated=True,
+                verbose=True,
+            )
+
+        warning_records = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert any("isolated node" in r.getMessage() for r in warning_records)
+        info_records = [r for r in caplog.records if r.levelname == "INFO"]
+        assert "Isolated Nodes: 2" in info_records[0].getMessage()
+
+    def test_verbose_warns_on_duplicate_edges(self, caplog):
+        """Duplicate edges must produce a WARNING when allowed but present."""
+        edges = pd.DataFrame(
+            {
+                "source": ["A", "B", "A", "B"],
+                "target": ["B", "C", "B", "C"],
+            }
+        )
+        with caplog.at_level("INFO", logger="astroml.features.graph_validation"):
+            validate_graph(edges, allow_duplicates=True, verbose=True)
+
+        warning_records = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert any("duplicate edge" in r.getMessage() for r in warning_records)
+
+    def test_verbose_reports_passed_status_when_all_checks_allowed(self, caplog):
+        """When every check that would otherwise fail is explicitly allowed,
+        validate_graph always returns validation_passed=True (any check that
+        is *not* allowed raises GraphValidationError before the verbose report
+        is ever reached, so the "FAILED" status text is unreachable by
+        construction). This pins that existing behavior: no FAILED warning
+        fires, and the report text says PASSED.
+        """
+        edges = pd.DataFrame(
+            {
+                "source": ["A", "A", "B"],
+                "target": ["A", "A", "C"],
+            }
+        )
+        with caplog.at_level("INFO", logger="astroml.features.graph_validation"):
+            report = validate_graph(
+                edges, allow_self_loops=True, allow_duplicates=True, verbose=True
+            )
+
+        assert report["validation_passed"] is True
+        warning_records = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert not any("FAILED" in r.getMessage() for r in warning_records)
+        info_records = [r for r in caplog.records if r.levelname == "INFO"]
+        assert "Validation Status: PASSED" in info_records[0].getMessage()
+
+    def test_verbose_no_warnings_on_clean_graph(self, valid_graph_edges, caplog):
+        """A graph with no issues should log only the INFO report, no WARNINGs."""
+        with caplog.at_level("INFO", logger="astroml.features.graph_validation"):
+            validate_graph(valid_graph_edges, weight_col="weight", verbose=True)
+
+        warning_records = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert warning_records == []

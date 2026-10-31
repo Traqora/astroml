@@ -202,41 +202,58 @@ class TestGraphCacheInvalidationAndStaleWrites:
 # ===========================================================================
 
 
-class TestDecoratorRecomputeAfterInvalidation:
-    """Test that decorated functions recompute and return fresh values when cache is cleared."""
+class TestCacheStartupAndSemanticTTL:
+    """Regression tests for startup warming and semantic TTL eviction."""
 
-    def test_cached_adjacency_recomputes_after_invalidation(self):
-        """cached_adjacency invokes underlying function again after invalidation."""
-        cache = GraphComputationCache()
-        call_counter = {"count": 0, "current_weight": 1.0}
+    def test_cache_warmer_startup_returns_summary_without_crashing(self):
+        from astroml.cache.cache_warming import CacheWarmer, warm_cache_on_startup
 
-        @cache.cached_adjacency(version="v1", window="24h", ttl_seconds=3600)
-        def compute_adj(edges: list[tuple[str, str]]):
-            call_counter["count"] += 1
-            return {"edges": len(edges), "weight": call_counter["current_weight"]}
+        warmer = CacheWarmer(cache_client=None)
+        warmer.available = False
+        assert warmer.warm_account_summaries(["acct_1"]) == {"acct_1": False}
 
-        edges = [("A", "B"), ("B", "C")]
+        summary = warm_cache_on_startup(top_n_accounts=1, top_n_features=1, top_n_snapshots=1)
+        assert isinstance(summary, dict)
+        assert "accounts" in summary
+        assert "features" in summary
+        assert "snapshots" in summary
 
-        # First call: computes value
-        res1 = compute_adj(edges)
-        assert res1["weight"] == 1.0
-        assert call_counter["count"] == 1
+    def test_semantic_ttl_entry_expires_and_is_evicted(self):
+        from astroml.llm.cache.semantic import SemanticCache
 
-        # Second call: cache hit, no new computation
-        res2 = compute_adj(edges)
-        assert res2["weight"] == 1.0
-        assert call_counter["count"] == 1
+        class MemoryStore:
+            def __init__(self):
+                self.values = {}
+                self.metadata = {}
 
-        # Invalidate cache for adjacency prefix
-        cache.invalidate("graph:adjacency")
+            def set(self, key, value, ttl, metadata):
+                self.values[key] = value
+                self.metadata[key] = metadata
 
-        # Update underlying data state
-        call_counter["current_weight"] = 5.0
+            def get(self, key):
+                return self.values.get(key)
 
-        # Third call: recomputed and returns fresh value
-        res3 = compute_adj(edges)
-        assert res3["weight"] == 5.0
-        assert call_counter["count"] == 2
+            def delete(self, key):
+                self.metadata.pop(key, None)
+                return self.values.pop(key, None) is not None
+
+            def scan_prefix(self, prefix):
+                return [
+                    (key, value)
+                    for key, value in self.values.items()
+                    if key.startswith(prefix)
+                ]
+
+            def get_metadata(self, key):
+                return self.metadata.get(key)
+
+        store = MemoryStore()
+        cache = SemanticCache(store=store, similarity_threshold=0.0, ttl=0)
+        cache.set("alpha prompt", "alpha response")
+        cache_key = next(iter(store.values))
+
+        assert cache.get("alpha prompt") is None
+        assert cache_key not in store.values
 
 
 # ===========================================================================

@@ -93,7 +93,7 @@ class ArtifactStore(ABC):
 class LocalArtifactStore(ArtifactStore):
     """Local filesystem artifact store."""
 
-    def __init__(self, base_path: str | Path):
+    def __init__(self, base_path: str | Path) -> None:
         """Initialize local artifact store.
 
         Args:

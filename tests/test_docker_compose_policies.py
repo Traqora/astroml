@@ -187,3 +187,14 @@ class TestE2eComposePolicies:
         healthcheck = e2e_compose["services"]["api-e2e"]["healthcheck"]
         probe = " ".join(str(part) for part in healthcheck.get("test", []))
         assert "/healthz/ready" in probe
+
+    def test_e2e_postgres_healthcheck_targets_the_actual_database(self, e2e_compose: dict):
+        """pg_isready with no -d only proves the server process accepted a TCP
+        connection, not that the astroml_test database api-e2e connects to
+        actually exists -- a missing/misconfigured DB would still report
+        healthy and let api-e2e start against a database it can't use.
+        """
+        postgres = e2e_compose["services"]["postgres-e2e"]
+        probe = " ".join(str(part) for part in postgres["healthcheck"].get("test", []))
+        expected_db = postgres["environment"]["POSTGRES_DB"]
+        assert f"-d {expected_db}" in probe

@@ -13,7 +13,9 @@ class BlockchainContextBuilder:
     string that fits within a token budget, compressing older days first.
     """
 
-    def __init__(self, token_limit -> Any: int = 4000, recent_detailed_days: int = 7, group_size: int = 7):
+    def __init__(
+        self, token_limit: int = 4000, recent_detailed_days: int = 7, group_size: int = 7
+    ) -> None:
         self.token_limit = token_limit
         self.recent_detailed_days = recent_detailed_days
         self.group_size = group_size
@@ -59,7 +61,7 @@ class BlockchainContextBuilder:
         group_size = group_size or self.group_size
         lines = []
         for i in range(0, len(summaries), group_size):
-            group = summaries[i: i + group_size]
+            group = summaries[i : i + group_size]
             start, end = group[0]["day"], group[-1]["day"]
             tx_total = sum(s["transaction_count"] for s in group)
             volume_total = sum(s["total_volume"] for s in group)

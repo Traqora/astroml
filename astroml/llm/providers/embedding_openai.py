@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """OpenAI embedding provider.
 
 Uses ``text-embedding-3-small`` (1536-dim) by default.  Falls back
@@ -19,6 +18,8 @@ Trade-offs
 from __future__ import annotations
 
 import os
+
+from astroml.utils.exceptions import AstroMLError
 
 from .embedding_base import EmbeddingError, EmbeddingProvider
 

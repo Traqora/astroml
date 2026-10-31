@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from astroml.api.models import FraudAlert
 from astroml.db.schema import Account, Transaction
+from astroml.db.session import PageParams, paginate_offset
 
 # ---------------------------------------------------------------------------
 # Async DB session dependency
@@ -116,8 +117,7 @@ router = APIRouter()
 
 @router.get("/api/v1/accounts", response_model=AccountListResponse, tags=["accounts"])
 async def list_accounts(
-    page: int = Query(default=1, ge=1, description="Page number (1-based)"),
-    page_size: int = Query(default=20, ge=1, le=100, description="Items per page"),
+    page_params: PageParams = Depends(),
     public_key: str | None = Query(default=None, description="Filter by account public key"),
     date_from: datetime | None = Query(
         default=None, description="Filter accounts updated on or after this datetime (ISO 8601)"
@@ -142,8 +142,7 @@ async def list_accounts(
     total: int = (await db.execute(count_stmt)).scalar_one()
 
     # Fetch the requested page
-    offset = (page - 1) * page_size
-    paged_stmt = stmt.offset(offset).limit(page_size)
+    paged_stmt = stmt.offset(page_params.offset).limit(page_params.limit)
     rows = (await db.execute(paged_stmt)).scalars().all()
 
     items = [
@@ -156,7 +155,10 @@ async def list_accounts(
         for row in rows
     ]
 
-    return AccountListResponse(items=items, total=total, page=page, page_size=page_size)
+    page = paginate_offset(items, total, page_params)
+    return AccountListResponse(
+        items=page.items, total=page.total, page=page.page, page_size=page.page_size
+    )
 
 
 @router.get("/api/v1/accounts/{public_key}", response_model=AccountItem, tags=["accounts"])
@@ -186,8 +188,7 @@ async def get_account(
 )
 async def get_account_transactions(
     public_key: str,
-    page: int = Query(default=1, ge=1, description="Page number (1-based)"),
-    page_size: int = Query(default=20, ge=1, le=100, description="Items per page"),
+    page_params: PageParams = Depends(),
     db: AsyncSession = Depends(get_db),
 ) -> TransactionListResponse:
     """Get paginated transactions for an account, ordered by created_at desc."""
@@ -196,12 +197,18 @@ async def get_account_transactions(
     count_stmt = select(func.count()).select_from(base_stmt.subquery())
     total: int = (await db.execute(count_stmt)).scalar_one()
 
-    offset = (page - 1) * page_size
-    paged_stmt = base_stmt.order_by(Transaction.created_at.desc()).offset(offset).limit(page_size)
+    paged_stmt = (
+        base_stmt.order_by(Transaction.created_at.desc())
+        .offset(page_params.offset)
+        .limit(page_params.limit)
+    )
     rows = (await db.execute(paged_stmt)).scalars().all()
 
     items = [TransactionItem.model_validate(row) for row in rows]
-    return TransactionListResponse(items=items, total=total, page=page, page_size=page_size)
+    page = paginate_offset(items, total, page_params)
+    return TransactionListResponse(
+        items=page.items, total=page.total, page=page.page, page_size=page.page_size
+    )
 
 
 @router.get(

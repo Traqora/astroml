@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { get, post } from '../../api/client'
 import './Discussions.css'
 
@@ -116,6 +116,30 @@ export function Discussions() {
     setUserReputation(null)
   }
 
+  function handleAuthorKeyDown(e: React.KeyboardEvent, author: string) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      handleAuthorClick(author)
+    }
+  }
+
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!(selectedAuthor && userReputation)) return
+
+    closeButtonRef.current?.focus()
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        closeReputationModal()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [selectedAuthor, userReputation])
+
   const filteredDiscussions = selectedCategory
     ? discussions.filter(d => d.category === selectedCategory)
     : discussions
@@ -211,7 +235,13 @@ export function Discussions() {
               <p className="discussion-body">{discussion.body}</p>
 
               <div className="discussion-meta">
-                <span className="author" onClick={() => handleAuthorClick(discussion.author)}>
+                <span
+                  className="author"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleAuthorClick(discussion.author)}
+                  onKeyDown={(e) => handleAuthorKeyDown(e, discussion.author)}
+                >
                   By <strong>{discussion.author}</strong>
                 </span>
                 <span className="comments">
@@ -228,10 +258,16 @@ export function Discussions() {
 
       {selectedAuthor && userReputation && (
         <div className="reputation-modal" onClick={closeReputationModal}>
-          <div className="reputation-card" onClick={(e) => e.stopPropagation()}>
-            <button className="close-btn" onClick={closeReputationModal}>×</button>
+          <div
+            className="reputation-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reputation-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button ref={closeButtonRef} className="close-btn" onClick={closeReputationModal} aria-label="Close">×</button>
             
-            <h3>{userReputation.username}</h3>
+            <h3 id="reputation-modal-title">{userReputation.username}</h3>
             
             <div className="reputation-score">
               <div className="score-value">{userReputation.reputationScore}</div>

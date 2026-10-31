@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """FastAPI router for automated model validation and compliance verification."""
 
 from __future__ import annotations
@@ -10,6 +9,7 @@ import numpy as np
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
+from astroml.utils.exceptions import AstroMLError
 from astroml.validation.compliance import ComplianceChecker
 from astroml.validation.model_validator import ModelValidator
 from astroml.validation.robustness import ModelRobustnessEvaluator
@@ -74,9 +74,7 @@ async def run_validation_gate(payload: ValidateModelRequest) -> dict[str, Any]:
         X = np.array(payload.X_test, dtype=np.float32)
         y = np.array(payload.y_test, dtype=np.float32)
         sens = (
-            np.array(payload.sensitive_features)
-            if payload.sensitive_features is not None
-            else None
+            np.array(payload.sensitive_features) if payload.sensitive_features is not None else None
         )
 
         # Rebuild linear model or weights dict

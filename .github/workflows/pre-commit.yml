@@ -29,5 +29,10 @@ jobs:
       - name: Run pre-commit
         run: pre-commit run --all-files
 
-      - name: Run secrets scan
-        run: detect-secrets scan --baseline .secrets.baseline --all-files
+      # `detect-secrets scan --baseline` rewrites the baseline and exits 0,
+      # so running it directly is not a gate. The checked-in gate compares a
+      # fresh scan against the audited baseline and fails on new/unaudited
+      # secrets; pre-commit also runs it, but keep an explicit step so a
+      # skipped local hook cannot silently disable enforcement.
+      - name: Run secrets gate
+        run: python -m astroml.ci.secrets_gate --baseline .secrets.baseline --root .

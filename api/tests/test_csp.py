@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.middleware.csp import CSPMiddleware
+from api.middleware.https import HSTSMiddleware, HTTPSRedirectMiddleware
 
 
 @pytest.fixture
@@ -242,3 +243,48 @@ def test_csp_report_uri() -> None:
 
     csp = response.headers["Content-Security-Policy"]
     assert "report-uri https://example.com/csp-report" in csp
+
+
+def test_csp_missing_on_https_redirect_response() -> None:
+    """Regression test for a real gap in the production middleware stack.
+
+    ``api/app.py`` registers middleware in this order: ``CSPMiddleware``,
+    then ``HTTPSRedirectMiddleware``, then ``HSTSMiddleware``. Starlette
+    wraps middleware so the *first* ``add_middleware`` call ends up
+    *innermost* — meaning a plain-HTTP request is intercepted by
+    ``HTTPSRedirectMiddleware`` (which issues a 301 and returns immediately,
+    without calling ``call_next``) *before* it ever reaches
+    ``CSPMiddleware``. The practical effect: the 301 redirect response that
+    tells a browser to upgrade to HTTPS carries **no CSP header at all**.
+
+    This test pins that current, verified behavior down as an explicit
+    regression test (rather than leaving it as an undocumented gap) so a
+    future change to this interaction — in either direction — is a
+    deliberate decision instead of an accidental side effect. If this
+    assertion ever needs to flip (e.g. because CSP is deliberately applied
+    even to redirects for defense-in-depth), that's a conscious call for
+    whoever touches this stack next, not a silent regression.
+    """
+    app = FastAPI()
+
+    @app.get("/")
+    async def root():
+        return {"message": "test"}
+
+    # Mirrors api/app.py's registration order exactly.
+    app.add_middleware(CSPMiddleware, report_only=False, enable_nonce=True)
+    app.add_middleware(HTTPSRedirectMiddleware, enabled=True, allowed_hosts=None)
+    app.add_middleware(HSTSMiddleware, max_age=31536000, enabled=True)
+
+    client = TestClient(app)
+    response = client.get("/", follow_redirects=False)
+
+    assert response.status_code == 301
+    assert "Content-Security-Policy" not in response.headers
+    assert "Content-Security-Policy-Report-Only" not in response.headers
+
+    # Once the client follows the redirect onto HTTPS, CSP is present again
+    # — confirming the gap is specific to the redirect hop, not a general
+    # failure of the middleware to ever fire.
+    https_response = client.get("https://testserver/")
+    assert "Content-Security-Policy" in https_response.headers

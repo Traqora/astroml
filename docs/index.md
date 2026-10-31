@@ -48,6 +48,7 @@ AstroML is a comprehensive machine learning framework for the Stellar network, p
 - [Health Checks](HEALTH_CHECKS.md)
 - [Metrics Reference](METRICS_REFERENCE.md)
 - [Ingestion Monitoring](ingestion-monitoring.md)
+- [PR Size Limits & Exemption Policy](PR_SIZE_LIMITS.md)
 - [Runbooks](runbooks/)
 
 ### API Reference

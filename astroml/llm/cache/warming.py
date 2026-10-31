@@ -1,9 +1,10 @@
-from typing import Any, Dict, List, Optional, Union, Callable
+from typing import Any, Callable, Dict, List, Optional, Union
+
 from .semantic import SemanticCache
 
 
 class CacheWarmingStrategy:
-    def __init__(self, semantic_cache -> Any: SemanticCache):
+    def __init__(self, semantic_cache: SemanticCache) -> None:
         self.cache = semantic_cache
         self.common_templates = [
             "Explain transaction details for high risk withdrawals",

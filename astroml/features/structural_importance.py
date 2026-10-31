@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Structural importance metrics for account nodes.
 
 This module provides various centrality and importance measures for nodes
@@ -16,12 +15,15 @@ Features computed:
 
 from __future__ import annotations
 
+import random
 import warnings
 from collections import defaultdict, deque
 from collections.abc import Iterable
 
 import numpy as np
 import pandas as pd
+
+from astroml.utils.exceptions import AstroMLError
 
 Edge = dict[str, object]
 
@@ -98,16 +100,21 @@ def compute_betweenness_centrality(
             adj[dst].add(src)  # Undirected for betweenness
             node_set.update([src, dst])
 
-    nodes_list = list(node_set)
+    nodes_list = sorted(node_set)
+    sources = nodes_list
+    sample_scale = 1.0
 
     # Sample nodes for large graphs if requested
-    if sample_size is not None and len(nodes_list) > sample_size:
-        np.random.seed(42)  # For reproducibility
-        nodes_list = np.random.choice(nodes_list, sample_size, replace=False).tolist()
+    if sample_size is not None:
+        if sample_size < 1:
+            raise ValueError("sample_size must be >= 1")
+        if len(nodes_list) > sample_size:
+            sources = random.Random(42).sample(nodes_list, sample_size)
+            sample_scale = len(nodes_list) / sample_size
 
     betweenness = defaultdict(float)
 
-    for s in nodes_list:
+    for s in sources:
         # Single-source shortest paths from s
         stack = []
         predecessors = defaultdict(list)
@@ -141,6 +148,12 @@ def compute_betweenness_centrality(
 
             if w != s:
                 betweenness[w] += delta[w]
+
+    # Expand the sampled-source estimate to the full source population before
+    # applying the same normalization used by the exact calculation.
+    if sample_scale != 1.0:
+        for node in betweenness:
+            betweenness[node] *= sample_scale
 
     # Normalize
     if normalized and len(node_set) > 2:
@@ -223,6 +236,7 @@ def compute_pagerank(
     max_iter: int = 100,
     tolerance: float = 1e-6,
     weighted: bool = True,
+    sample_size: int | None = None,
 ) -> pd.Series:
     """Compute PageRank scores for nodes.
 
@@ -233,12 +247,21 @@ def compute_pagerank(
         max_iter: Maximum number of iterations.
         tolerance: Convergence tolerance.
         weighted: If True, use edge weights for transition probabilities.
+        sample_size: If provided, estimate scores with this many deterministic
+            Monte Carlo walks instead of power iteration.
 
     Returns:
         pandas.Series indexed by node with PageRank scores
     """
-    # Build adjacency and out-degree information
-    adj = defaultdict(list)
+    if sample_size is not None and sample_size < 1:
+        raise ValueError("sample_size must be >= 1")
+    if not 0.0 <= alpha < 1.0:
+        raise ValueError("alpha must be in [0, 1)")
+
+    # Build outgoing transitions and incoming edges once. Re-scanning every
+    # edge for every node in every iteration made the exact path O(V * E).
+    adj: dict[str, list[tuple[str, float]]] = defaultdict(list)
+    incoming: dict[str, list[tuple[str, float]]] = defaultdict(list)
     out_degree = defaultdict(float)
     node_set = set() if nodes is None else set(nodes)
 
@@ -249,14 +272,32 @@ def compute_pagerank(
 
         if src is not None and dst is not None:
             adj[src].append((dst, weight))
+            incoming[dst].append((src, weight))
             out_degree[src] += weight
             node_set.update([src, dst])
 
-    nodes_list = list(node_set)
+    nodes_list = sorted(node_set)
     n_nodes = len(nodes_list)
 
     if n_nodes == 0:
         return pd.Series(dtype=float)
+
+    if sample_size is not None:
+        rng = random.Random(42)
+        visits = defaultdict(int)
+        for _ in range(sample_size):
+            current = nodes_list[rng.randrange(n_nodes)]
+            while rng.random() < alpha:
+                transitions = adj.get(current)
+                if transitions:
+                    targets, weights = zip(*transitions)
+                    current = rng.choices(targets, weights=weights, k=1)[0]
+                else:
+                    current = nodes_list[rng.randrange(n_nodes)]
+            visits[current] += 1
+        return pd.Series(
+            {node: visits[node] / sample_size for node in nodes_list}, dtype=float
+        ).sort_index()
 
     # Initialize PageRank
     pagerank = {node: 1.0 / n_nodes for node in nodes_list}
@@ -277,7 +318,7 @@ def compute_pagerank(
             rank += alpha * dangling_sum / n_nodes  # Dangling contribution
 
             # Contribution from incoming edges
-            for src, (dst, weight) in [(s, (d, w)) for s in adj for d, w in adj[s] if d == node]:
+            for src, weight in incoming[node]:
                 if out_degree[src] > 0:
                     rank += alpha * pagerank[src] * (weight / out_degree[src])
 

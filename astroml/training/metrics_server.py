@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Prometheus metrics server initialization and management.
 
 This module provides utilities for starting and managing the Prometheus
@@ -9,6 +8,8 @@ from __future__ import annotations
 
 import logging
 import os
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

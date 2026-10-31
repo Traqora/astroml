@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """FastAPI router for Model Registry and Lineage Tracking endpoints."""
 
 from __future__ import annotations
@@ -22,6 +21,7 @@ from astroml.tracking.model_registry import (
     ModelStage,
     SemanticVersion,
 )
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,9 @@ class CreateVersionRequest(BaseModel):
     dataset_id: str | None = None
     dataset_version: str = "latest"
     commit_hash: str | None = None
-    stage: str = Field(default="development", pattern=r"^(development|staging|production|archived)$")
+    stage: str = Field(
+        default="development", pattern=r"^(development|staging|production|archived)$"
+    )
 
 
 class TransitionStageRequest(BaseModel):
@@ -179,7 +181,10 @@ async def create_model_version(model_name: str, payload: CreateVersionRequest) -
             version_str = f"{latest.major}.{latest.minor + 1}.0"
 
     if version_str in existing_versions:
-        raise HTTPException(status_code=400, detail=f"Version '{version_str}' already exists for model '{model_name}'.")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Version '{version_str}' already exists for model '{model_name}'.",
+        )
 
     # Record Training Lineage
     lineage = TrainingLineage(
@@ -197,7 +202,8 @@ async def create_model_version(model_name: str, payload: CreateVersionRequest) -
     version_record = {
         "model_name": model_name,
         "version": version_str,
-        "artifact_uri": payload.artifact_uri or f"./artifacts/models/{model_name}/{version_str}/model.pkl",
+        "artifact_uri": payload.artifact_uri
+        or f"./artifacts/models/{model_name}/{version_str}/model.pkl",
         "stage": payload.stage,
         "parameters": payload.parameters,
         "metrics": payload.metrics,
@@ -237,7 +243,9 @@ async def get_model_version(model_name: str, version: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found.")
     versions = _in_memory_versions.get(model_name, {})
     if version not in versions:
-        raise HTTPException(status_code=404, detail=f"Version '{version}' not found for model '{model_name}'.")
+        raise HTTPException(
+            status_code=404, detail=f"Version '{version}' not found for model '{model_name}'."
+        )
 
     return {
         "status": "success",
@@ -261,7 +269,9 @@ async def transition_version_stage(
         for v_name, v_data in versions.items():
             if v_data["stage"] == ModelStage.PRODUCTION.value and v_name != version:
                 v_data["stage"] = ModelStage.ARCHIVED.value
-                logger.info("Demoted previous production model %s:%s to archived", model_name, v_name)
+                logger.info(
+                    "Demoted previous production model %s:%s to archived", model_name, v_name
+                )
 
     versions[version]["stage"] = payload.stage
     versions[version]["stage_transition_reason"] = payload.reason
@@ -280,10 +290,14 @@ async def get_production_version(model_name: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found.")
 
     versions = _in_memory_versions.get(model_name, {})
-    prod_version = next((v for v in versions.values() if v["stage"] == ModelStage.PRODUCTION.value), None)
+    prod_version = next(
+        (v for v in versions.values() if v["stage"] == ModelStage.PRODUCTION.value), None
+    )
 
     if not prod_version:
-        raise HTTPException(status_code=404, detail=f"No production version found for model '{model_name}'.")
+        raise HTTPException(
+            status_code=404, detail=f"No production version found for model '{model_name}'."
+        )
 
     return {
         "status": "success",
@@ -292,7 +306,9 @@ async def get_production_version(model_name: str) -> dict[str, Any]:
     }
 
 
-@router.post("/{model_name}/versions/{version}/metrics", summary="Update version evaluation metrics")
+@router.post(
+    "/{model_name}/versions/{version}/metrics", summary="Update version evaluation metrics"
+)
 async def update_version_metrics(
     model_name: str, version: str, payload: UpdateMetricsRequest
 ) -> dict[str, Any]:

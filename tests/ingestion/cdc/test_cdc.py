@@ -156,6 +156,13 @@ class TestExactlyOnceTracker:
         assert tracker.get_last_processed("t", 0) == 42
         assert tracker.get_last_processed("t", 1) == -1
 
+    def test_duplicate_offsets_are_ignored(self) -> None:
+        tracker = ExactlyOnceTracker()
+        assert tracker.mark_processed("t", 0, 10) is True
+        assert tracker.mark_processed("t", 0, 10) is False
+        assert tracker.get_last_processed("t", 0) == 10
+        assert tracker.is_processed("t", 0, 10) is True
+
 
 # ---------------------------------------------------------------------------
 # Schema registry

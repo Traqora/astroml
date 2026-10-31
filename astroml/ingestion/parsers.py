@@ -9,15 +9,24 @@ perform no I/O and are safe to call from any context.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from astroml.db.schema import Effect, Ledger, Operation, Transaction
+from astroml.utils.exceptions import IngestionError
 
 # Path payment operation types from Horizon
 _PATH_PAYMENT_TYPES = {
     "path_payment_strict_send",
     "path_payment_strict_receive",
 }
+
+# Same shapes already enforced at the API validation boundary
+# (astroml/validation/api_validation.py): an asset code is 1-12 alphanumeric
+# characters, and a Stellar public key (used here as the asset issuer) is
+# "G" followed by 55 base32-alphabet characters.
+_ASSET_CODE_RE = re.compile(r"^[A-Za-z0-9]{1,12}$")
+_STELLAR_PUBLIC_KEY_RE = re.compile(r"^G[A-Za-z0-9]{55}$")
 
 
 def _parse_datetime(iso_string: str) -> datetime:
@@ -197,19 +206,41 @@ def _extract_asset(data: dict) -> tuple[str | None, str | None]:
 
 
 def extract_asset_string(data: dict, prefix: str = "") -> str:
-    """Extract and format an asset string consistently as code:issuer or XLM."""
+    """Extract and format an asset string consistently as code:issuer or XLM.
+
+    Raises:
+        IngestionError: if a non-native asset's code or issuer is present
+            but malformed (issue #831) — an asset code must be 1-12
+            alphanumeric characters, and an issuer must be a well-formed
+            Stellar public key (``G`` followed by 55 base32-alphabet
+            characters). Validating here, before the composite
+            ``"code:issuer"`` string is built and handed to the caller for
+            insertion, catches a corrupt or malicious Horizon payload at
+            the ingestion boundary instead of writing bad data to the
+            normalized_transactions table and discovering it downstream.
+    """
     asset_type = data.get(f"{prefix}asset_type", data.get("asset_type", ""))
     if asset_type == "native":
         return "XLM"
-    
+
     code = data.get(f"{prefix}asset_code", data.get("asset_code"))
     issuer = data.get(f"{prefix}asset_issuer", data.get("asset_issuer"))
-    
+
     if code == "XLM" and not issuer:
         return "XLM"
     elif code and issuer:
+        if not _ASSET_CODE_RE.match(str(code)):
+            raise IngestionError(
+                f"Invalid asset code: {code!r}", asset_code=code, asset_issuer=issuer
+            )
+        if not _STELLAR_PUBLIC_KEY_RE.match(str(issuer)):
+            raise IngestionError(
+                f"Invalid asset issuer: {issuer!r}", asset_code=code, asset_issuer=issuer
+            )
         return f"{code}:{issuer}"
     elif code:
+        if not _ASSET_CODE_RE.match(str(code)):
+            raise IngestionError(f"Invalid asset code: {code!r}", asset_code=code)
         return str(code)
     else:
         return "UNKNOWN"

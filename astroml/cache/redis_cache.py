@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Redis caching service with decorators and metrics.
 
 This module provides a Redis-based caching service with:
@@ -10,6 +9,8 @@ This module provides a Redis-based caching service with:
 """
 
 from __future__ import annotations
+
+from astroml.utils.exceptions import AstroMLError
 
 import hashlib
 import json
@@ -24,6 +25,8 @@ from typing import Any, TypeVar, cast
 import pandas as pd
 import redis
 from redis.client import Redis
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +120,7 @@ class RedisCache:
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self, config -> Any: CacheConfig | None = None):
+    def __init__(self, config: CacheConfig | None = None) -> None:
         """Initialize Redis cache.
 
         Args:
@@ -156,7 +159,7 @@ class RedisCache:
             # Test connection
             self._client.ping()
             logger.info("Redis connection established successfully")
-        except AstroMLError as e:
+        except (AstroMLError, redis.exceptions.RedisError) as e:
             logger.error(f"Failed to connect to Redis: {e}")
             self._client = None
 
@@ -241,8 +244,8 @@ class RedisCache:
                     # Use first 100 rows as a quick hash
                     sample = arg.head(100).to_csv(index=False).encode("utf-8")
                     key_parts.append(hashlib.md5(sample).hexdigest()[:8])
-                except:
-                    pass
+                except (ValueError, TypeError, AttributeError, Exception) as exc:
+                    logger.debug("Failed to hash DataFrame sample: %s", exc)
             elif isinstance(arg, (list, tuple, set)):
                 key_parts.append(f"list:{len(arg)}")
             else:
@@ -252,6 +255,11 @@ class RedisCache:
         for k, v in sorted(kwargs.items()):
             if isinstance(v, pd.DataFrame):
                 key_parts.append(f"{k}:df:{v.shape[0]}x{v.shape[1]}")
+                try:
+                    sample = v.head(100).to_csv(index=False).encode("utf-8")
+                    key_parts.append(hashlib.md5(sample).hexdigest()[:8])
+                except (ValueError, TypeError, AttributeError, Exception) as exc:
+                    logger.debug("Failed to hash kwargs DataFrame sample: %s", exc)
             elif isinstance(v, (list, tuple, set)):
                 key_parts.append(f"{k}:list:{len(v)}")
             else:
@@ -281,7 +289,8 @@ class RedisCache:
                     # If not pickle, try JSON
                     try:
                         return json.loads(data.decode("utf-8"))
-                    except:
+                    except (json.JSONDecodeError, UnicodeDecodeError, AttributeError) as exc:
+                        logger.debug("Failed to decode JSON from cached data: %s", exc)
                         return data
             else:
                 self._stats.misses += 1

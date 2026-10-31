@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Alert configuration and threshold checks for LLM costs."""
 
 from __future__ import annotations
@@ -8,6 +7,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astroml.db.models.cost import LLMBudget
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Resource manager for model serving infrastructure.
 
 Issue #639 Step 3: Manages GPU/CPU allocation for model inference pods,
@@ -15,6 +14,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum, auto
 from typing import Any
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -157,23 +158,17 @@ class ResourceManager:
     @property
     def allocated_cpu(self) -> float:
         """Total CPU cores currently allocated."""
-        return sum(
-            a.requested.cpu_cores for a in self._allocations.values() if a.active
-        )
+        return sum(a.requested.cpu_cores for a in self._allocations.values() if a.active)
 
     @property
     def allocated_memory_mb(self) -> float:
         """Total memory currently allocated."""
-        return sum(
-            a.requested.memory_mb for a in self._allocations.values() if a.active
-        )
+        return sum(a.requested.memory_mb for a in self._allocations.values() if a.active)
 
     @property
     def allocated_gpu_count(self) -> int:
         """Total GPU count currently allocated."""
-        return sum(
-            a.requested.gpu_count for a in self._allocations.values() if a.active
-        )
+        return sum(a.requested.gpu_count for a in self._allocations.values() if a.active)
 
     @property
     def available_cpu(self) -> float:
@@ -204,7 +199,8 @@ class ResourceManager:
                 request.cpu_cores <= self.available_cpu
                 and request.memory_mb <= self.available_memory_mb
                 and request.gpu_count <= self.available_gpu_count
-                and request.gpu_memory_mb <= self.capacity.total_gpu_memory_mb - self.allocated_gpu_memory()
+                and request.gpu_memory_mb
+                <= self.capacity.total_gpu_memory_mb - self.allocated_gpu_memory()
             )
 
     @property
@@ -212,7 +208,8 @@ class ResourceManager:
         """Total GPU memory allocated in MB."""
         return sum(
             a.requested.gpu_memory_mb * a.requested.gpu_count
-            for a in self._allocations.values() if a.active
+            for a in self._allocations.values()
+            if a.active
         )
 
     def allocate(
@@ -254,15 +251,17 @@ class ResourceManager:
             )
             self._allocations[allocation.allocation_id] = allocation
 
-            self._events.append({
-                "type": "allocate",
-                "model_id": model_id,
-                "replica_id": replica_id,
-                "allocation_id": allocation.allocation_id,
-                "cpu": request.cpu_cores,
-                "gpu": request.gpu_count,
-                "timestamp": time.time(),
-            })
+            self._events.append(
+                {
+                    "type": "allocate",
+                    "model_id": model_id,
+                    "replica_id": replica_id,
+                    "allocation_id": allocation.allocation_id,
+                    "cpu": request.cpu_cores,
+                    "gpu": request.gpu_count,
+                    "timestamp": time.time(),
+                }
+            )
 
             logger.info(
                 f"Allocated {request.cpu_cores} CPU, {request.memory_mb}MB RAM, "
@@ -290,13 +289,15 @@ class ResourceManager:
                 return False
 
             alloc.active = False
-            self._events.append({
-                "type": "deallocate",
-                "model_id": alloc.model_id,
-                "replica_id": alloc.replica_id,
-                "allocation_id": allocation_id,
-                "timestamp": time.time(),
-            })
+            self._events.append(
+                {
+                    "type": "deallocate",
+                    "model_id": alloc.model_id,
+                    "replica_id": alloc.replica_id,
+                    "allocation_id": allocation_id,
+                    "timestamp": time.time(),
+                }
+            )
 
             logger.info(
                 f"Deallocated resources for {alloc.model_id}/{alloc.replica_id}: "
@@ -366,19 +367,25 @@ class ResourceManager:
                     "total": cpu_total,
                     "used": cpu_used,
                     "available": max(0.0, cpu_total - cpu_used),
-                    "utilization_pct": round(cpu_used / cpu_total * 100, 1) if cpu_total > 0 else 0.0,
+                    "utilization_pct": (
+                        round(cpu_used / cpu_total * 100, 1) if cpu_total > 0 else 0.0
+                    ),
                 },
                 "memory": {
                     "total": mem_total,
                     "used": mem_used,
                     "available": max(0.0, mem_total - mem_used),
-                    "utilization_pct": round(mem_used / mem_total * 100, 1) if mem_total > 0 else 0.0,
+                    "utilization_pct": (
+                        round(mem_used / mem_total * 100, 1) if mem_total > 0 else 0.0
+                    ),
                 },
                 "gpu": {
                     "total": gpu_total,
                     "used": gpu_used,
                     "available": max(0.0, gpu_total - gpu_used),
-                    "utilization_pct": round(gpu_used / gpu_total * 100, 1) if gpu_total > 0 else 0.0,
+                    "utilization_pct": (
+                        round(gpu_used / gpu_total * 100, 1) if gpu_total > 0 else 0.0
+                    ),
                 },
             }
 

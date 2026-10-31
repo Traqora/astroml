@@ -5,9 +5,12 @@ ensuring data quality before training ML models. It checks for isolated nodes,
 edge consistency, and provides summary statistics.
 """
 
+import logging
 import warnings
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 class GraphValidationError(Exception):
@@ -273,7 +276,10 @@ def validate_graph(
         allow_isolated: If False, raises error for isolated nodes.
         allow_self_loops: If False, raises error for self-loops.
         allow_duplicates: If False, raises error for duplicate edges.
-        verbose: If True, prints validation summary.
+        verbose: If True, logs the validation summary via the module logger
+            (INFO for the full report, WARNING for isolated nodes, duplicate
+            edges, or an overall failed validation) instead of printing to
+            stdout.
 
     Returns:
         Dictionary containing:
@@ -320,35 +326,56 @@ def validate_graph(
     report["validation_passed"] = validation_passed
 
     if verbose:
-        print("=" * 60)
-        print("GRAPH VALIDATION REPORT")
-        print("=" * 60)
-        print(f"\nNodes: {summary['num_nodes']}")
-        print(f"Edges: {summary['num_edges']}")
-        print(f"Density: {summary['density']:.6f}")
-        print(f"Average Degree: {summary['avg_degree']:.2f}")
-        print("\nDegree Statistics:")
-        print(f"  Min: {summary['degree_stats']['min']}")
-        print(f"  Max: {summary['degree_stats']['max']}")
-        print(f"  Median: {summary['degree_stats']['median']:.2f}")
-        print(f"  Std: {summary['degree_stats']['std']:.2f}")
+        separator = "=" * 60
+        degree_stats = summary["degree_stats"]
+        report_lines = [
+            separator,
+            "GRAPH VALIDATION REPORT",
+            separator,
+            f"\nNodes: {summary['num_nodes']}",
+            f"Edges: {summary['num_edges']}",
+            f"Density: {summary['density']:.6f}",
+            f"Average Degree: {summary['avg_degree']:.2f}",
+            "\nDegree Statistics:",
+            f"  Min: {degree_stats['min']}",
+            f"  Max: {degree_stats['max']}",
+            f"  Median: {degree_stats['median']:.2f}",
+            f"  Std: {degree_stats['std']:.2f}",
+        ]
 
         if weight_col and "weight_stats" in summary:
-            print("\nWeight Statistics:")
-            print(f"  Min: {summary['weight_stats']['min']:.2f}")
-            print(f"  Max: {summary['weight_stats']['max']:.2f}")
-            print(f"  Mean: {summary['weight_stats']['mean']:.2f}")
-            print(f"  Sum: {summary['weight_stats']['sum']:.2f}")
+            weight_stats = summary["weight_stats"]
+            report_lines += [
+                "\nWeight Statistics:",
+                f"  Min: {weight_stats['min']:.2f}",
+                f"  Max: {weight_stats['max']:.2f}",
+                f"  Mean: {weight_stats['mean']:.2f}",
+                f"  Sum: {weight_stats['sum']:.2f}",
+            ]
 
-        print("\nEdge Checks:")
-        print(f"  Self-loops: {edge_checks['self_loops']}")
-        print(f"  Duplicate edges: {edge_checks['duplicate_edges']}")
-        print(f"  Null values: {edge_checks['null_values']}")
+        report_lines += [
+            "\nEdge Checks:",
+            f"  Self-loops: {edge_checks['self_loops']}",
+            f"  Duplicate edges: {edge_checks['duplicate_edges']}",
+            f"  Null values: {edge_checks['null_values']}",
+        ]
 
         if isolated_nodes:
-            print(f"\nIsolated Nodes: {len(isolated_nodes)}")
+            report_lines.append(f"\nIsolated Nodes: {len(isolated_nodes)}")
 
-        print(f"\nValidation Status: {'PASSED' if validation_passed else 'FAILED'}")
-        print("=" * 60)
+        report_lines.append(f"\nValidation Status: {'PASSED' if validation_passed else 'FAILED'}")
+        report_lines.append(separator)
+
+        logger.info("\n".join(report_lines))
+
+        if isolated_nodes:
+            logger.warning("Graph validation found %d isolated node(s)", len(isolated_nodes))
+        if edge_checks["duplicate_edges"] > 0:
+            logger.warning(
+                "Graph validation found %d duplicate edge(s)",
+                edge_checks["duplicate_edges"],
+            )
+        if not validation_passed:
+            logger.warning("Graph validation FAILED: %s", edge_checks)
 
     return report

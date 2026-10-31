@@ -1,10 +1,11 @@
-from astroml.utils.exceptions import AstroMLError
 import logging
 import random
 import time
 from collections.abc import Callable
 from functools import wraps
 from typing import Any
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ class ErrorTaxonomy:
 
 
 class CircuitBreaker:
-    def __init__(self, failure_threshold -> Any: int = 5, recovery_timeout: int = 30):
+    def __init__(self, failure_threshold: int = 5, recovery_timeout: int = 30) -> None:
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
         self.failures = 0
@@ -70,7 +71,7 @@ def with_exponential_backoff(
     max_delay: float = 10.0,
     exceptions: tuple[type[Exception]] = (Exception,),
 ):
-    def decorator(func -> Any: Callable):
+    def decorator(func: Callable):
         @wraps(func)
         def wrapper(*args, **kwargs) -> Any:
             retries = 0
@@ -94,7 +95,7 @@ def with_exponential_backoff(
 
 
 class FallbackProviderChain:
-    def __init__(self, providers -> Any: list[Callable]):
+    def __init__(self, providers: list[Callable]) -> None:
         self.providers = providers
         self.circuit_breakers = {
             id(provider): CircuitBreaker(failure_threshold=5) for provider in providers

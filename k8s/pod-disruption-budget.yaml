@@ -1,0 +1,16 @@
+# PodDisruptionBudget for the feature-store API workers (#855). It is the
+# only HTTP-API deployment that runs more than one replica (feature-store-hpa
+# keeps it between 2 and 10); astroml-ingestion/astroml-training run a
+# single replica each, where minAvailable: 1 would block every voluntary
+# eviction (node drain, cluster upgrade) rather than tolerate one, so a PDB
+# there would do more harm than good.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: feature-store-pdb
+  namespace: astroml
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: feature-store

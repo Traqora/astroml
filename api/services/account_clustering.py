@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 
-import hdbscan
+import hdbscan  # type: ignore[import-not-found]
 import numpy as np
 
 

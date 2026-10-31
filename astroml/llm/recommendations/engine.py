@@ -1,10 +1,11 @@
-from astroml.utils.exceptions import AstroMLError
 """Recommendation engine for LLM-based recommendations (issue #474)."""
 
 from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional
+
+from astroml.utils.exceptions import AstroMLError
 
 from .generators import (
     FeatureRecommendationGenerator,

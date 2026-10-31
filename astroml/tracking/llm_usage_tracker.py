@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Token usage + cost tracking utilities for LLM calls.
 
 This repo currently doesn't include a concrete LLM provider integration.
@@ -27,9 +26,11 @@ from datetime import datetime, timezone
 try:
     from prometheus_client import REGISTRY as _PROM_REGISTRY
     from prometheus_client import Counter, Gauge, Histogram
-except AstroMLError:  # pragma: no cover
+    from prometheus_client.registry import DuplicateTimeseries
+except ImportError:  # pragma: no cover
     Counter = Gauge = Histogram = None  # type: ignore
     _PROM_REGISTRY = None  # type: ignore
+    DuplicateTimeseries = ValueError  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -126,10 +127,11 @@ class LLMUsageTracker:
             """Return existing counter if already registered, else create."""
             try:
                 return Counter(name, doc, labels)
-            except AstroMLError:
-                # DuplicateTimeseries: collector already registered in global
-                # REGISTRY (happens when multiple LLMUsageTracker instances are
-                # created in the same process, e.g. during tests).
+            except DuplicateTimeseries:
+                # Collector already registered in global REGISTRY (happens
+                # when multiple LLMUsageTracker instances are created in the
+                # same process, e.g. during tests, or when another module
+                # registers a same-named metric first).
                 for key, col in _PROM_REGISTRY._names_to_collectors.items():
                     if key.startswith(name):
                         return col  # type: ignore[return-value]
@@ -138,7 +140,7 @@ class LLMUsageTracker:
         def _get_or_create_histogram(name: str, doc: str, labels: list) -> Histogram:
             try:
                 return Histogram(name, doc, labels)
-            except AstroMLError:
+            except DuplicateTimeseries:
                 for key, col in _PROM_REGISTRY._names_to_collectors.items():
                     if key.startswith(name):
                         return col  # type: ignore[return-value]
@@ -147,7 +149,7 @@ class LLMUsageTracker:
         def _get_or_create_gauge(name: str, doc: str) -> Gauge:
             try:
                 return Gauge(name, doc)
-            except AstroMLError:
+            except DuplicateTimeseries:
                 col = _PROM_REGISTRY._names_to_collectors.get(name)
                 if col is not None:
                     return col  # type: ignore[return-value]
@@ -180,8 +182,11 @@ class LLMUsageTracker:
         try:
             if self.alert_budget_usd_per_window:
                 self._prom["llm_cost_budget_usd_gauge"].set(float(self.alert_budget_usd_per_window))
-        except AstroMLError:
-            pass
+        except (ValueError, TypeError):
+            logger.warning(
+                "Invalid alert_budget_usd_per_window=%r; skipping budget gauge",
+                self.alert_budget_usd_per_window,
+            )
 
     def register_cost_alert_callback(self, cb: Callable[[dict], None]) -> None:
         """Register a callback invoked when budget is exceeded."""
@@ -291,7 +296,7 @@ class LLMUsageTracker:
                     for cb in list(self._alert_callbacks):
                         try:
                             cb(alert)
-                        except Exception as exc:  # pragma: no cover
+                        except Exception as exc:  # noqa: BLE001 # pragma: no cover
                             logger.warning("LLM cost alert callback failed: %s", exc)
 
             # Emit Prometheus metrics
@@ -311,14 +316,14 @@ class LLMUsageTracker:
                     prom["llm_cost_usd_total"].labels(provider=provider, model=model).inc(
                         resolved_cost_usd
                     )
-                except AstroMLError:
-                    pass
+                except Exception as exc:  # noqa: BLE001 - metrics emission must not break the call
+                    logger.warning("Failed to emit LLM usage metrics: %s", exc)
 
         # Append JSONL log (all calls logged)
         try:
             with open(self._log_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(usage_dict) + "\n")
-        except Exception as exc:  # pragma: no cover
+        except Exception as exc:  # noqa: BLE001 # pragma: no cover
             logger.warning("Failed to write LLM usage log: %s", exc)
 
         return LLMUsage(

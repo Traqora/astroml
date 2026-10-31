@@ -81,6 +81,14 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             VERSION=${{ steps.meta.outputs.version }}
+          # (#866) Generate and attach a native SBOM attestation for each
+          # released image. `setup-buildx-action@v3` above already boots
+          # the `docker-container` driver by default, which this attestation
+          # requires. Provenance is attested separately below via
+          # actions/attest-build-provenance, so we don't also set
+          # `provenance: true` here to avoid two independent provenance
+          # attestations for the same image.
+          sbom: true
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v1

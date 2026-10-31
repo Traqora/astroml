@@ -1,5 +1,5 @@
-from typing import Any, Dict, List, Optional, Union, Callable
 import time
+from typing import Any, Callable, Dict, List, Optional, Union
 
 
 class AdaptiveBuffer:
@@ -29,7 +29,7 @@ class AdaptiveBuffer:
         self.last_flush = time.time()
         return items
 
-    def adjust_backpressure(self, client_rtt_ms -> Any: float):
+    def adjust_backpressure(self, client_rtt_ms: float):
         # Adjust batch size up if client is slow (high RTT) to maximize throughput, or down if fast (low latency)
         if client_rtt_ms > 200:
             self.batch_size = min(self.max_batch_size, self.batch_size + 1)

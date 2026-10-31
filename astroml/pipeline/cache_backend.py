@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Cache backends for pipeline caching — local filesystem, Redis, and S3.
 
 Issue #636: Multi-backend cache support for pipeline caching system.
@@ -17,6 +16,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -595,8 +596,7 @@ def create_backend(
         return S3Backend(**kwargs)
     else:
         raise ValueError(
-            f"Unknown backend type: {backend_type!r}. "
-            f"Use one of: 'local', 'redis', 's3'."
+            f"Unknown backend type: {backend_type!r}. " f"Use one of: 'local', 'redis', 's3'."
         )
 
 

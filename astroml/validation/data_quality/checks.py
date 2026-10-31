@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Data quality checks for completeness, consistency, accuracy, and timeliness.
 
 Provides modular check suites and validator classes to inspect tabular and
@@ -16,6 +15,8 @@ from dataclasses import field as dc_field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Callable
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +57,7 @@ class CheckResult:
     message: str = ""
     field: str | None = None
     details: dict[str, Any] = dc_field(default_factory=dict)
-    timestamp: str = dc_field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    timestamp: str = dc_field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 # ---------------------------------------------------------------------------
@@ -88,9 +87,7 @@ class DataQualityReport:
     summary: dict[str, Any] = dc_field(default_factory=dict)
     dimension_scores: dict[str, float] = dc_field(default_factory=dict)
     batch_id: str | None = None
-    created_at: str = dc_field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    created_at: str = dc_field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     @property
     def quality_score(self) -> float:
@@ -102,9 +99,7 @@ class DataQualityReport:
     @property
     def error_types(self) -> set[str]:
         """Get set of unique error types found."""
-        return {
-            r.error_type for r in self.validation_results if not r.is_valid and r.error_type
-        }
+        return {r.error_type for r in self.validation_results if not r.is_valid and r.error_type}
 
 
 # ---------------------------------------------------------------------------
@@ -441,7 +436,11 @@ class AccuracyChecker:
                         severity=CheckSeverity.ERROR if not is_valid else CheckSeverity.INFO,
                         field=field_name,
                         message=f"{len(out_of_bounds)} values outside range [{min_b}, {max_b}]",
-                        details={"min_bound": min_b, "max_bound": max_b, "violations": len(out_of_bounds)},
+                        details={
+                            "min_bound": min_b,
+                            "max_bound": max_b,
+                            "violations": len(out_of_bounds),
+                        },
                     )
                 )
 
@@ -505,11 +504,16 @@ class TimelinessChecker:
                     check_name="data_freshness_latency",
                     dimension=MetricDimension.TIMELINESS,
                     is_valid=is_fresh,
-                    score=max(0.0, min(1.0, 1.0 - (latency_sec / (self.max_latency_seconds * 2.0)))),
+                    score=max(
+                        0.0, min(1.0, 1.0 - (latency_sec / (self.max_latency_seconds * 2.0)))
+                    ),
                     severity=CheckSeverity.WARNING if not is_fresh else CheckSeverity.INFO,
                     field=self.timestamp_field,
                     message=f"Data freshness latency: {latency_sec:.1f}s",
-                    details={"latency_seconds": latency_sec, "latest_timestamp": max_ts.isoformat()},
+                    details={
+                        "latency_seconds": latency_sec,
+                        "latest_timestamp": max_ts.isoformat(),
+                    },
                 )
             )
 
@@ -943,28 +947,41 @@ class DataQualityValidator:
 
             for tx in transactions:
                 if "source_account" in tx:
-                    validation_results.append(self.referential.validate_account_format(tx["source_account"]))
+                    validation_results.append(
+                        self.referential.validate_account_format(tx["source_account"])
+                    )
                 if "asset_code" in tx:
-                    validation_results.append(self.referential.validate_asset_format(tx["asset_code"]))
+                    validation_results.append(
+                        self.referential.validate_asset_format(tx["asset_code"])
+                    )
                 if "ledger_sequence" in tx:
-                    validation_results.append(self.referential.validate_ledger_sequence(tx["ledger_sequence"]))
+                    validation_results.append(
+                        self.referential.validate_ledger_sequence(tx["ledger_sequence"])
+                    )
                 if "fee" in tx:
                     validation_results.append(self.business.validate_fee_non_negative(tx["fee"]))
                 if "amount" in tx:
-                    validation_results.append(self.business.validate_amount_non_negative(tx["amount"]))
+                    validation_results.append(
+                        self.business.validate_amount_non_negative(tx["amount"])
+                    )
                 if "operation_count" in tx:
-                    validation_results.append(self.business.validate_operation_count(tx["operation_count"]))
+                    validation_results.append(
+                        self.business.validate_operation_count(tx["operation_count"])
+                    )
 
             amounts = [
                 tx.get("amount", 0.0)
                 for tx in transactions
-                if isinstance(tx.get("amount"), (int, float)) and not isinstance(tx.get("amount"), bool)
+                if isinstance(tx.get("amount"), (int, float))
+                and not isinstance(tx.get("amount"), bool)
             ]
             if amounts:
                 validation_results.append(self.statistical.detect_amount_outliers(amounts))
 
             validation_results.append(
-                self.statistical.detect_duplicate_patterns(transactions, ["amount", "source_account"])
+                self.statistical.detect_duplicate_patterns(
+                    transactions, ["amount", "source_account"]
+                )
             )
 
         report.validation_results = validation_results

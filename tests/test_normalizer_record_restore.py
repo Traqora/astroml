@@ -24,7 +24,7 @@ OPS = [
         "amount": "3",
         "asset_type": "credit_alphanum4",
         "asset_code": "USDC",
-        "asset_issuer": "GISSUER",
+        "asset_issuer": "G" + "I" * 55,
         "created_at": "2024-05-02T00:00:00Z",
         "transaction_hash": "def456",
     },

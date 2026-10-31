@@ -28,3 +28,9 @@ node_modules/
 coverage.xml
 htmlcov/
 fix.md
+
+# Runtime ingestion state (issue #829): a committed snapshot here pre-seeds
+# every fresh clone's default IngestionService() with "already processed"
+# ledgers, silently defeating idempotency tests and any real backfill that
+# relies on the default state path.
+.astroml_state/

@@ -35,6 +35,11 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
+# Issue #838 — shared with astroml.api.models.FraudAlert so the two
+# (duplicate) FraudAlert models bucket scores identically rather than each
+# carrying its own copy of the threshold logic.
+from astroml.api.models import risk_level_for_score as _risk_level_for_score
+
 # Reuse the project-wide declarative base so all tables live in one metadata.
 from astroml.db.schema import Base
 
@@ -126,12 +131,14 @@ class FraudAlert(Base):
     )
 
     @staticmethod
-    def risk_level_for_score(score: float) -> str:
-        if score >= 0.8:
-            return "high"
-        if score >= 0.5:
-            return "medium"
-        return "low"
+    def risk_level_for_score(score: float, asset: Optional[str] = None) -> str:
+        """Bucket a numeric anomaly score into a labelled risk level.
+
+        ``asset`` is optional (issue #838); see
+        ``astroml.api.models.risk_level_for_score`` for the per-asset
+        threshold lookup this delegates to.
+        """
+        return _risk_level_for_score(score, asset)
 
 
 # ---------------------------------------------------------------------------

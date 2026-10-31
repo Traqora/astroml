@@ -42,12 +42,18 @@ install — kept unchanged content-wise by the purpose-file split below so
 existing builds don't break.
 
 ### `requirements-cpu.txt` — CPU-only training stack
-Same shape as `requirements.txt` but pins the **CPU-only** torch wheels
-from the official PyTorch CPU index:
+Same shape as `requirements.txt` but resolves torch against the **CPU-only**
+wheel index instead of PyPI's default (GPU) index:
 
 ```
-torch==2.0.0+cpu --index-url https://download.pytorch.org/whl/cpu
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.0.0
 ```
+
+The lower bound (`>=2.0.0`) is the same as `requirements.txt`'s; it's the
+index, not the version specifier, that picks a `+cpu` build over a CUDA
+build. `torch>=2.0.0+cpu` is **not** valid here: pip rejects a local
+version label (`+cpu`) combined with anything other than `==`/`!=`.
 
 Drops `mlflow`, `scikit-learn` standalone (still pulled transitively via
 some libs), the feature-store stack, visualization, dev tooling, and
@@ -126,7 +132,7 @@ sync across all of them. The actual lower bounds in use:
 | `pyyaml`         | `>=6.0`            | requirements.txt, -cpu.txt, -minimal.txt        |
 | `hydra-core`     | `>=1.3.0`          | requirements.txt, -cpu.txt, -minimal.txt        |
 | `omegaconf`      | `>=2.3.0`          | requirements.txt, -cpu.txt, -minimal.txt        |
-| `torch`          | `>=2.0.0` / `+cpu` | requirements.txt (GPU), -cpu.txt (CPU), -train.txt |
+| `torch`          | `>=2.0.0`          | requirements.txt (GPU index), -cpu.txt (CPU index), -train.txt |
 | `torch-geometric`| `>=2.3.0`          | requirements.txt, -cpu.txt, -train.txt          |
 | `scikit-learn`   | `>=1.3.0`          | requirements.txt, -train.txt                    |
 | `mlflow`         | `>=2.10.0`         | requirements.txt, -mlflow.txt                   |

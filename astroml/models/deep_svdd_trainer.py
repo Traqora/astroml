@@ -1,9 +1,9 @@
-from astroml.utils.exceptions import AstroMLError
 """Training utilities and advanced Deep SVDD implementations.
 
 This module provides enhanced Deep SVDD training with various loss functions,
 optimization strategies, and evaluation metrics for fraud detection.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -20,6 +20,7 @@ from sklearn.preprocessing import StandardScaler
 
 from astroml.artifacts import get_artifact_store
 from astroml.tracking import MLflowTracker
+from astroml.utils.exceptions import AstroMLError
 
 from .deep_svdd import DeepSVDD, DeepSVDDNetwork
 
@@ -30,7 +31,7 @@ class DeepSVDDTrainer:
     def __init__(
         self,
         model: DeepSVDD,
-        device: str = 'cpu',
+        device: str = "cpu",
         patience: int = 10,
         min_delta: float = 1e-4,
         tracker: Optional[MLflowTracker] = None,
@@ -41,14 +42,10 @@ class DeepSVDDTrainer:
         self.patience = patience
         self.min_delta = min_delta
         self.tracker = tracker  # None → no MLflow logging
-        self.artifact_uri = artifact_uri or './artifacts'
+        self.artifact_uri = artifact_uri or "./artifacts"
         self.artifact_store = get_artifact_store(artifact_uri)
 
-        self.training_history = {
-            'train_loss': [],
-            'val_loss': [],
-            'radius': []
-        }
+        self.training_history = {"train_loss": [], "val_loss": [], "radius": []}
 
     def train(
         self,
@@ -57,8 +54,8 @@ class DeepSVDDTrainer:
         epochs: int = 100,
         lr: float = 0.001,
         weight_decay: float = 1e-5,
-        loss_type: str = 'svdd',
-        scheduler_type: str = 'cosine'
+        loss_type: str = "svdd",
+        scheduler_type: str = "cosine",
     ) -> Dict[str, np.ndarray]:
         """Train Deep SVDD with advanced strategies."""
 
@@ -66,17 +63,13 @@ class DeepSVDDTrainer:
         self.model.init_center(train_loader)
 
         # Setup optimizer
-        optimizer = torch.optim.Adam(
-            self.model.parameters(),
-            lr=lr,
-            weight_decay=weight_decay
-        )
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr, weight_decay=weight_decay)
 
         # Setup scheduler
         scheduler = self._get_scheduler(optimizer, scheduler_type, epochs)
 
         # Early stopping
-        best_val_loss = float('inf')
+        best_val_loss = float("inf")
         patience_counter = 0
 
         for epoch in range(epochs):
@@ -101,17 +94,17 @@ class DeepSVDDTrainer:
                     break
 
             # Update scheduler
-            if scheduler_type != 'none':
+            if scheduler_type != "none":
                 scheduler.step()
 
             # Update radius
             radius = self._compute_radius(train_loader)
 
             # Record history
-            self.training_history['train_loss'].append(train_loss)
+            self.training_history["train_loss"].append(train_loss)
             if val_loss is not None:
-                self.training_history['val_loss'].append(val_loss)
-            self.training_history['radius'].append(radius)
+                self.training_history["val_loss"].append(val_loss)
+            self.training_history["radius"].append(radius)
 
             # MLflow per-epoch metrics
             if self.tracker is not None:
@@ -137,7 +130,7 @@ class DeepSVDDTrainer:
         self,
         dataloader: torch.utils.data.DataLoader,
         optimizer: torch.optim.Optimizer,
-        loss_type: str
+        loss_type: str,
     ) -> float:
         """Train for one epoch."""
         self.model.train()
@@ -151,11 +144,11 @@ class DeepSVDDTrainer:
 
             optimizer.zero_grad()
 
-            if loss_type == 'svdd':
+            if loss_type == "svdd":
                 loss = self.model.compute_loss(x)
-            elif loss_type == 'soft_boundary':
+            elif loss_type == "soft_boundary":
                 loss = self._soft_boundary_loss(x)
-            elif loss_type == 'robust':
+            elif loss_type == "robust":
                 loss = self._robust_loss(x)
             else:
                 raise ValueError(f"Unknown loss type: {loss_type}")
@@ -167,11 +160,7 @@ class DeepSVDDTrainer:
 
         return total_loss / len(dataloader)
 
-    def _validate_epoch(
-        self,
-        dataloader: torch.utils.data.DataLoader,
-        loss_type: str
-    ) -> float:
+    def _validate_epoch(self, dataloader: torch.utils.data.DataLoader, loss_type: str) -> float:
         """Validate for one epoch."""
         self.model.eval()
         total_loss = 0
@@ -183,11 +172,11 @@ class DeepSVDDTrainer:
                 else:
                     x = batch.to(self.device)
 
-                if loss_type == 'svdd':
+                if loss_type == "svdd":
                     loss = self.model.compute_loss(x)
-                elif loss_type == 'soft_boundary':
+                elif loss_type == "soft_boundary":
                     loss = self._soft_boundary_loss(x)
-                elif loss_type == 'robust':
+                elif loss_type == "robust":
                     loss = self._robust_loss(x)
 
                 total_loss += loss.item()
@@ -215,7 +204,7 @@ class DeepSVDDTrainer:
         loss = torch.where(
             distances <= delta,
             0.5 * distances,
-            delta * (torch.sqrt(distances) - 0.5 * torch.sqrt(delta))
+            delta * (torch.sqrt(distances) - 0.5 * torch.sqrt(delta)),
         )
 
         return torch.mean(loss)
@@ -249,58 +238,48 @@ class DeepSVDDTrainer:
         return torch.quantile(distances, 1 - self.model.nu)
 
     def _get_scheduler(
-        self,
-        optimizer: torch.optim.Optimizer,
-        scheduler_type: str,
-        epochs: int
+        self, optimizer: torch.optim.Optimizer, scheduler_type: str, epochs: int
     ) -> torch.optim.lr_scheduler._LRScheduler:
         """Get learning rate scheduler."""
-        if scheduler_type == 'cosine':
-            return torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, T_max=epochs
-            )
-        elif scheduler_type == 'step':
-            return torch.optim.lr_scheduler.StepLR(
-                optimizer, step_size=epochs // 3, gamma=0.1
-            )
-        elif scheduler_type == 'plateau':
+        if scheduler_type == "cosine":
+            return torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+        elif scheduler_type == "step":
+            return torch.optim.lr_scheduler.StepLR(optimizer, step_size=epochs // 3, gamma=0.1)
+        elif scheduler_type == "plateau":
             return torch.optim.lr_scheduler.ReduceLROnPlateau(
-                optimizer, mode='min', patience=5, factor=0.5
+                optimizer, mode="min", patience=5, factor=0.5
             )
-        elif scheduler_type == 'none':
-            return torch.optim.lr_scheduler.LambdaLR(
-                optimizer, lambda epoch: 1.0
-            )
+        elif scheduler_type == "none":
+            return torch.optim.lr_scheduler.LambdaLR(optimizer, lambda epoch: 1.0)
         else:
             raise ValueError(f"Unknown scheduler type: {scheduler_type}")
 
     def _save_checkpoint(self) -> Any:
         """Save best model checkpoint and log it to MLflow."""
         checkpoint = {
-            'model_state_dict': self.model.state_dict(),
-            'center': self.model.center,
-            'scaler': self.model.scaler if hasattr(self.model, 'scaler') else None,
-            'training_history': self.training_history,
-            'metadata': {
-                'version': '1.0',
-                'input_dim': self.model.input_dim,
-                'hidden_dims': self.model.hidden_dims,
-                'device': self.device,
-                'model_class': self.model.__class__.__name__
-            }
+            "model_state_dict": self.model.state_dict(),
+            "center": self.model.center,
+            "scaler": self.model.scaler if hasattr(self.model, "scaler") else None,
+            "training_history": self.training_history,
+            "metadata": {
+                "version": "1.0",
+                "input_dim": self.model.input_dim,
+                "hidden_dims": self.model.hidden_dims,
+                "device": self.device,
+                "model_class": self.model.__class__.__name__,
+            },
         }
 
         # Save to artifact store
         try:
             checkpoint_uri = self.artifact_store.save_checkpoint(
-                checkpoint,
-                'deep_svdd/best_deep_svdd.pth'
+                checkpoint, "deep_svdd/best_deep_svdd.pth"
             )
             print(f"Checkpoint saved to artifact store: {checkpoint_uri}")
         except AstroMLError as e:
             print(f"Warning: Failed to save to artifact store: {e}")
             # Fallback to local save
-            torch.save(checkpoint, 'best_deep_svdd.pth')
+            torch.save(checkpoint, "best_deep_svdd.pth")
             print("Checkpoint saved locally to best_deep_svdd.pth")
 
         if self.tracker is not None:
@@ -330,14 +309,12 @@ class DeepSVDDTrainer:
             RuntimeError: If device is unavailable or checkpoint is corrupted
         """
 
-
         try:
             # Try to load from artifact store first if it looks like a relative path
-            if not checkpoint_path.startswith(('/', 's3://', 'gs://', 'http')):
+            if not checkpoint_path.startswith(("/", "s3://", "gs://", "http")):
                 try:
                     checkpoint = self.artifact_store.load_checkpoint(
-                        checkpoint_path,
-                        device=self.device
+                        checkpoint_path, device=self.device
                     )
                 except AstroMLError:
                     # Fall through to local file loading
@@ -348,9 +325,7 @@ class DeepSVDDTrainer:
                         )
 
                     checkpoint = torch.load(
-                        checkpoint_path,
-                        map_location=self.device,
-                        weights_only=True
+                        checkpoint_path, map_location=self.device, weights_only=True
                     )
             else:
                 # Load from absolute path or remote URI
@@ -361,9 +336,7 @@ class DeepSVDDTrainer:
                     )
 
                 checkpoint = torch.load(
-                    checkpoint_path,
-                    map_location=self.device,
-                    weights_only=True
+                    checkpoint_path, map_location=self.device, weights_only=True
                 )
 
         except FileNotFoundError:
@@ -375,19 +348,19 @@ class DeepSVDDTrainer:
             ) from e
 
         # Validate checkpoint structure
-        if 'model_state_dict' not in checkpoint:
+        if "model_state_dict" not in checkpoint:
             raise ValueError(
                 f"Invalid checkpoint format: missing 'model_state_dict' key.\n"
                 f"Available keys: {list(checkpoint.keys())}"
             )
 
         # Validate metadata if present
-        if 'metadata' in checkpoint:
-            metadata = checkpoint['metadata']
+        if "metadata" in checkpoint:
+            metadata = checkpoint["metadata"]
 
             # Check input dimension
-            if 'input_dim' in metadata:
-                if metadata['input_dim'] != self.model.input_dim:
+            if "input_dim" in metadata:
+                if metadata["input_dim"] != self.model.input_dim:
                     raise ValueError(
                         f"Checkpoint input dimension mismatch:\n"
                         f"  Expected: {self.model.input_dim}\n"
@@ -396,8 +369,8 @@ class DeepSVDDTrainer:
                     )
 
             # Check hidden dimensions
-            if 'hidden_dims' in metadata:
-                if metadata['hidden_dims'] != self.model.hidden_dims:
+            if "hidden_dims" in metadata:
+                if metadata["hidden_dims"] != self.model.hidden_dims:
                     raise ValueError(
                         f"Checkpoint hidden dimensions mismatch:\n"
                         f"  Expected: {self.model.hidden_dims}\n"
@@ -406,9 +379,9 @@ class DeepSVDDTrainer:
                     )
 
             # Check device compatibility
-            if 'device' in metadata:
-                checkpoint_device = metadata['device']
-                if checkpoint_device != self.device and checkpoint_device != 'cpu':
+            if "device" in metadata:
+                checkpoint_device = metadata["device"]
+                if checkpoint_device != self.device and checkpoint_device != "cpu":
                     print(
                         f"Warning: Loading checkpoint from device '{checkpoint_device}' "
                         f"to device '{self.device}'. This may cause performance issues."
@@ -422,7 +395,7 @@ class DeepSVDDTrainer:
 
         # Load model state
         try:
-            self.model.load_state_dict(checkpoint['model_state_dict'])
+            self.model.load_state_dict(checkpoint["model_state_dict"])
         except AstroMLError as e:
             raise ValueError(
                 f"Failed to load model state dict:\n"
@@ -432,17 +405,17 @@ class DeepSVDDTrainer:
             ) from e
 
         # Load center
-        if 'center' not in checkpoint:
+        if "center" not in checkpoint:
             raise ValueError("Invalid checkpoint format: missing 'center' key")
-        self.model.center = checkpoint['center']
+        self.model.center = checkpoint["center"]
 
         # Load scaler if present
-        if checkpoint.get('scaler') is not None:
-            self.model.scaler = checkpoint['scaler']
+        if checkpoint.get("scaler") is not None:
+            self.model.scaler = checkpoint["scaler"]
 
         # Load training history if present
-        if checkpoint.get('training_history') is not None:
-            self.training_history = checkpoint['training_history']
+        if checkpoint.get("training_history") is not None:
+            self.training_history = checkpoint["training_history"]
 
         return True
 
@@ -468,16 +441,16 @@ class DeepSVDDTrainer:
 
         # AUC-ROC
         try:
-            metrics['auc_roc'] = roc_auc_score(y, scores)
+            metrics["auc_roc"] = roc_auc_score(y, scores)
         except ValueError:
-            metrics['auc_roc'] = 0.0
+            metrics["auc_roc"] = 0.0
 
         # AUC-PR
         try:
             precision, recall, _ = precision_recall_curve(y, scores)
-            metrics['auc_pr'] = auc(recall, precision)
+            metrics["auc_pr"] = auc(recall, precision)
         except ValueError:
-            metrics['auc_pr'] = 0.0
+            metrics["auc_pr"] = 0.0
 
         # Basic classification metrics
         tp = np.sum((predictions == 1) & (y == 1))
@@ -485,23 +458,30 @@ class DeepSVDDTrainer:
         fn = np.sum((predictions == 0) & (y == 1))
         tn = np.sum((predictions == 0) & (y == 0))
 
-        metrics['precision'] = tp / (tp + fp) if (tp + fp) > 0 else 0
-        metrics['recall'] = tp / (tp + fn) if (tp + fn) > 0 else 0
-        metrics['f1'] = 2 * metrics['precision'] * metrics['recall'] / (
-            metrics['precision'] + metrics['recall']
-        ) if (metrics['precision'] + metrics['recall']) > 0 else 0
-        metrics['accuracy'] = (tp + tn) / (tp + fp + fn + tn)
+        metrics["precision"] = tp / (tp + fp) if (tp + fp) > 0 else 0
+        metrics["recall"] = tp / (tp + fn) if (tp + fn) > 0 else 0
+        metrics["f1"] = (
+            2
+            * metrics["precision"]
+            * metrics["recall"]
+            / (metrics["precision"] + metrics["recall"])
+            if (metrics["precision"] + metrics["recall"]) > 0
+            else 0
+        )
+        metrics["accuracy"] = (tp + tn) / (tp + fp + fn + tn)
 
         # Log evaluation metrics (ROC-AUC, precision, recall, f1, accuracy)
         if self.tracker is not None:
-            self.tracker.log_metrics({
-                "eval_roc_auc": metrics['auc_roc'],
-                "eval_auc_pr": metrics['auc_pr'],
-                "eval_precision": metrics['precision'],
-                "eval_recall": metrics['recall'],
-                "eval_f1": metrics['f1'],
-                "eval_accuracy": metrics['accuracy'],
-            })
+            self.tracker.log_metrics(
+                {
+                    "eval_roc_auc": metrics["auc_roc"],
+                    "eval_auc_pr": metrics["auc_pr"],
+                    "eval_precision": metrics["precision"],
+                    "eval_recall": metrics["recall"],
+                    "eval_f1": metrics["f1"],
+                    "eval_accuracy": metrics["accuracy"],
+                }
+            )
 
         return metrics
 
@@ -515,14 +495,10 @@ class FraudDetectionDeepSVDD:
         hidden_dims: list = [256, 128, 64, 32],
         dropout: float = 0.2,
         nu: float = 0.05,  # Lower nu for fraud detection (few anomalies)
-        device: str = 'cpu'
+        device: str = "cpu",
     ):
         self.model = DeepSVDD(
-            input_dim=input_dim,
-            hidden_dims=hidden_dims,
-            dropout=dropout,
-            nu=nu,
-            device=device
+            input_dim=input_dim, hidden_dims=hidden_dims, dropout=dropout, nu=nu, device=device
         )
         self.trainer = DeepSVDDTrainer(self.model, device=device)
 
@@ -531,8 +507,8 @@ class FraudDetectionDeepSVDD:
         X: np.ndarray,
         y: Optional[np.ndarray] = None,
         validation_split: float = 0.2,
-        **training_kwargs
-    ) -> 'FraudDetectionDeepSVDD':
+        **training_kwargs,
+    ) -> "FraudDetectionDeepSVDD":
         """Fit model for fraud detection."""
 
         # Split data for validation
@@ -553,28 +529,16 @@ class FraudDetectionDeepSVDD:
             y_train, y_val = y, None
 
         # Create datasets
-        train_dataset = torch.utils.data.TensorDataset(
-            torch.FloatTensor(X_train)
-        )
-        train_loader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=128, shuffle=True
-        )
+        train_dataset = torch.utils.data.TensorDataset(torch.FloatTensor(X_train))
+        train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=128, shuffle=True)
 
         val_loader = None
         if X_val is not None:
-            val_dataset = torch.utils.data.TensorDataset(
-                torch.FloatTensor(X_val)
-            )
-            val_loader = torch.utils.data.DataLoader(
-                val_dataset, batch_size=128, shuffle=False
-            )
+            val_dataset = torch.utils.data.TensorDataset(torch.FloatTensor(X_val))
+            val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=128, shuffle=False)
 
         # Train model
-        self.trainer.train(
-            train_loader=train_loader,
-            val_loader=val_loader,
-            **training_kwargs
-        )
+        self.trainer.train(train_loader=train_loader, val_loader=val_loader, **training_kwargs)
 
         return self
 
@@ -598,10 +562,7 @@ class FraudDetectionDeepSVDD:
         return probabilities
 
     def evaluate_fraud_detection(
-        self,
-        X: np.ndarray,
-        y: np.ndarray,
-        threshold_percentile: float = 95.0
+        self, X: np.ndarray, y: np.ndarray, threshold_percentile: float = 95.0
     ) -> Dict[str, Union[float, np.ndarray]]:
         """Evaluate fraud detection performance."""
 
@@ -610,6 +571,6 @@ class FraudDetectionDeepSVDD:
 
         return {
             **metrics,
-            'anomaly_scores': scores,
-            'fraud_probabilities': self.predict_fraud_probability(X)
+            "anomaly_scores": scores,
+            "fraud_probabilities": self.predict_fraud_probability(X),
         }

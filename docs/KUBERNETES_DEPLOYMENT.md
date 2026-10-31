@@ -455,30 +455,15 @@ kubectl create secret generic tls-secret \
 
 ### Network Policies
 
-Implement network policies for security:
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: feature-store-network-policy
-  namespace: astroml
-spec:
-  podSelector:
-    matchLabels:
-      app: feature-store
-  policyTypes:
-  - Ingress
-  - Egress
-  ingress:
-  - from:
-    - podSelector:
-        matchLabels:
-          app: astroml-ingestion
-    ports:
-    - protocol: TCP
-      port: 8000
-```
+`k8s/network-policy.yaml` applies a default-deny-all `NetworkPolicy` for the
+`astroml` namespace (both Ingress and Egress, every pod), with explicit
+allows carved out for the traffic the stack actually needs: ingress-nginx
+routing to `astroml-ingestion`/`astroml-training`/`feature-store`,
+Prometheus scraping each workload's metrics port, those three workloads
+reaching `postgres`/`redis`, DNS resolution, and egress to the public
+internet for the ingestion/training/feature-store pods. It is included in
+`k8s/kustomization.yaml`, so `kubectl apply -k k8s/` applies it alongside
+everything else; no extra step is needed.
 
 ### RBAC Configuration
 

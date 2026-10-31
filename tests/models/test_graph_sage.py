@@ -303,6 +303,66 @@ class TestTraining:
         assert history.stopped_early
         assert history.epochs_run < 500
 
+    @pytest.mark.parametrize("patience", [1, 3, 10])
+    def test_early_stopping_fires_exactly_patience_epochs_after_the_best_one(self, patience):
+        """Early-stopping patience config (issue #839).
+
+        `epochs_without_improvement` starts at 0 on the best epoch and is
+        checked with `>=` after incrementing, so the run must stop on
+        exactly `best_epoch + patience` — not one epoch early (which would
+        discard improvement opportunities the configured patience promises)
+        and not one epoch late (which would silently extend patience by
+        one). Tested across several patience values, including the
+        minimum valid value (1), to pin down the exact off-by-one behavior
+        rather than only asserting "it stopped before the full schedule."
+        """
+        x, edge_index, y, train_mask, val_mask = _toy_graph()
+
+        _, history = train_graph_sage(
+            x,
+            edge_index,
+            y,
+            train_mask,
+            val_mask,
+            GraphSAGEConfig(epochs=500, early_stopping_patience=patience),
+        )
+
+        assert history.stopped_early
+        assert history.epochs_run == history.best_epoch + patience
+
+    def test_early_stopping_disabled_runs_the_full_schedule_even_without_improvement(self):
+        """`early_stopping_patience=None` must train the full configured
+        schedule regardless of how long validation accuracy has plateaued
+        — the "no early stopping" escape hatch the config exists to
+        provide, not merely a very large patience value."""
+        x, edge_index, y, train_mask, val_mask = _toy_graph()
+
+        _, history = train_graph_sage(
+            x,
+            edge_index,
+            y,
+            train_mask,
+            val_mask,
+            GraphSAGEConfig(epochs=15, early_stopping_patience=None),
+        )
+
+        assert not history.stopped_early
+        assert history.epochs_run == 15
+
+    @pytest.mark.parametrize("bad_patience", [0, -1, -5])
+    def test_a_non_positive_early_stopping_patience_is_rejected(self, bad_patience):
+        x, edge_index, y, train_mask, val_mask = _toy_graph()
+
+        with pytest.raises(ValueError, match="early_stopping_patience"):
+            train_graph_sage(
+                x,
+                edge_index,
+                y,
+                train_mask,
+                val_mask,
+                config=GraphSAGEConfig(epochs=10, early_stopping_patience=bad_patience),
+            )
+
     def test_training_without_a_validation_mask_runs_the_full_schedule(self):
         x, edge_index, y, train_mask, _ = _toy_graph()
 

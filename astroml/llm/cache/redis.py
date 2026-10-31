@@ -1,6 +1,8 @@
-from typing import Any, Dict, List, Optional, Union, Callable
+from typing import Any, Callable, Dict, List, Optional, Union
+
+
 class RedisCacheBackend:
-    def __init__(self, host -> Any: str = "localhost", port: int = 6379, db: int = 0):
+    def __init__(self, host: str = "localhost", port: int = 6379, db: int = 0) -> None:
         self.host = host
         self.port = port
         self.db = db

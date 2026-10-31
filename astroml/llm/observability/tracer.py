@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Distributed tracing for LLM requests — OpenTelemetry-compatible.
 
 Resolves #456: Full request lifecycle tracing from prompt to response,
@@ -7,6 +6,8 @@ including provider routing, retry tracking, and token/cost attribution.
 
 from __future__ import annotations
 
+from astroml.utils.exceptions import AstroMLError
+
 import logging
 import time
 import uuid
@@ -14,6 +15,8 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

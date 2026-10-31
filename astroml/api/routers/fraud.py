@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Fraud Detection API endpoints for AstroML.
 
 Provides real-time fraud scoring, paginated alert listing, and
@@ -19,6 +18,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from astroml.api.models import FraudAlert
+from astroml.db.session import PageParams, paginate_offset
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +124,7 @@ async def score_accounts(body: ScoreRequest) -> JSONResponse:
 
     try:
         from astroml.pipeline.scoring import InductiveAnomalyScorer  # noqa: F401
-    except (ImportError, Exception) as exc:
+    except (ImportError, Exception) as exc:  # noqa: BLE001 - surfaced as a 503, not swallowed
         logger.warning("Scoring pipeline unavailable: %s", exc)
         return JSONResponse(
             status_code=503,
@@ -152,7 +153,7 @@ async def score_accounts(body: ScoreRequest) -> JSONResponse:
             account_ids=body.accounts,
             ref_time=_time.time(),
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - checkpoint errors vary by backend; surfaced as a 503
         logger.warning("Model checkpoint unavailable or corrupted: %s", exc)
         return JSONResponse(
             status_code=503,
@@ -177,8 +178,7 @@ async def score_accounts(body: ScoreRequest) -> JSONResponse:
     tags=["fraud"],
 )
 async def list_fraud_alerts(
-    page: int = Query(default=1, ge=1, description="Page number (1-based)"),
-    page_size: int = Query(default=20, ge=1, le=100, description="Items per page"),
+    page_params: PageParams = Depends(),
     risk_level: str | None = Query(
         default=None,
         description="Filter by risk level: low, medium, or high",
@@ -194,8 +194,11 @@ async def list_fraud_alerts(
     count_stmt = select(func.count()).select_from(base_stmt.subquery())
     total: int = (await db.execute(count_stmt)).scalar_one()
 
-    offset = (page - 1) * page_size
-    paged_stmt = base_stmt.order_by(FraudAlert.created_at.desc()).offset(offset).limit(page_size)
+    paged_stmt = (
+        base_stmt.order_by(FraudAlert.created_at.desc())
+        .offset(page_params.offset)
+        .limit(page_params.limit)
+    )
     rows = (await db.execute(paged_stmt)).scalars().all()
 
     items = [
@@ -211,7 +214,10 @@ async def list_fraud_alerts(
         for row in rows
     ]
 
-    return FraudAlertListResponse(items=items, total=total, page=page, page_size=page_size)
+    page = paginate_offset(items, total, page_params)
+    return FraudAlertListResponse(
+        items=page.items, total=page.total, page=page.page, page_size=page.page_size
+    )
 
 
 @router.get("/api/v1/fraud/stats", response_model=FraudStatsResponse, tags=["fraud"])

@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Invariant checker for ML model outputs.
 
 Implements Procedure step 4:
@@ -20,6 +19,8 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional
 
 import numpy as np
+
+from astroml.utils.exceptions import AstroMLError
 
 # ── Type alias ────────────────────────────────────────────────────────────────
 
@@ -176,8 +177,8 @@ class InvariantChecker:
 
         for name, fn in self._invariants.items():
             for i in range(n_samples):
-                xi = X[i: i + 1]
-                yi = output[i: i + 1]
+                xi = X[i : i + 1]
+                yi = output[i : i + 1]
                 try:
                     passed = fn(xi, yi)
                 except Exception as exc:

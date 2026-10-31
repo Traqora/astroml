@@ -3,10 +3,10 @@
 ## Alert
 **Name**: IngestionLagHigh  
 **Severity**: Critical  
-**Threshold**: Ingestion lag > 1000 ledgers
+**Threshold**: `astroml_ingestion_lag_seconds` > 300s for 5 minutes
 
 ## Symptoms
-- Ingestion is behind by more than 1000 ledgers
+- A stream's processed records are more than 300 seconds (5 minutes) old
 - Data freshness degraded
 - Potential data loss if lag continues to grow
 
@@ -108,7 +108,9 @@ SELECT count(*) FROM normalized_transactions WHERE timestamp > NOW() - INTERVAL 
 
 ## Prevention
 
-- Monitor ingestion lag continuously
-- Set up alerts for smaller lag thresholds (e.g., 500 ledgers)
+- Monitor ingestion lag continuously (see the "Ingestion Lag" panel on the
+  ingestion throughput dashboard)
+- Set up alerts for a smaller lag threshold (e.g. 120s) if 300s pages too
+  late for your SLO
 - Implement automatic scaling based on lag
 - Add multiple Horizon endpoints for redundancy

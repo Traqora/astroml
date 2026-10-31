@@ -1,5 +1,7 @@
-from typing import Any, Dict, List, Optional, Union, Callable
+from typing import Any, Callable, Dict, List, Optional, Union
+
 from astroml.utils.exceptions import AstroMLError
+
 """
 Documentation updater for maintaining sync with code.
 
@@ -90,7 +92,7 @@ class DocumentationUpdater:
     - Handles merge conflicts
     """
 
-    def __init__(self, metadata_dir -> Any: str = ".doc_metadata"):
+    def __init__(self, metadata_dir: str = ".doc_metadata") -> None:
         """
         Initialize the documentation updater.
 

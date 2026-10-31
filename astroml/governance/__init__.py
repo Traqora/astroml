@@ -1,4 +1,3 @@
-from typing import Any, Dict, List, Optional, Union, Callable
 """Model governance and audit logging module.
 
 Issue #637: Implements comprehensive model governance including audit logging,
@@ -8,6 +7,7 @@ approval workflows, compliance documentation, and model cards.
 from __future__ import annotations
 
 from importlib import import_module
+from typing import Any, Callable, Dict, List, Optional, Union
 
 __all__ = [
     "ModelAuditLogger",
@@ -45,7 +45,7 @@ _LAZY: dict[str, tuple[str, str]] = {
 }
 
 
-def __getattr__(name -> Any: str):
+def __getattr__(name: str):
     if name in _LAZY:
         module_path, attr = _LAZY[name]
         module = import_module(module_path)

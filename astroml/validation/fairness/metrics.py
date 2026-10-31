@@ -160,6 +160,28 @@ def _false_positive_rate(
     return float(np.mean(y_pred[negatives] == 1))
 
 
+def _rate_gap(rates: dict[str, float], defined: set[str]) -> float:
+    """Return the max-min gap over cohorts whose rate is actually defined.
+
+    A cohort with no positive labels has no true positive rate (and one with no
+    negative labels has no false positive rate). Those cohorts are reported as
+    ``0.0`` in ``group_metrics`` but must not drag the gap up, otherwise a small
+    cohort with no positives looks like a large fairness violation.
+
+    Args:
+        rates: Per-cohort rate keyed by cohort label.
+        defined: Cohort labels for which the rate is defined.
+
+    Returns:
+        The gap between the highest and lowest defined rate, or ``0.0`` when
+        fewer than two cohorts have a defined rate.
+    """
+    values = [rate for group, rate in rates.items() if group in defined]
+    if len(values) < 2:
+        return 0.0
+    return max(values) - min(values)
+
+
 class FairnessMetrics:
     """Compute standard fairness metrics for binary classification.
 
@@ -220,6 +242,8 @@ class FairnessMetrics:
         """Compute equal opportunity difference.
 
         Equal opportunity requires equal true positive rates across groups.
+        Cohorts with no positive labels have no defined TPR and are left out
+        of the gap (they still appear in ``group_metrics`` as ``0.0``).
 
         Args:
             y_true: Ground truth binary labels.
@@ -237,8 +261,8 @@ class FairnessMetrics:
             mask = _get_group_mask(sensitive_features, group)
             group_metrics[str(group)] = _true_positive_rate(y_true, y_pred, mask)
 
-        rates = list(group_metrics.values())
-        value = max(rates) - min(rates)
+        with_positives = {str(g) for g in groups if np.any(y_true[sensitive_features == g] == 1)}
+        value = _rate_gap(group_metrics, with_positives)
         passed = value < EQUAL_OPPORTUNITY_THRESHOLD
 
         return FairnessMetricResult(
@@ -262,7 +286,8 @@ class FairnessMetrics:
         """Compute equalized odds difference.
 
         Equalized odds requires equal TPR and FPR across groups. The reported
-        value is the maximum of the TPR difference and FPR difference.
+        value is the maximum of the TPR difference and FPR difference. Cohorts
+        with no positives (or no negatives) are left out of the TPR (or FPR) gap.
 
         Args:
             y_true: Ground truth binary labels.
@@ -281,10 +306,10 @@ class FairnessMetrics:
             tpr_metrics[str(group)] = _true_positive_rate(y_true, y_pred, mask)
             fpr_metrics[str(group)] = _false_positive_rate(y_true, y_pred, mask)
 
-        tpr_rates = list(tpr_metrics.values())
-        fpr_rates = list(fpr_metrics.values())
-        tpr_diff = max(tpr_rates) - min(tpr_rates)
-        fpr_diff = max(fpr_rates) - min(fpr_rates)
+        with_positives = {str(g) for g in groups if np.any(y_true[sensitive_features == g] == 1)}
+        with_negatives = {str(g) for g in groups if np.any(y_true[sensitive_features == g] == 0)}
+        tpr_diff = _rate_gap(tpr_metrics, with_positives)
+        fpr_diff = _rate_gap(fpr_metrics, with_negatives)
         value = max(tpr_diff, fpr_diff)
         passed = value < EQUALIZED_ODDS_THRESHOLD
 

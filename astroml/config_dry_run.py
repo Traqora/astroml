@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Startup configuration dry-run validation.
 
 Validates all configuration sources without starting any services.
@@ -18,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from astroml.db.session import DatabaseConfig, load_database_config
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger("astroml.config.dry_run")
 
@@ -97,9 +97,7 @@ def validate_environment_variables() -> ValidationResult:
         if value:
             result.details[var] = value
         else:
-            result.warnings.append(
-                f"{var} not set ({description}) - will use defaults"
-            )
+            result.warnings.append(f"{var} not set ({description}) - will use defaults")
 
     for var, description in optional_vars.items():
         value = os.environ.get(var)
@@ -134,9 +132,7 @@ def validate_imports() -> ValidationResult:
             __import__(module_name)
             result.details[module_name] = "available"
         except ImportError as e:
-            result.errors.append(
-                f"Required module '{module_name}' ({description}) not found: {e}"
-            )
+            result.errors.append(f"Required module '{module_name}' ({description}) not found: {e}")
             result.valid = False
 
     for module_name, description in optional_modules:
@@ -144,9 +140,7 @@ def validate_imports() -> ValidationResult:
             __import__(module_name)
             result.details[module_name] = "available"
         except ImportError:
-            result.warnings.append(
-                f"Optional module '{module_name}' ({description}) not found"
-            )
+            result.warnings.append(f"Optional module '{module_name}' ({description}) not found")
 
     if not result.errors:
         result.valid = True

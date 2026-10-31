@@ -18,10 +18,15 @@ Dependencies:
 - aiohttp: Async HTTP client for streaming
 """
 
-from astroml.ingestion.horizon_stream import HorizonStreamError, HorizonStreamingClient
+from astroml.ingestion.horizon_stream import (
+    HorizonRateLimitedError,
+    HorizonStreamError,
+    HorizonStreamingClient,
+)
 from astroml.ingestion.service import BackfillCheckpointManager
 
 __all__ = [
+    "HorizonRateLimitedError",
     "HorizonStreamError",
     "HorizonStreamingClient",
     "BackfillCheckpointManager",

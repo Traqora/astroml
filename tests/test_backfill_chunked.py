@@ -8,6 +8,7 @@ import os
 import pytest
 
 from astroml.ingestion.service import IngestionService, LedgerOutcome
+from astroml.ingestion.state import StateStore
 
 
 class TestIngestBackfillChunked:
@@ -333,3 +334,178 @@ class TestBackfillCheckpoint:
 
         # Should process the full range (checkpoint ignored)
         assert processed == list(range(1, 6))
+
+
+class TestBackfillRerunIdempotency:
+    """Idempotency test for backfill reruns (issue #829).
+
+    `ingest_backfill_chunked`'s docstring and module-level docs both claim
+    idempotent reruns ("state is updated per-ledger, ensuring safe
+    retries"), but had no dedicated regression test for the chunked
+    backfill path specifically (only `test_skipped_already_processed`
+    above, which covers a single chunk). These exercise a full rerun
+    across multiple chunks, with a real `process_fn` side effect, so a
+    regression that reprocesses already-completed ledgers shows up as a
+    duplicate call rather than only as a `processed`/`skipped` count.
+    """
+
+    def test_rerunning_the_full_range_processes_nothing_the_second_time(self, tmp_path):
+        svc = IngestionService(state_store=StateStore(path=str(tmp_path / "state.json")))
+        calls: list[int] = []
+
+        def process(ledger_id: int, _payload) -> None:
+            calls.append(ledger_id)
+
+        first_chunks = list(
+            svc.ingest_backfill_chunked(
+                start_ledger=1,
+                end_ledger=23,
+                chunk_size=7,
+                process_fn=process,
+            )
+        )
+        assert calls == list(range(1, 24))
+        assert sum(c["processed"] for c in first_chunks) == 23
+        assert sum(c["skipped"] for c in first_chunks) == 0
+
+        second_chunks = list(
+            svc.ingest_backfill_chunked(
+                start_ledger=1,
+                end_ledger=23,
+                chunk_size=7,
+                process_fn=process,
+            )
+        )
+
+        # No new calls to process_fn: every ledger in the rerun is already
+        # recorded as processed, so `process` must not fire again for any
+        # of them.
+        assert calls == list(range(1, 24))
+        assert sum(c["processed"] for c in second_chunks) == 0
+        assert sum(c["skipped"] for c in second_chunks) == 23
+
+    def test_rerunning_a_partially_overlapping_range_only_processes_new_ledgers(self, tmp_path):
+        svc = IngestionService(state_store=StateStore(path=str(tmp_path / "state.json")))
+        calls: list[int] = []
+
+        def process(ledger_id: int, _payload) -> None:
+            calls.append(ledger_id)
+
+        list(
+            svc.ingest_backfill_chunked(
+                start_ledger=1,
+                end_ledger=10,
+                chunk_size=4,
+                process_fn=process,
+            )
+        )
+        assert calls == list(range(1, 11))
+
+        # Overlaps 1-10 (already processed) and extends to 15 (new).
+        second_chunks = list(
+            svc.ingest_backfill_chunked(
+                start_ledger=1,
+                end_ledger=15,
+                chunk_size=4,
+                process_fn=process,
+            )
+        )
+
+        assert calls == list(range(1, 16))
+        assert sum(c["processed"] for c in second_chunks) == 5
+        assert sum(c["skipped"] for c in second_chunks) == 10
+
+    def test_rerun_after_a_mid_backfill_error_does_not_reprocess_completed_chunks(self, tmp_path):
+        """A chunk that raises still lets the next `ingest_backfill_chunked`
+        call pick back up without redoing the chunks that already
+        succeeded, since each ledger's processed state was persisted
+        per-chunk rather than only at the very end of the call."""
+        svc = IngestionService(state_store=StateStore(path=str(tmp_path / "state.json")))
+        calls: list[int] = []
+        fail_on = {5}
+
+        def flaky_process(ledger_id: int, _payload) -> None:
+            if ledger_id in fail_on:
+                raise RuntimeError(f"simulated failure at ledger {ledger_id}")
+            calls.append(ledger_id)
+
+        first_chunks = list(
+            svc.ingest_backfill_chunked(
+                start_ledger=1,
+                end_ledger=12,
+                chunk_size=4,
+                process_fn=flaky_process,
+            )
+        )
+        # Chunk 1-4 and 9-12 succeed; the chunk containing ledger 5 (5-8)
+        # is reported as an error and its ledgers are never marked processed.
+        assert calls == [1, 2, 3, 4, 9, 10, 11, 12]
+        assert sum(c["errors"] for c in first_chunks) == 1
+
+        fail_on.clear()
+        second_chunks = list(
+            svc.ingest_backfill_chunked(
+                start_ledger=1,
+                end_ledger=12,
+                chunk_size=4,
+                process_fn=flaky_process,
+            )
+        )
+
+        # Only the previously-failed chunk's ledgers (5-8) are processed on
+        # rerun; 1-4 and 9-12 are skipped, not reprocessed.
+        assert calls == [1, 2, 3, 4, 9, 10, 11, 12, 5, 6, 7, 8]
+        assert sum(c["processed"] for c in second_chunks) == 4
+        assert sum(c["skipped"] for c in second_chunks) == 8
+        assert sum(c["errors"] for c in second_chunks) == 0
+
+
+class TestBackfillCorrelationId:
+    """One correlation id shared across every chunk of one backfill run
+    (issue #957), restored alongside the checkpoint fix for issue #829:
+    the two features had been merged together incorrectly, dropping this
+    behavior (and the checkpoint/current-ledger initialization entirely)
+    while leaving the docstring claiming it still happened."""
+
+    def test_same_correlation_id_is_active_throughout_every_chunk(self, tmp_path):
+        from astroml.utils.logging import get_correlation_id
+
+        svc = IngestionService(state_store=StateStore(path=str(tmp_path / "state.json")))
+        seen_ids: list[str | None] = []
+
+        def process(_ledger_id: int, _payload) -> None:
+            seen_ids.append(get_correlation_id())
+
+        list(
+            svc.ingest_backfill_chunked(
+                start_ledger=1,
+                end_ledger=20,
+                chunk_size=5,
+                process_fn=process,
+            )
+        )
+
+        assert len(seen_ids) == 20
+        assert len(set(seen_ids)) == 1
+        assert seen_ids[0] is not None
+
+    def test_correlation_id_inherits_an_already_active_scope(self, tmp_path):
+        from astroml.utils.logging import CorrelationId, get_correlation_id
+
+        svc = IngestionService(state_store=StateStore(path=str(tmp_path / "state.json")))
+        seen_ids: list[str | None] = []
+
+        def process(_ledger_id: int, _payload) -> None:
+            seen_ids.append(get_correlation_id())
+
+        with CorrelationId("caller-supplied-id"):
+            list(
+                svc.ingest_backfill_chunked(
+                    start_ledger=1,
+                    end_ledger=10,
+                    chunk_size=5,
+                    process_fn=process,
+                )
+            )
+
+        assert all(cid == "caller-supplied-id" for cid in seen_ids)

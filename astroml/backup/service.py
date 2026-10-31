@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Backup service for database and model artifacts (issue #304)."""
 
 from __future__ import annotations
@@ -15,6 +14,8 @@ from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Any
+
+from astroml.utils.exceptions import AstroMLError
 
 from .encryption import encrypt_backup_file
 
@@ -99,7 +100,7 @@ class BackupMetadata:
 class BackupService:
     """Service for creating and managing backups."""
 
-    def __init__(self, config -> Any: BackupConfig):
+    def __init__(self, config: BackupConfig) -> None:
         """Initialize backup service.
 
         Args:
@@ -114,16 +115,25 @@ class BackupService:
         (self.backup_dir / "models").mkdir(exist_ok=True)
         (self.backup_dir / "metadata").mkdir(exist_ok=True)
 
-    def create_database_backup(self, description: str | None = None) -> BackupMetadata:
+    def create_database_backup(
+        self,
+        description: str | None = None,
+        *,
+        backup_id: str | None = None,
+    ) -> BackupMetadata:
         """Create a database backup using pg_dump.
 
         Args:
             description: Optional description for the backup.
+            backup_id: Explicit ID to store the backup under. Defaults to a
+                freshly generated ``db_<timestamp>``. :meth:`create_full_backup`
+                passes the paired ID here so the database and model halves of a
+                full backup can be located from one shared base ID.
 
         Returns:
             BackupMetadata with backup information.
         """
-        backup_id = self._generate_backup_id("db")
+        backup_id = backup_id or self._generate_backup_id("db")
         timestamp = datetime.utcnow()
         backup_file = self.backup_dir / "database" / f"{backup_id}.sql.gz"
 
@@ -232,16 +242,25 @@ class BackupService:
             logger.error(f"Backup creation failed: {e}")
             raise
 
-    def create_model_backup(self, description: str | None = None) -> BackupMetadata:
+    def create_model_backup(
+        self,
+        description: str | None = None,
+        *,
+        backup_id: str | None = None,
+    ) -> BackupMetadata:
         """Create a backup of model artifacts.
 
         Args:
             description: Optional description for the backup.
+            backup_id: Explicit ID to store the backup under. Defaults to a
+                freshly generated ``models_<timestamp>``. :meth:`create_full_backup`
+                passes the paired ID here so the database and model halves of a
+                full backup can be located from one shared base ID.
 
         Returns:
             BackupMetadata with backup information.
         """
-        backup_id = self._generate_backup_id("models")
+        backup_id = backup_id or self._generate_backup_id("models")
         timestamp = datetime.utcnow()
         artifacts_dir = Path(self.config.model_artifacts_dir)
         backup_file = self.backup_dir / "models" / f"{backup_id}.tar.gz"
@@ -286,11 +305,28 @@ class BackupService:
         if self.config.storage_backend != StorageBackend.LOCAL:
             self._upload_to_storage(backup_file, backup_id)
 
+        # Verify backup if enabled. The database path has always done this;
+        # model backups previously never ran the verifier, so a corrupted or
+        # truncated artifact archive was only discovered at restore time.
+        if self.config.verify_after_backup:
+            from .verification import BackupVerifier
+
+            verifier = BackupVerifier(self.config)
+            metadata.is_verified = verifier.verify_backup(backup_file, checksum)
+            self._save_metadata(metadata)
+
         logger.info(f"Model artifacts backup created successfully: {backup_id}")
         return metadata
 
     def create_full_backup(self, description: str | None = None) -> list[BackupMetadata]:
         """Create a full backup (database + model artifacts).
+
+        Both halves share one timestamp, so the resulting IDs are
+        ``db_<timestamp>`` and ``models_<timestamp>`` and can be resolved from
+        a single base ID by :meth:`RestoreService.restore_full`. Previously each
+        half generated its own timestamp, so a full backup taken across a
+        second boundary produced two unpaired IDs that ``restore_full`` could
+        not recombine.
 
         Args:
             description: Optional description for the backup.
@@ -299,8 +335,9 @@ class BackupService:
             List of BackupMetadata for each backup component.
         """
         logger.info("Creating full backup")
-        db_backup = self.create_database_backup(description)
-        model_backup = self.create_model_backup(description)
+        core_id = self._generate_backup_id("full").replace("full_", "", 1)
+        db_backup = self.create_database_backup(description, backup_id=f"db_{core_id}")
+        model_backup = self.create_model_backup(description, backup_id=f"models_{core_id}")
         return [db_backup, model_backup]
 
     def list_backups(self, backup_type: BackupType | None = None) -> list[BackupMetadata]:

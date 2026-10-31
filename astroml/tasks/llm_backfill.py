@@ -1,4 +1,5 @@
 from astroml.utils.exceptions import AstroMLError
+
 """Celery tasks for LLM backfill processing."""
 
 import logging
@@ -67,7 +68,7 @@ def process_batch(
         raise
 
 
-def _get_provider_for_job(job_type -> Any: str):
+def _get_provider_for_job(job_type: str):
     """Get the appropriate provider for a job type."""
     if job_type == "embedding":
         return get_llm_provider("openai"), {}

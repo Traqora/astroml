@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """GraphSAGE model for node classification and transaction analysis.
 
 Implements inductive representation learning and node classification on
@@ -16,6 +15,8 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
+
+from astroml.utils.exceptions import AstroMLError
 
 try:
     from torch_geometric.nn import SAGEConv as PyGSAGEConv

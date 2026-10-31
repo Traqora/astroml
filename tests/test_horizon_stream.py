@@ -5,7 +5,11 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from astroml.ingestion import HorizonStreamError, HorizonStreamingClient
+from astroml.ingestion import (
+    HorizonRateLimitedError,
+    HorizonStreamError,
+    HorizonStreamingClient,
+)
 
 
 def test_package_exports_horizon_streaming_client():
@@ -279,3 +283,282 @@ def test_cursor_comparison_is_numeric_not_lexicographic():
     client = HorizonStreamingClient(cursor="9")
     client._advance_cursor("10")
     assert client.cursor == "10"
+
+
+def test_consume_stream_raises_rate_limited_error_on_429():
+    """A 429 response raises `HorizonRateLimitedError`, not the generic error."""
+
+    async def run_test():
+        async def handler(reader, writer):
+            await reader.readline()
+            while True:
+                line = await reader.readline()
+                if line in {b"\r\n", b"\n", b""}:
+                    break
+            writer.write(b"HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n")
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
+
+        server = await asyncio.start_server(handler, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        client = HorizonStreamingClient(base_url=f"http://127.0.0.1:{port}")
+
+        async def on_transaction(_tx):
+            return None
+
+        try:
+            with pytest.raises(HorizonRateLimitedError):
+                await client._consume_stream(on_transaction)
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    asyncio.run(run_test())
+
+
+def test_consume_stream_parses_retry_after_on_429():
+    """`Retry-After` (delta-seconds form) is captured on the raised error."""
+
+    async def run_test():
+        async def handler(reader, writer):
+            await reader.readline()
+            while True:
+                line = await reader.readline()
+                if line in {b"\r\n", b"\n", b""}:
+                    break
+            writer.write(
+                b"HTTP/1.1 429 Too Many Requests\r\n"
+                b"Retry-After: 7\r\n"
+                b"Connection: close\r\n\r\n"
+            )
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
+
+        server = await asyncio.start_server(handler, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        client = HorizonStreamingClient(base_url=f"http://127.0.0.1:{port}")
+
+        async def on_transaction(_tx):
+            return None
+
+        try:
+            with pytest.raises(HorizonRateLimitedError) as exc_info:
+                await client._consume_stream(on_transaction)
+            assert exc_info.value.retry_after == 7.0
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    asyncio.run(run_test())
+
+
+def test_consume_stream_ignores_unparseable_retry_after():
+    """An HTTP-date or garbage `Retry-After` value is treated as absent."""
+
+    async def run_test():
+        async def handler(reader, writer):
+            await reader.readline()
+            while True:
+                line = await reader.readline()
+                if line in {b"\r\n", b"\n", b""}:
+                    break
+            writer.write(
+                b"HTTP/1.1 429 Too Many Requests\r\n"
+                b"Retry-After: Wed, 21 Oct 2026 07:28:00 GMT\r\n"
+                b"Connection: close\r\n\r\n"
+            )
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
+
+        server = await asyncio.start_server(handler, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        client = HorizonStreamingClient(base_url=f"http://127.0.0.1:{port}")
+
+        async def on_transaction(_tx):
+            return None
+
+        try:
+            with pytest.raises(HorizonRateLimitedError) as exc_info:
+                await client._consume_stream(on_transaction)
+            assert exc_info.value.retry_after is None
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    asyncio.run(run_test())
+
+
+def test_stream_retries_after_429_with_jittered_backoff():
+    """`stream()` catches the 429 and retries, rather than crashing the loop.
+
+    Also covers the pre-existing bug this fix touches: `HorizonStreamError`
+    is a plain `RuntimeError`, not an `AstroMLError`, so `stream()`'s old
+    `except AstroMLError` clause never actually caught it and any non-200
+    response (429 or otherwise) crashed the reconnect loop outright.
+    """
+
+    async def run_test():
+        received_ids = []
+        received_event = asyncio.Event()
+        connection_count = 0
+
+        async def handler(reader, writer):
+            nonlocal connection_count
+            connection_count += 1
+            await reader.readline()
+            while True:
+                line = await reader.readline()
+                if line in {b"\r\n", b"\n", b""}:
+                    break
+
+            if connection_count == 1:
+                writer.write(b"HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n")
+                await writer.drain()
+                writer.close()
+                await writer.wait_closed()
+                return
+
+            payload = {"id": "tx-1", "paging_token": "1"}
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/event-stream\r\n"
+                "Connection: close\r\n\r\n"
+                f"data: {json.dumps(payload)}\n\n"
+            )
+            writer.write(response.encode("utf-8"))
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
+
+        server = await asyncio.start_server(handler, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        client = HorizonStreamingClient(
+            base_url=f"http://127.0.0.1:{port}",
+            rate_limit_backoff=0.05,
+            max_rate_limit_backoff=0.1,
+        )
+
+        async def on_transaction(tx):
+            received_ids.append(tx["id"])
+            received_event.set()
+
+        try:
+            await client.start(on_transaction)
+            await asyncio.wait_for(received_event.wait(), timeout=2.0)
+            await client.stop()
+        finally:
+            await client.stop()
+            server.close()
+            await server.wait_closed()
+
+        assert connection_count == 2
+        assert received_ids == ["tx-1"]
+
+    asyncio.run(run_test())
+
+
+def test_stream_jittered_wait_is_bounded_by_current_backoff(monkeypatch):
+    """The jittered 429 wait is drawn from `[0, rate_limit_backoff]`."""
+
+    async def run_test():
+        captured_delays = []
+
+        async def fake_sleep(seconds):
+            captured_delays.append(seconds)
+            if len(captured_delays) >= 2:
+                client._stop_event.set()
+
+        monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+
+        async def always_429(_on_transaction):
+            raise HorizonRateLimitedError()
+
+        client = HorizonStreamingClient(
+            base_url="http://127.0.0.1:1",
+            rate_limit_backoff=1.0,
+            max_rate_limit_backoff=4.0,
+        )
+        client._consume_stream = always_429
+
+        async def on_transaction(_tx):
+            return None
+
+        await client.stream(on_transaction)
+
+        assert len(captured_delays) >= 2
+        assert 0.0 <= captured_delays[0] <= 1.0
+        # Backoff ceiling doubles after the first 429, so the second
+        # jittered wait is drawn from a wider range.
+        assert 0.0 <= captured_delays[1] <= 2.0
+
+    asyncio.run(run_test())
+
+
+def test_stream_resets_rate_limit_backoff_after_clean_reconnect():
+    """A clean reconnect after a 429 resets the backoff ceiling, not just the
+    normal reconnect delay — a later, independent 429 should not inherit an
+    escalated ceiling from an earlier, unrelated rate-limit episode."""
+
+    async def run_test():
+        connection_count = 0
+        received_ids = []
+        received_event = asyncio.Event()
+
+        async def handler(reader, writer):
+            nonlocal connection_count
+            connection_count += 1
+            await reader.readline()
+            while True:
+                line = await reader.readline()
+                if line in {b"\r\n", b"\n", b""}:
+                    break
+
+            if connection_count == 1:
+                writer.write(b"HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n")
+                await writer.drain()
+                writer.close()
+                await writer.wait_closed()
+                return
+
+            payload = {"id": f"tx-{connection_count}", "paging_token": str(connection_count)}
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/event-stream\r\n"
+                "Connection: close\r\n\r\n"
+                f"data: {json.dumps(payload)}\n\n"
+            )
+            writer.write(response.encode("utf-8"))
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
+
+        server = await asyncio.start_server(handler, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        client = HorizonStreamingClient(
+            base_url=f"http://127.0.0.1:{port}",
+            reconnect_delay=0.02,
+            max_reconnect_delay=0.05,
+            rate_limit_backoff=0.02,
+            max_rate_limit_backoff=0.05,
+        )
+
+        async def on_transaction(tx):
+            received_ids.append(tx["id"])
+            if len(received_ids) >= 2:
+                received_event.set()
+
+        try:
+            await client.start(on_transaction)
+            await asyncio.wait_for(received_event.wait(), timeout=2.0)
+            await client.stop()
+        finally:
+            await client.stop()
+            server.close()
+            await server.wait_closed()
+
+        assert received_ids == ["tx-2", "tx-3"]
+
+    asyncio.run(run_test())

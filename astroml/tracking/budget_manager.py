@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Budget definition, enforcement and alerting for ML spend.
 
 Resolves part of #647.
@@ -28,6 +27,7 @@ from enum import Enum
 from typing import Any
 
 from astroml.tracking.cost_tracker import CostTracker, utcnow
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

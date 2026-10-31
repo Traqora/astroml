@@ -1,5 +1,3 @@
-from typing import Any, Dict, List, Optional, Union, Callable
-from astroml.utils.exceptions import AstroMLError
 """Test generation orchestrator.
 
 Orchestrates the generation of tests from code, documentation,
@@ -13,6 +11,9 @@ import logging
 import textwrap
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any, Callable, Dict, List, Optional, Union
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,7 @@ class TestGenerator:
     and comprehensive assertions.
     """
 
-    def __init__(self, config -> Any: TestGenerationConfig | None = None):
+    def __init__(self, config: TestGenerationConfig | None = None) -> None:
         self.config = config or TestGenerationConfig()
 
     def generate_from_function(

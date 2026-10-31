@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Utility functions for benchmarking."""
 
 from __future__ import annotations
@@ -9,6 +8,8 @@ from typing import Any
 
 import psutil
 import torch
+
+from astroml.utils.exceptions import AstroMLError
 
 
 def measure_memory_usage() -> dict[str, float]:
@@ -53,7 +54,7 @@ def format_memory(mb: float) -> str:
 class Timer:
     """Context manager for timing operations."""
 
-    def __init__(self, description -> Any: str = "Operation"):
+    def __init__(self, description: str = "Operation") -> None:
         self.description = description
         self.start_time = None
         self.end_time = None
@@ -82,7 +83,7 @@ class Timer:
 class MemoryMonitor:
     """Context manager for monitoring memory usage."""
 
-    def __init__(self, description -> Any: str = "Memory usage"):
+    def __init__(self, description: str = "Memory usage") -> None:
         self.description = description
         self.start_memory = None
         self.end_memory = None
@@ -226,10 +227,10 @@ def estimate_training_time(
     return estimated_seconds
 
 
-def create_progress_callback(description -> Any: str):
+def create_progress_callback(description: str):
     """Create a progress callback for training."""
 
-    def callback(epoch -> Any: int, loss: float, metrics: dict[str, float]):
+    def callback(epoch: int, loss: float, metrics: dict[str, float]):
         print(f"Epoch {epoch}: Loss = {loss:.4f}")
         for metric, value in metrics.items():
             print(f"  {metric}: {value:.4f}")

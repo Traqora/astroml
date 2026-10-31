@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Fine-tuned model registry.
 
 Provides versioned storage, lineage tracking, and deployment
@@ -13,6 +12,8 @@ import os
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ class FineTuneRegistry:
     deployment management for fine-tuned models.
     """
 
-    def __init__(self, storage_path -> Any: str = "./fine_tune_registry"):
+    def __init__(self, storage_path: str = "./fine_tune_registry") -> None:
         self.storage_path = storage_path
         os.makedirs(storage_path, exist_ok=True)
         self._records: dict[str, FineTuneModelRecord] = {}

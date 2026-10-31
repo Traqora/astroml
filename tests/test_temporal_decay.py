@@ -124,26 +124,27 @@ class TestTemporalDecayWeighter:
 
     def test_aggregate_with_decay_sum(self):
         """Test sum aggregation with decay."""
-        weighter = TemporalDecayWeighter(lambda_param=0.0)
-        transactions = [{"timestamp": 100.0, "amount": 100.0}, {"timestamp": 100.0, "amount": 50.0}]
+        weighter = TemporalDecayWeighter(lambda_param=0.1)
+        transactions = [{"timestamp": 100.0, "amount": 100.0}, {"timestamp": 90.0, "amount": 50.0}]
         result = weighter.aggregate_with_decay(transactions, current_time=100.0, aggregation="sum")
-        assert abs(result - 150.0) < 1e-10
+        assert result == pytest.approx(100.0 + 50.0 * math.exp(-1.0))
 
     def test_aggregate_with_decay_mean(self):
         """Test mean aggregation with decay."""
-        weighter = TemporalDecayWeighter(lambda_param=0.0)
-        transactions = [{"timestamp": 100.0, "amount": 100.0}, {"timestamp": 100.0, "amount": 50.0}]
+        weighter = TemporalDecayWeighter(lambda_param=0.1)
+        transactions = [{"timestamp": 100.0, "amount": 100.0}, {"timestamp": 90.0, "amount": 50.0}]
         result = weighter.aggregate_with_decay(transactions, current_time=100.0, aggregation="mean")
-        assert abs(result - 75.0) < 1e-10
+        assert result == pytest.approx((100.0 + 50.0 * math.exp(-1.0)) / 2)
 
     def test_aggregate_with_decay_weighted_mean(self):
         """Test weighted mean aggregation."""
-        weighter = TemporalDecayWeighter(lambda_param=0.0)
-        transactions = [{"timestamp": 100.0, "amount": 100.0}, {"timestamp": 100.0, "amount": 50.0}]
+        weighter = TemporalDecayWeighter(lambda_param=0.1)
+        transactions = [{"timestamp": 100.0, "amount": 100.0}, {"timestamp": 90.0, "amount": 50.0}]
         result = weighter.aggregate_with_decay(
             transactions, current_time=100.0, aggregation="weighted_mean"
         )
-        assert abs(result - 75.0) < 1e-10
+        expected = (100.0 + 50.0 * math.exp(-1.0)) / (1.0 + math.exp(-1.0))
+        assert result == pytest.approx(expected)
 
     def test_aggregate_with_decay_invalid_aggregation(self):
         """Test that invalid aggregation method raises error."""

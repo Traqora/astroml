@@ -4,7 +4,7 @@ from typing import Any
 
 
 class ReconnectionManager:
-    def __init__(self, ttl_seconds -> Any: int = 300):
+    def __init__(self, ttl_seconds: int = 300) -> None:
         self.sessions: dict[str, dict[str, Any]] = {}
         self.ttl = ttl_seconds
 
@@ -18,7 +18,7 @@ class ReconnectionManager:
         }
         return session_id
 
-    def append_tokens(self, session_id -> Any: str, tokens: list[str]):
+    def append_tokens(self, session_id: str, tokens: list[str]):
         if session_id in self.sessions:
             self.sessions[session_id]["tokens"].extend(tokens)
             self.sessions[session_id]["last_accessed"] = time.time()

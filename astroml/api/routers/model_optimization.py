@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Model optimization API endpoints for ONNX conversion, optimization, and quantization."""
 
 from __future__ import annotations
@@ -22,6 +21,7 @@ from astroml.training.optimization.quantization import (
 from astroml.training.optimization.quantization import (
     quantize as quantize_model,
 )
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

@@ -18,6 +18,8 @@ resources:
   - rbac.yaml
   - horizontal-pod-autoscaler.yaml
   - serving-worker-hpa.yaml
+  - network-policy.yaml
+  - pod-disruption-budget.yaml
 
 commonLabels:
   managed-by: kustomize

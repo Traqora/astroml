@@ -106,7 +106,17 @@ class TemporalSpread:
 
 @dataclass(frozen=True)
 class SnapshotStats:
-    """Everything reported about one snapshot."""
+    """Everything reported about one snapshot.
+
+    ``isolated_sinks``/``isolated_sources`` — issue #835:
+        A node counts as an isolated sink if it never *sends* to any other
+        node in the window, and as an isolated source if it never
+        *receives* from any other node. A self-loop (``src == dst``) does
+        not count towards either: a node whose only edge in the window is a
+        self-loop has no real connection to the rest of the graph and must
+        still be reported as isolated on both sides, which is exactly the
+        case these two metrics exist to catch.
+    """
 
     version: str
     index: int | None
@@ -260,6 +270,16 @@ class SnapshotStatsAccumulator:
 
         self._out_degree: dict[str, int] = {}
         self._in_degree: dict[str, int] = {}
+        # Issue #835 — degree counters that exclude self-loops, used only for
+        # the isolated-node checks. A node whose only edge is a self-loop has
+        # out_degree == in_degree == 1 in the counters above, so it looked
+        # "connected" and was never reported as isolated even though it has
+        # no edge to or from any *other* node — the thing the metric exists
+        # to catch. ``_out_degree``/``_in_degree`` themselves stay unchanged
+        # (degree distribution and reciprocity are computed from them too),
+        # so only these two are non-loop.
+        self._out_degree_non_loop: dict[str, int] = {}
+        self._in_degree_non_loop: dict[str, int] = {}
         self._nodes: set[str] = set()
         self._pairs: set[tuple[str, str]] = set()
         self._amounts: list[float] = []
@@ -284,6 +304,9 @@ class SnapshotStatsAccumulator:
         self._pairs.add((src, dst))
         if src == dst:
             self._self_loops += 1
+        else:
+            self._out_degree_non_loop[src] = self._out_degree_non_loop.get(src, 0) + 1
+            self._in_degree_non_loop[dst] = self._in_degree_non_loop.get(dst, 0) + 1
         if amount is not None:
             self._amounts.append(amount)
         if timestamp is not None:
@@ -334,8 +357,12 @@ class SnapshotStatsAccumulator:
             num_self_loops=self._self_loops,
             density=round(density, 9),
             reciprocity=round(reciprocity, 9),
-            isolated_sinks=sum(1 for node in self._nodes if not self._out_degree.get(node)),
-            isolated_sources=sum(1 for node in self._nodes if not self._in_degree.get(node)),
+            isolated_sinks=sum(
+                1 for node in self._nodes if not self._out_degree_non_loop.get(node)
+            ),
+            isolated_sources=sum(
+                1 for node in self._nodes if not self._in_degree_non_loop.get(node)
+            ),
             degree=Distribution.from_values(degrees),
             amounts=Distribution.from_values(self._amounts),
             temporal=temporal,

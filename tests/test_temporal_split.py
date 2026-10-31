@@ -76,6 +76,32 @@ class TestTemporalGraphSplitRatio:
         assert result.train_edges == []
         assert result.test_edges == []
 
+    def test_tied_timestamp_at_the_split_boundary_raises_leakage_error(self):
+        """Temporal split leakage guard (issue #837).
+
+        A plain index-based ratio split has no notion of "value", only
+        position: if two edges share the same timestamp and the split
+        index happens to fall between them, one goes to train and the
+        other to test despite being simultaneous. `temporal_graph_split`
+        runs its own `train_max >= test_min` check inline specifically to
+        catch this instead of silently returning a tied, leaking split.
+        """
+        edges = [
+            FakeEdge(src=f"a{i}", dst=f"b{i}", timestamp=t)
+            for i, t in enumerate([0, 1, 2, 3, 4, 4, 6, 7, 8, 9])
+        ]
+        with pytest.raises(LeakageError, match="overlap"):
+            temporal_graph_split(edges, train_ratio=0.5)
+
+    def test_distinct_timestamp_immediately_adjacent_to_the_boundary_is_clean(self):
+        """Complement to the tied-boundary case: when the split happens to
+        land exactly on a value change (no duplicate value spans train and
+        test), the guard must not false-positive."""
+        edges = _make_edges(10)  # timestamps 0..9, all distinct
+        result = temporal_graph_split(edges, train_ratio=0.5)
+        assert [e.timestamp for e in result.train_edges] == [0, 1, 2, 3, 4]
+        assert [e.timestamp for e in result.test_edges] == [5, 6, 7, 8, 9]
+
 
 # ---------------------------------------------------------------------------
 # temporal_graph_split — cutoff mode
@@ -266,3 +292,16 @@ class TestTemporalSplitterEdges:
         test_timestamps = {e.timestamp for e in result.test_edges}
         # The maximum training timestamp must be strictly less than every test timestamp.
         assert max(train_timestamps) < min(test_timestamps)
+
+    def test_splitter_also_rejects_a_tied_boundary_timestamp(self):
+        """The high-level `TemporalSplitter` entry point must not bypass
+        the leakage guard: a tie at the ratio-split boundary raises the
+        same `LeakageError` whether a caller uses `temporal_graph_split`
+        directly or goes through the splitter (issue #837)."""
+        edges = [
+            FakeEdge(src=f"a{i}", dst=f"b{i}", timestamp=t)
+            for i, t in enumerate([0, 1, 2, 3, 4, 4, 6, 7, 8, 9])
+        ]
+        splitter = TemporalSplitter(train_ratio=0.5)
+        with pytest.raises(LeakageError, match="overlap"):
+            splitter.split_edges(edges)

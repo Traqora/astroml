@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Unit of Work pattern for transaction management (issue #571)."""
 
 from __future__ import annotations
@@ -14,6 +13,7 @@ from astroml.db.repositories import (
     ProcessedLedgerRepository,
     TransactionRepository,
 )
+from astroml.utils.exceptions import AstroMLError
 
 
 class UnitOfWork:

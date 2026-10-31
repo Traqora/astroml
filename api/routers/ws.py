@@ -126,7 +126,8 @@ async def _handle_llm_chat(websocket: WebSocket, client):
             await ws_manager.send_json(client, {"type": "error", "error": "Invalid JSON message"})
         except WebSocketDisconnect:
             break
-        except Exception as e:
+        except Exception:
+            logger.exception("Unhandled error in LLM chat WebSocket handler")
             await ws_manager.send_json(client, {"type": "error", "error": "An error occurred"})
 
 

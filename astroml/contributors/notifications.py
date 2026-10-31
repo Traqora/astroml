@@ -1,5 +1,3 @@
-from typing import Any, Dict, List, Optional, Union, Callable
-from astroml.utils.exceptions import AstroMLError
 """Notification service for contributor activities.
 
 Features:
@@ -8,16 +6,30 @@ Features:
   - Weekly digest emails
   - User preference management
   - GitHub webhook handling
+
+The batch send path (``send_notifications_batch``) persists all notification
+records with a single ``Session.flush()`` call instead of one flush per
+notification, so webhook handlers that fan out to multiple mentioned users
+keep the final ``Session.commit()`` as the only round-trip-heavy operation.
+See ``api/tests/test_notifications.py::test_notifications_batching``.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
+from typing import TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+from astroml.utils.exceptions import AstroMLError
+
+if TYPE_CHECKING:  # pragma: no cover
+    from api.models.orm import NotificationPreference
 
 
 class NotificationType(str, Enum):
@@ -51,9 +63,9 @@ class NotificationEvent:
     content: str
     link: str | None = None
     actor: str | None = None  # GitHub username who triggered it
-    timestamp: datetime = None
+    timestamp: datetime | None = None
 
-    def __post_init__(self) -> Any:
+    def __post_init__(self) -> None:
         if self.timestamp is None:
             self.timestamp = datetime.now(timezone.utc)
 
@@ -61,13 +73,14 @@ class NotificationEvent:
 class NotificationService:
     """Manages notification delivery across channels."""
 
-    def __init__(self, db -> Any: Session):
+    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     def send_notification(
         self,
         event: NotificationEvent,
-        channels: list[NotificationChannel] = None,
+        channels: list[NotificationChannel] | None = None,
     ) -> int:
         """Send notification and store record.
 
@@ -104,6 +117,60 @@ class NotificationService:
             self._deliver(notification_id, channel, event)
 
         return notification_id
+
+    def send_notifications_batch(
+        self,
+        events: list[NotificationEvent],
+        channels: list[NotificationChannel] | None = None,
+    ) -> list[int]:
+        """Send multiple notifications in a single batch with one flush.
+
+        Args:
+            events: List of notification event details
+            channels: List of channels to send to (uses preferences if None)
+
+        Returns:
+            List of notification record IDs
+        """
+        from api.models.orm import Notification  # noqa: PLC0415
+
+        notification_ids = []
+        notifications = []
+
+        # Create all notification objects
+        for event in events:
+            notification = Notification(
+                user_id=event.user_id,
+                event_type=event.event_type.value,
+                title=event.title,
+                content=event.content,
+                link=event.link,
+                actor=event.actor,
+                is_read=False,
+                created_at=event.timestamp,
+            )
+            notifications.append(notification)
+            self.db.add(notification)
+
+        # Single flush for all notifications
+        self.db.flush()
+
+        # Collect IDs and deliver to channels
+        for notification, event in zip(notifications, events):
+            notification_id = notification.id
+            notification_ids.append(notification_id)
+
+            # Get user preferences for this event
+            event_channels = channels
+            if event_channels is None:
+                prefs = self._get_preferences(event.user_id)
+                event_channels = prefs.get_enabled_channels(event.event_type)
+
+            # Send to each channel
+            for channel in event_channels:
+                self._deliver(notification_id, channel, event)
+
+        return notification_ids
 
     def _deliver(
         self,
@@ -192,7 +259,7 @@ class NotificationService:
         user_id: int,
         limit: int = 20,
         unread_only: bool = False,
-    ) -> list:
+    ) -> list[Notification]:
         """Get notifications for user."""
         from api.models.orm import Notification  # noqa: PLC0415
 
@@ -204,7 +271,7 @@ class NotificationService:
         q = q.order_by(Notification.created_at.desc()).limit(limit)
 
         result = self.db.execute(q)
-        return result.scalars().all()
+        return list(result.scalars().all())
 
 
 class NotificationPreferences:
@@ -236,7 +303,7 @@ class NotificationPreferences:
 
     def get_enabled_channels(self, event_type: NotificationType) -> list[NotificationChannel]:
         """Get enabled channels for event type."""
-        channels = []
+        channels: list[NotificationChannel] = []
 
         # Check if event type is enabled
         if event_type == NotificationType.PR_COMMENT and not self.pr_comments:
@@ -261,7 +328,7 @@ class NotificationPreferences:
         return channels
 
     @classmethod
-    def from_orm(cls, orm_obj) -> NotificationPreferences:
+    def from_orm(cls, orm_obj: NotificationPreference) -> NotificationPreferences:
         """Create from ORM object."""
         return cls(
             user_id=orm_obj.user_id,
@@ -280,7 +347,8 @@ class NotificationPreferences:
 class GitHubWebhookHandler:
     """Handles GitHub webhook events."""
 
-    def __init__(self, db -> Any: Session):
+    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
         self.service = NotificationService(db)
 
@@ -292,10 +360,12 @@ class GitHubWebhookHandler:
         repo: str,
         link: str,
     ) -> None:
-        """Handle PR comment webhook."""
+        """Handle PR comment webhook with batched notifications."""
         # Find mentioned users
         mentioned_users = self._extract_mentions(content)
 
+        # Batch all notifications for efficiency
+        events = []
         for user_id in mentioned_users:
             event = NotificationEvent(
                 event_type=NotificationType.PR_MENTION,
@@ -305,7 +375,10 @@ class GitHubWebhookHandler:
                 link=link,
                 actor=commenter,
             )
-            self.service.send_notification(event)
+            events.append(event)
+
+        if events:
+            self.service.send_notifications_batch(events)
 
     def handle_issue_comment(
         self,
@@ -315,9 +388,11 @@ class GitHubWebhookHandler:
         repo: str,
         link: str,
     ) -> None:
-        """Handle issue comment webhook."""
+        """Handle issue comment webhook with batched notifications."""
         mentioned_users = self._extract_mentions(content)
 
+        # Batch all notifications for efficiency
+        events = []
         for user_id in mentioned_users:
             event = NotificationEvent(
                 event_type=NotificationType.ISSUE_MENTION,
@@ -327,7 +402,10 @@ class GitHubWebhookHandler:
                 link=link,
                 actor=commenter,
             )
-            self.service.send_notification(event)
+            events.append(event)
+
+        if events:
+            self.service.send_notifications_batch(events)
 
     def handle_review_request(
         self,
@@ -366,8 +444,6 @@ class GitHubWebhookHandler:
     @staticmethod
     def _extract_mentions(text: str) -> list[str]:
         """Extract @mentions from text."""
-        import re
-
         pattern = r"@(\w+)"
         return re.findall(pattern, text)
 
@@ -375,10 +451,11 @@ class GitHubWebhookHandler:
 class DigestEmailGenerator:
     """Generates weekly digest emails."""
 
-    def __init__(self, db -> Any: Session):
+    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
-    def generate_digest(self, user_id: int) -> dict:
+    def generate_digest(self, user_id: int) -> dict[str, object]:
         """Generate weekly digest for user."""
         from api.models.orm import Notification  # noqa: PLC0415
 
@@ -392,7 +469,7 @@ class DigestEmailGenerator:
         notifications = result.scalars().all()
 
         # Group by event type
-        grouped = {}
+        grouped: dict[str, list[Notification]] = {}
         for notif in notifications:
             event_type = notif.event_type
             if event_type not in grouped:

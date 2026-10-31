@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -8,7 +9,10 @@ from astroml.llm.stream.protocol import StreamProtocol
 from astroml.llm.stream.reconnect import get_reconnection_manager
 from astroml.llm.stream.server import get_streaming_server
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/v1/llm-stream", tags=["llm-stream"])
+
 
 
 @router.get("/sse")
@@ -71,11 +75,16 @@ async def ws_stream(websocket: WebSocket):
 
         await websocket.send_json(StreamProtocol.format_ws("done", {"session_id": session_id}))
     except WebSocketDisconnect:
-        pass
+        logger.debug("WebSocket client disconnected during stream")
     except Exception as e:
+        logger.error("Error during WebSocket streaming: %s", e)
         try:
             await websocket.send_json({"event": "error", "message": "An error occurred"})
-        except:
-            pass
+        except (WebSocketDisconnect, RuntimeError, Exception) as send_err:
+            logger.warning("Failed to send WebSocket error message to client: %s", send_err)
     finally:
-        await websocket.close()
+        try:
+            await websocket.close()
+        except Exception as close_err:
+            logger.debug("WebSocket close exception: %s", close_err)
+

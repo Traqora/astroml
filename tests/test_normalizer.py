@@ -6,6 +6,7 @@ import pytest
 
 from astroml.db.schema import NormalizedTransaction
 from astroml.ingestion.normalizer import normalize_operation, normalize_path_payment_hops
+from astroml.utils.exceptions import IngestionError
 
 
 @pytest.fixture()
@@ -36,6 +37,10 @@ def sample_create_account_json():
     }
 
 
+SAMPLE_ISSUER = "G" + "D" * 55
+SAMPLE_MID_ISSUER = "G" + "M" * 55
+
+
 @pytest.fixture()
 def sample_trustline_json():
     return {
@@ -44,7 +49,7 @@ def sample_trustline_json():
         "source_account": "G_TRUSTOR",
         "asset_type": "credit_alphanum4",
         "asset_code": "USDC",
-        "asset_issuer": "G_ISSUER",
+        "asset_issuer": SAMPLE_ISSUER,
         "created_at": "2024-01-15T12:40:00Z",
         "transaction_hash": "c_hash",
     }
@@ -78,7 +83,7 @@ def test_normalize_other_operation(sample_trustline_json):
     assert norm.sender == "G_TRUSTOR"
     assert norm.receiver is None
     assert norm.amount is None
-    assert norm.asset == "USDC:G_ISSUER"
+    assert norm.asset == f"USDC:{SAMPLE_ISSUER}"
     assert norm.transaction_hash == "c_hash"
 
 
@@ -99,7 +104,7 @@ def sample_path_payment_json():
         "amount": "48.5",
         "asset_type": "credit_alphanum4",
         "asset_code": "USDC",
-        "asset_issuer": "G_ISSUER",
+        "asset_issuer": SAMPLE_ISSUER,
         "source_asset_type": "native",
         "path": [],
         "created_at": "2024-01-15T13:00:00Z",
@@ -111,7 +116,13 @@ def sample_path_payment_json():
 def sample_multi_hop_path_payment_json(sample_path_payment_json):
     return {
         **sample_path_payment_json,
-        "path": [{"asset_type": "credit_alphanum4", "asset_code": "BTC", "asset_issuer": "G_MID"}],
+        "path": [
+            {
+                "asset_type": "credit_alphanum4",
+                "asset_code": "BTC",
+                "asset_issuer": SAMPLE_MID_ISSUER,
+            }
+        ],
     }
 
 
@@ -153,7 +164,7 @@ def test_normalize_path_payment_hops_multi_hop(sample_multi_hop_path_payment_jso
     # The middle of the chain is the intermediate path asset (BTC), not the
     # destination asset (USDC) — the destination asset only applies to the
     # final hop when there's more than one intermediate asset in the path.
-    assert second.asset == "BTC:G_MID"
+    assert second.asset == f"BTC:{SAMPLE_MID_ISSUER}"
     assert second.amount == 48.5
     assert second.transaction_hash == "path_hash_hop1"
 
@@ -195,3 +206,76 @@ def test_normalize_path_payment_hops_falls_back_when_no_hops_extracted(monkeypat
 
     assert len(hops) == 1
     assert _fields(hops[0]) == _fields(normalize_operation(data))
+
+
+# ---------------------------------------------------------------------------
+# Asset code/issuer validation pre-insert (#831)
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_rejects_malformed_asset_code(sample_trustline_json):
+    sample_trustline_json["asset_code"] = "TOO-LONG-CODE!!"
+    with pytest.raises(IngestionError, match="asset code"):
+        normalize_operation(sample_trustline_json)
+
+
+def test_normalize_rejects_asset_code_over_twelve_chars(sample_trustline_json):
+    sample_trustline_json["asset_code"] = "THIRTEENCHARS"
+    with pytest.raises(IngestionError, match="asset code"):
+        normalize_operation(sample_trustline_json)
+
+
+def test_normalize_rejects_malformed_asset_issuer(sample_trustline_json):
+    sample_trustline_json["asset_issuer"] = "not-a-real-issuer"
+    with pytest.raises(IngestionError, match="asset issuer"):
+        normalize_operation(sample_trustline_json)
+
+
+def test_normalize_rejects_issuer_not_starting_with_g(sample_trustline_json):
+    sample_trustline_json["asset_issuer"] = "A" + "D" * 55
+    with pytest.raises(IngestionError, match="asset issuer"):
+        normalize_operation(sample_trustline_json)
+
+
+def test_normalize_rejects_issuer_wrong_length(sample_trustline_json):
+    sample_trustline_json["asset_issuer"] = "G" + "D" * 40
+    with pytest.raises(IngestionError, match="asset issuer"):
+        normalize_operation(sample_trustline_json)
+
+
+def test_normalize_accepts_well_formed_asset_code_and_issuer(sample_trustline_json):
+    # Sanity check: the fixture's own realistic code/issuer must not be
+    # rejected by the validation this issue adds.
+    norm = normalize_operation(sample_trustline_json)
+    assert norm.asset == f"USDC:{SAMPLE_ISSUER}"
+
+
+def test_normalize_rejects_malformed_code_with_no_issuer():
+    data = {
+        "id": "1",
+        "type": "change_trust",
+        "source_account": "G_TRUSTOR",
+        "asset_type": "credit_alphanum4",
+        "asset_code": "bad code!",
+        "created_at": "2024-01-15T12:40:00Z",
+        "transaction_hash": "d_hash",
+    }
+    with pytest.raises(IngestionError, match="asset code"):
+        normalize_operation(data)
+
+
+def test_normalize_native_asset_skips_validation_entirely():
+    # asset_type == "native" must short-circuit before any code/issuer
+    # validation runs, since native XLM payloads never carry either field.
+    data = {
+        "id": "1",
+        "type": "payment",
+        "source_account": "G_SENDER",
+        "to": "G_RECEIVER",
+        "amount": "1.0",
+        "asset_type": "native",
+        "created_at": "2024-01-15T12:30:00Z",
+        "transaction_hash": "e_hash",
+    }
+    norm = normalize_operation(data)
+    assert norm.asset == "XLM"

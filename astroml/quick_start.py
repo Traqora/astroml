@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Quick start module for AstroML.
 
 Provides a single entry point to wire sample data through the complete
@@ -22,6 +21,8 @@ from pathlib import Path
 
 import numpy as np
 import torch
+
+from astroml.utils.exceptions import AstroMLError
 
 from .benchmarking.config import BenchmarkConfig
 from .benchmarking.core import BenchmarkResult

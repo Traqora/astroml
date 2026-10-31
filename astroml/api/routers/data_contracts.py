@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Data contract API endpoints for AstroML.
 
 Provides endpoints to validate data against contracts, infer contracts from data,
@@ -19,6 +18,7 @@ from astroml.pipeline.contracts.quality_contract import QualityContract
 from astroml.pipeline.contracts.schema_contract import SchemaContract
 from astroml.pipeline.contracts.semantic_contract import SemanticContract
 from astroml.pipeline.contracts.verifier import ContractVerifier, MissingContractError
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

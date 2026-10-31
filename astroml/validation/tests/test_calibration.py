@@ -1,8 +1,8 @@
-from typing import Any, Dict, List, Optional, Union, Callable
 """Tests for calibration curve visualization and analysis."""
 
 from __future__ import annotations
 
+from typing import Any, Callable, Dict, List, Optional, Union
 from unittest.mock import patch
 
 import matplotlib.pyplot as plt

@@ -1,4 +1,5 @@
 from astroml.utils.exceptions import AstroMLError
+
 """Storage backends for cache."""
 
 import json
@@ -46,7 +47,7 @@ class CacheStore(ABC):
 class RedisStore(CacheStore):
     """Redis-backed cache store (hot cache)."""
 
-    def __init__(self, redis_url -> Any: str = None):
+    def __init__(self, redis_url: str = None) -> None:
         """Initialize Redis store.
 
         Args:
@@ -115,7 +116,7 @@ class RedisStore(CacheStore):
 class SQLiteStore(CacheStore):
     """SQLite-backed cache store (warm cache)."""
 
-    def __init__(self, db_path -> Any: str = None):
+    def __init__(self, db_path: str = None) -> None:
         """Initialize SQLite store.
 
         Args:
@@ -194,7 +195,7 @@ class SQLiteStore(CacheStore):
 class DiskStore(CacheStore):
     """Disk-backed cache store (cold storage)."""
 
-    def __init__(self, cache_dir -> Any: str = None):
+    def __init__(self, cache_dir: str = None) -> None:
         """Initialize disk store.
 
         Args:

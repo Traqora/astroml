@@ -763,17 +763,42 @@ results = fraud_detection_experiment()
 
 ### Hyperparameter Optimization
 
+AstroML provides a validated search space definition for hyperparameter optimization:
+
 ```python
-from astroml.models import HyperparameterSearch
+from astroml.training import SearchSpace, HPOptimizer
+
+# Define a validated search space
+search_space = SearchSpace.from_dict({
+    "learning_rate": (0.0001, 0.01),  # Range: min, max
+    "dropout": (0.1, 0.5),             # Range: min, max
+    "optimizer": ["adam", "sgd"],      # Categorical: list of choices
+    "hidden_dims": [[64, 32], [128, 64]],  # Categorical: list of lists
+})
+
+# Use with an optimizer
+optimizer = HPOptimizer(search_space)
+optimizer.optimize()
+```
+
+The `SearchSpace` class validates that:
+- Parameter names are non-empty strings
+- Categorical parameters are non-empty lists
+- Range parameters are 2-element tuples with numeric min < max
+
+For integration with Optuna:
+
+```python
+from astroml.training import SearchSpace
 from astroml.models.config import GCNConfig
 import optuna
 
 def optimize_hyperparameters():
     """Optimize hyperparameters using Optuna."""
-    
+
     def objective(trial):
         """Objective function for hyperparameter optimization."""
-        
+
         # Define hyperparameter search space
         hidden_dims = trial.suggest_categorical("hidden_dims", [
             [64, 32],
@@ -782,7 +807,7 @@ def optimize_hyperparameters():
             [512, 256],
             [128, 64, 32]
         ])
-        
+
         dropout = trial.suggest_float("dropout", 0.1, 0.5, step=0.1)
         learning_rate = trial.suggest_float("learning_rate", 1e-4, 1e-2, log=True)
         weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True)

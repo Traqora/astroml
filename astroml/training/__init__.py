@@ -1,5 +1,5 @@
-from typing import Any, Dict, List, Optional, Union, Callable
 from importlib import import_module
+from typing import Any, Callable, Dict, List, Optional, Union
 
 __all__ = [
     "temporal_split",
@@ -25,6 +25,8 @@ __all__ = [
     "available_objectives",
     "validate_edge_index",
     "validate_masks",
+    "SearchSpace",
+    "HPOptimizer",
 ]
 
 _LAZY = {
@@ -41,7 +43,10 @@ _LAZY = {
     "EarlyStoppingConfig": ("astroml.training.config", "EarlyStoppingConfig"),
     "TemporalSplitConfig": ("astroml.training.config", "TemporalSplitConfig"),
     "OptimizerConfig": ("astroml.training.config", "OptimizerConfig"),
-    "ContinuousLearningPipeline": ("astroml.training.continuous_learning", "ContinuousLearningPipeline"),
+    "ContinuousLearningPipeline": (
+        "astroml.training.continuous_learning",
+        "ContinuousLearningPipeline",
+    ),
     "ModelVersionManager": ("astroml.training.continuous_learning", "ModelVersionManager"),
     "GraphObjective": ("astroml.training.graph_objectives", "GraphObjective"),
     "NodeClassificationObjective": (
@@ -57,10 +62,12 @@ _LAZY = {
     "available_objectives": ("astroml.training.graph_objectives", "available_objectives"),
     "validate_edge_index": ("astroml.training.graph_objectives", "validate_edge_index"),
     "validate_masks": ("astroml.training.graph_objectives", "validate_masks"),
+    "SearchSpace": ("astroml.training.hyperparameter_optimization", "SearchSpace"),
+    "HPOptimizer": ("astroml.training.hyperparameter_optimization", "HPOptimizer"),
 }
 
 
-def __getattr__(name -> Any: str):
+def __getattr__(name: str):
     if name in _LAZY:
         module_path, attr = _LAZY[name]
         module = import_module(module_path)

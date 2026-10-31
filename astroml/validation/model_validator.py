@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Automated model validation suite and CI/CD deployment gating.
 
 Combines performance validation, fairness & bias detection, adversarial robustness
@@ -17,6 +16,7 @@ from typing import Any
 
 import numpy as np
 
+from astroml.utils.exceptions import AstroMLError
 from astroml.validation.compliance import ComplianceChecker, ComplianceReport
 from astroml.validation.fairness import BiasDetector, FairnessMetrics
 from astroml.validation.robustness import ModelRobustnessEvaluator
@@ -39,9 +39,7 @@ class ValidationGateResult:
     fairness_results: dict[str, Any]
     robustness_results: dict[str, Any]
     compliance_results: dict[str, Any]
-    timestamp: str = dc_field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    timestamp: str = dc_field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def to_dict(self) -> dict[str, Any]:
         """Convert gate result to dictionary."""
@@ -153,7 +151,10 @@ class ModelValidator:
 
         # 1. Performance Gate
         perf_metrics = self._evaluate_performance(model, X_test, y_test)
-        perf_passed = perf_metrics["accuracy"] >= self.min_accuracy and perf_metrics["f1_score"] >= self.min_f1_score
+        perf_passed = (
+            perf_metrics["accuracy"] >= self.min_accuracy
+            and perf_metrics["f1_score"] >= self.min_f1_score
+        )
         gate_decisions["performance"] = perf_passed
         if not perf_passed:
             blocking_reasons.append(
@@ -165,7 +166,7 @@ class ModelValidator:
         fairness_summary: dict[str, Any] = {"status": "skipped", "fairness_passed": True}
         if sensitive_features is not None:
             try:
-                preds = (self._evaluate_performance(model, X_test, y_test)["accuracy"])
+                preds = self._evaluate_performance(model, X_test, y_test)["accuracy"]
                 # Generate predictions
                 if hasattr(model, "predict"):
                     p = model.predict(X_test)
@@ -192,7 +193,9 @@ class ModelValidator:
                     },
                 }
                 if not fairness_passed:
-                    blocking_reasons.append("Fairness gate failed: significant bias detected across protected classes.")
+                    blocking_reasons.append(
+                        "Fairness gate failed: significant bias detected across protected classes."
+                    )
             except AstroMLError as e:
                 warnings.append(f"Fairness evaluation warning: {e}")
                 gate_decisions["fairness"] = True
@@ -226,7 +229,10 @@ class ModelValidator:
             robustness_report=robustness_res,
             frameworks=required_compliance_frameworks,
         )
-        compliance_passed = compliance_rep.overall_compliant and compliance_rep.compliance_score >= self.min_compliance_score
+        compliance_passed = (
+            compliance_rep.overall_compliant
+            and compliance_rep.compliance_score >= self.min_compliance_score
+        )
         gate_decisions["compliance"] = compliance_passed
         if not compliance_passed:
             blocking_reasons.append(

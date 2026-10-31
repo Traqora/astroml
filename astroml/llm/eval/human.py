@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Human evaluation workflows and annotation storage."""
 
 from __future__ import annotations
@@ -8,11 +7,13 @@ import os
 from datetime import datetime
 from typing import Any
 
+from astroml.utils.exceptions import AstroMLError
+
 
 class HumanEvaluator:
     """Manages human review feedback and annotations for LLM outputs."""
 
-    def __init__(self, storage_path -> Any: str = "data/eval/human_feedback.json"):
+    def __init__(self, storage_path: str = "data/eval/human_feedback.json") -> None:
         self.storage_path = storage_path
         self.feedback_list: list[dict[str, Any]] = []
         self._load()

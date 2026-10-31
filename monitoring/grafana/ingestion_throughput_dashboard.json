@@ -234,8 +234,9 @@
       ]
     },
     {
-      "title": "Ledger Lag",
+      "title": "Ingestion Lag",
       "type": "graph",
+      "description": "Issue #858: this panel previously queried astroml_ingestion_ledger_lag_seconds, a metric nothing in the codebase ever emitted (the real gauge is astroml_ingestion_lag_seconds, time since the last processed record's own created_at). Backs the IngestionLagHigh alert's 300s critical threshold.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -244,9 +245,18 @@
       },
       "targets": [
         {
-          "expr": "astroml_ingestion_ledger_lag_seconds",
-          "legendFormat": "{{horizon_url}}",
+          "expr": "astroml_ingestion_lag_seconds",
+          "legendFormat": "{{stream_type}} - {{horizon_url}}",
           "refId": "K"
+        }
+      ],
+      "thresholds": [
+        {
+          "value": 300,
+          "colorMode": "critical",
+          "op": "gt",
+          "line": true,
+          "fill": false
         }
       ],
       "yaxes": [

@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Kafka stream processing for CDC events (issue #626).
 
 Processes CDC events from Kafka topics into the AstroML feature store
@@ -21,6 +20,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from astroml.ingestion.cdc.connector import ChangeEvent, ChangeOperation
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -68,15 +68,25 @@ class ExactlyOnceTracker:
     def __init__(self, checkpoint_interval: int = 100) -> None:
         self.checkpoint_interval = checkpoint_interval
         self._processed_offsets: dict[str, dict[int, int]] = defaultdict(dict)
+        self._seen_offsets: set[tuple[str, int, int]] = set()
         self._events_since_checkpoint: int = 0
         self._committed: set[tuple[str, int, int]] = set()
 
-    def mark_processed(self, topic: str, partition: int, offset: int) -> None:
-        """Record that an offset has been processed but not yet committed."""
+    def mark_processed(self, topic: str, partition: int, offset: int) -> bool:
+        """Record that an offset has been processed but not yet committed.
+
+        Returns True on first processing of this offset, False for duplicates.
+        """
+        key = (topic, partition, offset)
+        if key in self._seen_offsets:
+            return False
+
+        self._seen_offsets.add(key)
         self._processed_offsets[topic][partition] = max(
             self._processed_offsets[topic].get(partition, -1), offset
         )
         self._events_since_checkpoint += 1
+        return True
 
     def mark_committed(self, topic: str, partition: int, offset: int) -> None:
         """Record that an offset has been committed."""
@@ -88,15 +98,21 @@ class ExactlyOnceTracker:
 
     def checkpoint(self) -> dict[str, Any]:
         """Return the current checkpoint state to persist."""
-        self._events_since_checkpoint = 0
-        return {
+        checkpoint = {
             "offsets": dict(self._processed_offsets),
             "committed_count": len(self._committed),
+            "processed_count": sum(len(v) for v in self._processed_offsets.values()),
         }
+        self._events_since_checkpoint = 0
+        return checkpoint
 
     def get_last_processed(self, topic: str, partition: int) -> int:
         """Return the last processed offset for a given topic-partition."""
         return self._processed_offsets.get(topic, {}).get(partition, -1)
+
+    def is_processed(self, topic: str, partition: int, offset: int) -> bool:
+        """Check whether an offset has already been processed."""
+        return (topic, partition, offset) in self._seen_offsets
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +229,18 @@ class StreamProcessor:
         """
         import time
 
+        offset_key = (topic, partition, offset)
+        if self.tracker.is_processed(topic, partition, offset):
+            duplicate = ProcessedEvent(
+                original_event=event,
+                transformed_data={},
+                feature_store_key=f"{event.source.get('table', 'unknown')}:duplicate:{offset}",
+                processing_time_ms=0.0,
+                status="skipped",
+            )
+            self._stats["skipped"] += 1
+            return duplicate
+
         start = time.perf_counter()
 
         try:
@@ -231,7 +259,7 @@ class StreamProcessor:
                 feature_store_key=key,
                 processing_time_ms=elapsed_ms,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - one bad CDC event must not stop the stream
             elapsed_ms = (time.perf_counter() - start) * 1000
             logger.error("Failed to process event at offset %d: %s", offset, exc)
             result = ProcessedEvent(

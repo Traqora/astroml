@@ -297,7 +297,13 @@ class Subscription:
     @strawberry.subscription
     async def transaction_created(self) -> Transaction:
         """Subscribe to new transactions."""
-        from api.graphql.subscriptions import transaction_created_subscription
+        from api.graphql.subscriptions import (  # type: ignore[import-not-found]
+            transaction_created_subscription,
+        )
+
+        # api/graphql/subscriptions.py (the pub/sub queue backing this
+        # subscription) does not exist yet; tracked separately from this
+        # mypy-batch fix.
 
         async for transaction in transaction_created_subscription():
             yield transaction

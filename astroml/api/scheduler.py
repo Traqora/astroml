@@ -1,5 +1,3 @@
-from typing import Any, Dict, List, Optional, Union, Callable
-from astroml.utils.exceptions import AstroMLError
 """Batch scoring scheduler for fraud detection.
 
 The scheduler runs as a background ``asyncio`` task that wakes up on a
@@ -24,9 +22,12 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timedelta, timezone
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

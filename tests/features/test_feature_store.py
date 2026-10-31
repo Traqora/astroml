@@ -27,6 +27,34 @@ from astroml.features.feature_store import (
     FeatureType,
     create_feature_store,
 )
+from astroml.features.offline_store import OfflineFeatureStore
+
+
+def test_offline_parquet_schema_evolves_across_batches(tmp_path):
+    store = OfflineFeatureStore(tmp_path)
+    first_batch = pd.DataFrame(
+        {
+            "entity_id": ["entity_1"],
+            "timestamp": ["2025-01-01T00:00:00Z"],
+            "score_v1": [0.75],
+        }
+    )
+    second_batch = pd.DataFrame(
+        {
+            "entity_id": ["entity_2"],
+            "timestamp": ["2025-01-02T00:00:00Z"],
+            "score_v2": [0.9],
+        }
+    )
+
+    store.write_offline_features("evolving_score", first_batch)
+    store.write_offline_features("evolving_score", second_batch)
+
+    result = store.read_offline_feature("evolving_score").set_index("entity_id")
+    assert result.loc["entity_1", "score_v1"] == 0.75
+    assert pd.isna(result.loc["entity_1", "score_v2"])
+    assert pd.isna(result.loc["entity_2", "score_v1"])
+    assert result.loc["entity_2", "score_v2"] == 0.9
 
 
 class TestFeatureDefinition:

@@ -45,7 +45,7 @@ class ValidationError:
 class ValidationResult:
     """Result of validation with errors and status."""
 
-    def __init__(self, is_valid -> Any: bool, errors: list[ValidationError] = None):
+    def __init__(self, is_valid: bool, errors: list[ValidationError] = None) -> None:
         self.is_valid = is_valid
         self.errors = errors or []
 

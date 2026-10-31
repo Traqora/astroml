@@ -1,9 +1,9 @@
-from typing import Any, Dict, List, Optional, Union, Callable
 """Automated feature selection with filter, wrapper, embedded and hybrid methods."""
 
 from __future__ import annotations
 
 from importlib import import_module
+from typing import Any, Callable, Dict, List, Optional, Union
 
 __all__ = [
     "FilterSelector",
@@ -42,7 +42,7 @@ _LAZY: dict[str, tuple[str, str]] = {
 }
 
 
-def __getattr__(name -> Any: str):
+def __getattr__(name: str):
     if name in _LAZY:
         module_path, attr = _LAZY[name]
         module = import_module(module_path)

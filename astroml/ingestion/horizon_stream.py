@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import json
 import logging
+import random
 import ssl
 from collections import OrderedDict
 from collections.abc import Callable
@@ -20,9 +21,30 @@ TransactionHandler = Callable[[Transaction], Any]
 # How many recently delivered paging tokens are remembered for de-duplication.
 DEFAULT_DEDUPE_CAPACITY = 1024
 
+# Default backoff-with-jitter bounds applied on top of the normal reconnect
+# delay when Horizon responds 429 (issue #830). Full jitter (0 to the current
+# backoff ceiling) rather than a fixed addend, so many clients hitting the
+# same rate limit at once do not all retry in lockstep.
+DEFAULT_RATE_LIMIT_BACKOFF = 5.0
+DEFAULT_MAX_RATE_LIMIT_BACKOFF = 60.0
+
 
 class HorizonStreamError(RuntimeError):
     """Raised when the Horizon stream returns an invalid HTTP response."""
+
+
+class HorizonRateLimitedError(HorizonStreamError):
+    """Raised when Horizon responds 429 Too Many Requests.
+
+    A subclass of :class:`HorizonStreamError` so existing
+    ``except HorizonStreamError`` handling still catches it; :meth:`stream`
+    additionally checks for this specific type to apply rate-limit backoff
+    with jitter instead of the normal reconnect delay.
+    """
+
+    def __init__(self, retry_after: float | None = None) -> None:
+        super().__init__("Unexpected HTTP status: 429")
+        self.retry_after = retry_after
 
 
 class HorizonStreamingClient:
@@ -53,6 +75,8 @@ class HorizonStreamingClient:
         cursor: str = "now",
         reconnect_delay: float = 1.0,
         max_reconnect_delay: float = 30.0,
+        rate_limit_backoff: float = DEFAULT_RATE_LIMIT_BACKOFF,
+        max_rate_limit_backoff: float = DEFAULT_MAX_RATE_LIMIT_BACKOFF,
         dedupe: bool = True,
         dedupe_capacity: int = DEFAULT_DEDUPE_CAPACITY,
         logger: logging.Logger | None = None,
@@ -64,6 +88,8 @@ class HorizonStreamingClient:
             raise ValueError("base_url must include a hostname")
         if reconnect_delay <= 0 or max_reconnect_delay <= 0:
             raise ValueError("Reconnect delays must be positive")
+        if rate_limit_backoff <= 0 or max_rate_limit_backoff <= 0:
+            raise ValueError("Rate limit backoff delays must be positive")
         if dedupe_capacity < 1:
             raise ValueError("dedupe_capacity must be >= 1")
 
@@ -72,6 +98,8 @@ class HorizonStreamingClient:
         self._cursor = str(cursor)
         self._reconnect_delay = reconnect_delay
         self._max_reconnect_delay = max_reconnect_delay
+        self._rate_limit_backoff = rate_limit_backoff
+        self._max_rate_limit_backoff = max_rate_limit_backoff
         self._dedupe = dedupe
         self._dedupe_capacity = dedupe_capacity
         self._logger = logger or logging.getLogger(__name__)
@@ -149,6 +177,17 @@ class HorizonStreamingClient:
         capped interval instead of a hot loop, while a routine server-side
         disconnect reconnects promptly.
 
+        Rate limiting (issue #830): a 429 response is raised by
+        :meth:`_consume_stream` as :class:`HorizonRateLimitedError` and is
+        handled separately from a generic stream error. Instead of the
+        normal exponential reconnect delay, the wait is drawn uniformly at
+        random from ``[0, backoff]`` ("full jitter"), where ``backoff``
+        itself doubles per consecutive 429 up to
+        ``max_rate_limit_backoff``. Jitter keeps many clients that were all
+        throttled at the same moment from retrying in lockstep and
+        re-triggering the same limit. If Horizon sends a ``Retry-After``
+        header, that value is honored as a floor under the jittered delay.
+
         Args:
             on_transaction: Handler passed through to each consumption; may be
                 a coroutine function.
@@ -159,6 +198,7 @@ class HorizonStreamingClient:
             disconnected socket to retry.
         """
         delay = self._reconnect_delay
+        rate_limit_backoff = self._rate_limit_backoff
 
         while not self._stop_event.is_set():
             try:
@@ -166,10 +206,24 @@ class HorizonStreamingClient:
                 if self._stop_event.is_set():
                     break
                 delay = self._reconnect_delay
+                rate_limit_backoff = self._rate_limit_backoff
                 self._logger.warning("Horizon stream disconnected. Reconnecting in %.2fs", delay)
             except asyncio.CancelledError:
                 raise
-            except AstroMLError:
+            except HorizonRateLimitedError as exc:
+                if self._stop_event.is_set():
+                    break
+                jittered = random.uniform(0, rate_limit_backoff)  # noqa: S311 — not cryptographic
+                wait_for = max(jittered, exc.retry_after or 0.0)
+                self._logger.warning(
+                    "Horizon stream rate limited (429). Retrying in %.2fs", wait_for
+                )
+                if self._stop_event.is_set():
+                    break
+                await asyncio.sleep(wait_for)
+                rate_limit_backoff = min(rate_limit_backoff * 2, self._max_rate_limit_backoff)
+                continue
+            except (HorizonStreamError, AstroMLError):
                 if self._stop_event.is_set():
                     break
                 self._logger.exception("Horizon stream error. Reconnecting in %.2fs", delay)
@@ -214,13 +268,23 @@ class HorizonStreamingClient:
             if len(parts) < 2:
                 raise HorizonStreamError(f"Invalid HTTP status line: {status!r}")
             status_code = int(parts[1])
-            if status_code != 200:
-                raise HorizonStreamError(f"Unexpected HTTP status: {status_code}")
 
+            response_headers: dict[str, str] = {}
             while True:
                 header_line = await reader.readline()
                 if header_line in {b"\r\n", b"\n", b""}:
                     break
+                decoded = header_line.decode("iso-8859-1").rstrip("\r\n")
+                name, _, value = decoded.partition(":")
+                if name:
+                    response_headers[name.strip().lower()] = value.strip()
+
+            if status_code == 429:
+                raise HorizonRateLimitedError(
+                    retry_after=self._parse_retry_after(response_headers.get("retry-after"))
+                )
+            if status_code != 200:
+                raise HorizonStreamError(f"Unexpected HTTP status: {status_code}")
 
             self._logger.info("Connected to Horizon stream: %s", self._request_path())
 
@@ -282,9 +346,22 @@ class HorizonStreamingClient:
             result = on_transaction(tx)
             if inspect.isawaitable(result):
                 await result
-        except BaseException:
+        except BaseException as exc:
             self._cursor = previous_cursor
-            self._logger.warning(
+            # Issue #860 — a handler crashing is the critical case this
+            # rollback exists for, and warning() alone discards the
+            # traceback that explains *why* it crashed; exception() logs it
+            # at ERROR with the traceback attached. CancelledError is
+            # deliberately excluded: it's routine shutdown/cancellation,
+            # not a handler bug, and would otherwise spam a full traceback
+            # on every cancelled task. The cursor still rolls back and the
+            # exception still propagates either way.
+            log = (
+                self._logger.exception
+                if not isinstance(exc, asyncio.CancelledError)
+                else self._logger.warning
+            )
+            log(
                 "Transaction handler failed; cursor rolled back",
                 extra={"cursor": previous_cursor, "paging_token": paging_token},
             )
@@ -341,3 +418,21 @@ class HorizonStreamingClient:
     def _request_path(self) -> str:
         query = urlencode({"cursor": self._cursor, "stream": "true"})
         return f"{self._endpoint}?{query}"
+
+    @staticmethod
+    def _parse_retry_after(value: str | None) -> float | None:
+        """Parse a ``Retry-After`` header's delay-seconds form.
+
+        Only the numeric delta-seconds form (e.g. ``"30"``) is supported;
+        the less common HTTP-date form is treated as absent rather than
+        guessed at, since getting it wrong would under- or over-wait
+        silently. Returns ``None`` for anything else, which leaves the
+        jittered backoff as the sole source of the retry delay.
+        """
+        if value is None:
+            return None
+        try:
+            seconds = float(value)
+        except ValueError:
+            return None
+        return seconds if seconds >= 0 else None

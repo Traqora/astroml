@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Benchmark runners to evaluate model performance on datasets."""
 
 from __future__ import annotations
@@ -9,12 +8,13 @@ from typing import Any
 
 from astroml.llm.eval.datasets import EvalDataset
 from astroml.llm.eval.metrics import calculate_bleu, calculate_custom_scores, calculate_rouge_l
+from astroml.utils.exceptions import AstroMLError
 
 
 class BenchmarkRunner:
     """Executes prompt datasets against an LLM and measures response quality."""
 
-    def __init__(self, model_name -> Any: str, generation_fn: Callable[[str], Awaitable[str]]):
+    def __init__(self, model_name: str, generation_fn: Callable[[str], Awaitable[str]]) -> None:
         self.model_name = model_name
         self.generation_fn = generation_fn
 

@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Optional, Union, Callable
+from typing import Any, Callable, Dict, List, Optional, Union
+
 """
 Vision model integration for multimodal LLM tasks.
 
@@ -43,7 +44,7 @@ class VisionProcessor:
     - General image classification
     """
 
-    def __init__(self, config -> Any: VisionConfig | None = None):
+    def __init__(self, config: VisionConfig | None = None) -> None:
         """Initialize vision processor with given config."""
         self.config = config or VisionConfig()
         self._cache = {}

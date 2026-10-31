@@ -29,6 +29,8 @@ nav:
   - Contributor Roadmap: contributor-roadmap.md
   - Runbooks:
     - PostgreSQL Disaster Recovery: runbooks/postgres_disaster_recovery.md
+    - Disaster-Recovery Drill: runbooks/disaster_recovery_drill.md
+  - Environment Drift: environment-drift.md
 
 markdown_extensions:
   - admonition

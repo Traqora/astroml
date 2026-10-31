@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Online Feature Store for low-latency feature serving.
 
 Provides fast key-value storage and retrieval of entity features for real-time inference,
@@ -17,6 +16,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 import pandas as pd
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -95,9 +96,9 @@ class InMemoryOnlineStore(BaseOnlineStore):
 
     def __init__(self, default_ttl_seconds: int = 86400) -> None:
         """Initialize in-memory store."""
-        self._store: dict[
-            str, dict[str, tuple[Any, float]]
-        ] = {}  # entity -> {feature: (value, expire_at)}
+        self._store: dict[str, dict[str, tuple[Any, float]]] = (
+            {}
+        )  # entity -> {feature: (value, expire_at)}
         self.default_ttl = default_ttl_seconds
 
     def _clean_expired(self, entity_id: str) -> None:

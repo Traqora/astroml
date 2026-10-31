@@ -189,3 +189,120 @@ class TestAlembicRoundTrip:
                 assert expected in tables, f"{expected} missing after upgrade to head"
         finally:
             engine.dispose()
+
+
+class TestCompositeIndexMigrations:
+    """Migration test for composite index (issue #832).
+
+    The chain-integrity and round-trip tests above exercise every
+    revision generically, but none of them assert that a *specific*
+    composite (multi-column) index actually exists with the right
+    columns after upgrading, or that it is really removed on downgrade.
+    These tests pin that down for the two composite indexes most central
+    to the ingestion/snapshot read paths:
+    ``ix_graph_edges_source_occurred_at`` (``graph_edges``, from revision
+    002) and ``ix_normalized_transactions_timestamp_order``
+    (``normalized_transactions``, from revision 014, issue #732).
+
+    Writing these surfaced a real, separate bug: no revision ever created
+    ``normalized_transactions`` at all — revision 013 assumed it already
+    existed and died with ``relation "normalized_transactions" does not
+    exist`` on a fresh database, the same gap already fixed once for
+    ``models``/``model_versions`` in revision 010a. Fixed by adding
+    revision 012a ahead of 013.
+    """
+
+    def test_graph_edges_composite_index_exists_with_correct_columns(self, pristine_db_url):
+        cfg = _alembic_config(pristine_db_url)
+        engine = sa.create_engine(pristine_db_url)
+        try:
+            from alembic import command
+
+            command.upgrade(cfg, "head")
+            indexes = sa.inspect(engine).get_indexes("graph_edges")
+            composite = next(
+                (i for i in indexes if i["name"] == "ix_graph_edges_source_occurred_at"), None
+            )
+            assert composite is not None, "ix_graph_edges_source_occurred_at missing after upgrade"
+            assert composite["column_names"] == ["source_account_id", "occurred_at"]
+        finally:
+            engine.dispose()
+
+    def test_normalized_transactions_composite_index_exists_with_correct_columns(
+        self, pristine_db_url
+    ):
+        cfg = _alembic_config(pristine_db_url)
+        engine = sa.create_engine(pristine_db_url)
+        try:
+            from alembic import command
+
+            command.upgrade(cfg, "head")
+            indexes = sa.inspect(engine).get_indexes("normalized_transactions")
+            composite = next(
+                (i for i in indexes if i["name"] == "ix_normalized_transactions_timestamp_order"),
+                None,
+            )
+            assert (
+                composite is not None
+            ), "ix_normalized_transactions_timestamp_order missing after upgrade"
+            assert composite["column_names"] == [
+                "timestamp",
+                "ledger_sequence",
+                "operation_id",
+                "hop_index",
+            ]
+        finally:
+            engine.dispose()
+
+    def test_normalized_transactions_table_itself_exists_after_upgrade(self, pristine_db_url):
+        """Regression guard for the missing-table bug found while writing
+        this test class: revisions 013/014 both assume
+        ``normalized_transactions`` already exists, so this asserts the
+        table is actually present, not just its composite index."""
+        cfg = _alembic_config(pristine_db_url)
+        engine = sa.create_engine(pristine_db_url)
+        try:
+            from alembic import command
+
+            command.upgrade(cfg, "head")
+            tables = sa.inspect(engine).get_table_names()
+            assert "normalized_transactions" in tables
+        finally:
+            engine.dispose()
+
+    def test_normalized_transactions_composite_index_is_removed_on_downgrade(self, pristine_db_url):
+        cfg = _alembic_config(pristine_db_url)
+        engine = sa.create_engine(pristine_db_url)
+        try:
+            from alembic import command
+
+            command.upgrade(cfg, "head")
+            command.downgrade(cfg, "012a")
+            tables = sa.inspect(engine).get_table_names()
+            # The composite index's own revision (014) and the natural-key
+            # revision (013) are both downgraded past; only the table
+            # itself (created by 012a) should remain.
+            assert "normalized_transactions" in tables
+            indexes = sa.inspect(engine).get_indexes("normalized_transactions")
+            assert not any(
+                i["name"] == "ix_normalized_transactions_timestamp_order" for i in indexes
+            )
+        finally:
+            engine.dispose()
+
+    def test_full_downgrade_removes_normalized_transactions_entirely(self, pristine_db_url):
+        cfg = _alembic_config(pristine_db_url)
+        engine = sa.create_engine(pristine_db_url)
+        try:
+            from alembic import command
+
+            command.upgrade(cfg, "head")
+            command.downgrade(cfg, "base")
+            tables = sa.inspect(engine).get_table_names()
+            assert "normalized_transactions" not in tables
+
+            command.upgrade(cfg, "head")
+            tables_after_reupgrade = sa.inspect(engine).get_table_names()
+            assert "normalized_transactions" in tables_after_reupgrade
+        finally:
+            engine.dispose()

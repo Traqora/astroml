@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Model registry for managing ML models and their versions.
 
 Enhanced with:
@@ -24,6 +23,7 @@ from sqlalchemy.orm import Session
 from astroml.db.schema import Model, ModelVersion
 from astroml.db.session import get_session
 from astroml.tracking.lineage import ModelLineage, TrainingLineage
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ class InvalidStatusTransitionError(ValueError):
 class SemanticVersion:
     """Semantic version parser and comparator."""
 
-    def __init__(self, version -> Any: str):
+    def __init__(self, version: str) -> None:
         self.version = version
         self.major, self.minor, self.patch = self._parse(version)
 
@@ -114,7 +114,7 @@ class ModelRegistry:
     with helper methods for common registry operations.
     """
 
-    def __init__(self, session -> Any: Session | None = None):
+    def __init__(self, session: Session | None = None) -> None:
         """Initialize the registry.
 
         Args:

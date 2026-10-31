@@ -1,0 +1,184 @@
+# Default-deny ingress/egress for the astroml namespace (#856), plus
+# explicit allows for the traffic this stack actually needs: ingress-nginx
+# routing to astroml-ingestion/astroml-training/feature-store (see
+# ingress.yaml), Prometheus scraping each workload's :8080 metrics port
+# (see monitoring.yaml), astroml-ingestion/astroml-training/feature-store
+# reaching postgres:5432 and redis:6379, DNS resolution via kube-dns, and
+# egress to the internet for pulling model artifacts / external APIs.
+#
+# astroml-api (referenced in services.yaml) has no matching Deployment and
+# ingress.yaml never routes to it, so no policy targets it here — add one
+# alongside its Deployment if that service is actually built out.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: astroml
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: astroml
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-controller
+  namespace: astroml
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - astroml-ingestion
+          - astroml-training
+          - feature-store
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+        - protocol: TCP
+          port: 6006
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape
+  namespace: astroml
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - astroml-ingestion
+          - astroml-training
+          - feature-store
+          - postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-workloads-to-postgres
+  namespace: astroml
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - astroml-ingestion
+                  - astroml-training
+                  - feature-store
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-workloads-to-redis
+  namespace: astroml
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - astroml-ingestion
+                  - astroml-training
+                  - feature-store
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+# Default-deny blocks egress from these pods too, so they need an explicit
+# allow to reach postgres/redis (in-namespace) and the public internet
+# (model artifact downloads, external APIs). DNS egress is covered by
+# allow-dns-egress above.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-workloads-egress
+  namespace: astroml
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - astroml-ingestion
+          - astroml-training
+          - feature-store
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80

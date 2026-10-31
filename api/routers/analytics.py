@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -5,6 +6,8 @@ from pydantic import BaseModel
 
 from ..services.account_clustering import AccountClustering
 from ..services.rag_system import BlockchainRAGSystem
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -45,5 +48,6 @@ def ask_blockchain_question(
     try:
         response = service.answer_question(request.query, request.session_id)
         return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Internal server error")
+    except Exception as e:  # noqa: BLE001 - surfaced as a 500, logged for diagnosis
+        logger.error("RAG question answering failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error") from e

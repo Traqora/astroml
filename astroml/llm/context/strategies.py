@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Optional, Union, Callable
+from typing import Any, Callable, Dict, List, Optional, Union
+
 """Pruning strategies for context management."""
 
 from collections.abc import Callable
@@ -19,7 +20,7 @@ class PruningStrategy(str, Enum):
 class WindowPruner:
     """Sliding window pruning strategy."""
 
-    def __init__(self, window_size -> Any: int = 10):
+    def __init__(self, window_size: int = 10) -> None:
         """Initialize with window size."""
         self.window_size = window_size
 
@@ -27,13 +28,13 @@ class WindowPruner:
         """Keep only recent messages."""
         if len(messages) <= self.window_size:
             return messages
-        return messages[-self.window_size:]
+        return messages[-self.window_size :]
 
 
 class ImportancePruner:
     """Importance-based pruning strategy."""
 
-    def __init__(self, scorer -> Any: Callable | None = None, retain_ratio: float = 0.5):
+    def __init__(self, scorer: Callable | None = None, retain_ratio: float = 0.5) -> None:
         """Initialize with optional custom scorer.
 
         Args:
@@ -76,7 +77,7 @@ class ImportancePruner:
 class SummarizationPruner:
     """Summarization-based pruning (requires summarizer function)."""
 
-    def __init__(self, summarizer -> Any: Callable | None = None, summary_ratio: float = 0.5):
+    def __init__(self, summarizer: Callable | None = None, summary_ratio: float = 0.5) -> None:
         """Initialize with optional custom summarizer.
 
         Args:

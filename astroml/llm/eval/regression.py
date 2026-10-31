@@ -1,17 +1,18 @@
-from typing import Any, Dict, List, Optional, Union, Callable
-from astroml.utils.exceptions import AstroMLError
 """Regression suite to detect LLM quality degradation."""
 
 from __future__ import annotations
 
 import json
 import os
+from typing import Any, Callable, Dict, List, Optional, Union
+
+from astroml.utils.exceptions import AstroMLError
 
 
 class QualityRegressionDetector:
     """Compares current benchmark results against baseline to catch regression."""
 
-    def __init__(self, baseline_path -> Any: str = "data/eval/baseline.json"):
+    def __init__(self, baseline_path: str = "data/eval/baseline.json") -> None:
         self.baseline_path = baseline_path
         self.baseline_metrics: dict[str, float] = {}
         self._load_baseline()

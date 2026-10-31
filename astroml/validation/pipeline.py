@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Validation pipeline for comprehensive data quality checks (issue #303).
 
 Provides a pipeline architecture for running multiple validation stages:
@@ -17,6 +16,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any
+
+from astroml.utils.exceptions import AstroMLError
 
 from .api_validation import ValidationError, ValidationResult
 

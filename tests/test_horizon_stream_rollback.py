@@ -61,3 +61,42 @@ def test_invalid_payload_leaves_cursor_untouched():
     client = HorizonStreamingClient(cursor="10")
     asyncio.run(client._handle_payload("not json", lambda tx: None))
     assert client.cursor == "10"
+
+
+def test_handler_failure_logs_with_traceback(caplog):
+    """A crashing handler is the critical case the rollback exists for, and
+    logging it at ``warning()`` without ``exc_info`` discards exactly the
+    traceback that would explain why it crashed (issue #860). This asserts
+    the record actually carries ``exc_info``, not just that something was
+    logged at some level.
+    """
+    client = HorizonStreamingClient(cursor="10")
+
+    def fail(tx):
+        raise RuntimeError("handler boom")
+
+    with caplog.at_level("ERROR", logger=client._logger.name):
+        with pytest.raises(RuntimeError, match="handler boom"):
+            asyncio.run(client._handle_payload(_payload("11"), fail))
+
+    assert len(caplog.records) == 1
+    record = caplog.records[0]
+    assert record.levelname == "ERROR"
+    assert record.exc_info is not None
+    assert record.exc_info[0] is RuntimeError
+
+
+def test_cancelled_handler_does_not_log_a_traceback():
+    """Cancellation is routine shutdown, not a handler bug: logging a full
+    traceback for every cancelled task would be noise, not signal. The
+    cursor still rolls back and the exception still propagates either way
+    -- only the log level/traceback capture differs from a real failure.
+    """
+    client = HorizonStreamingClient(cursor="10")
+
+    async def cancel(tx):
+        raise asyncio.CancelledError()
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(client._handle_payload(_payload("11"), cancel))
+    assert client.cursor == "10"

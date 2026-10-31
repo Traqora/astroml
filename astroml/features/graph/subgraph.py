@@ -198,7 +198,7 @@ class SubgraphSampler:
                 of drifting away.
             max_steps: Random-walk only — step budget, so a walk through a
                 small component cannot spin. Defaults to a multiple of
-                ``max_nodes``.
+                ``max_nodes`` bounded by the graph's node count.
 
         Returns:
             A :class:`Subgraph` containing every edge of the snapshot whose
@@ -319,7 +319,9 @@ class SubgraphSampler:
         current = seed_node
         # Without a step cap, a walk over a component smaller than max_nodes
         # would keep stepping forever having already collected everything.
-        budget = max_steps if max_steps is not None else max(64, max_nodes * 20)
+        budget = (
+            max_steps if max_steps is not None else max(64, min(max_nodes, self.num_nodes) * 20)
+        )
 
         for _ in range(budget):
             if len(selected) >= max_nodes:

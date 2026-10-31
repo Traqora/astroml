@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Alerting mechanisms for data quality degradation and threshold breaches.
 
 Provides rule-based alerting, severity classification, degradation detection,
@@ -15,6 +14,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable
 
+from astroml.utils.exceptions import AstroMLError
 from astroml.validation.data_quality.checks import CheckSeverity, MetricDimension
 
 logger = logging.getLogger(__name__)
@@ -68,9 +68,7 @@ class QualityAlert:
     message: str = ""
     batch_id: str | None = None
     details: dict[str, Any] = dc_field(default_factory=dict)
-    created_at: str = dc_field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    created_at: str = dc_field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     resolved_at: str | None = None
     resolved_by: str | None = None
 

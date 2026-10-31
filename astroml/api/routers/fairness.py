@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """FastAPI router for fairness evaluation and bias mitigation endpoints."""
 
 from __future__ import annotations
@@ -10,6 +9,7 @@ import numpy as np
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from astroml.utils.exceptions import AstroMLError
 from astroml.validation.fairness.bias_detector import BiasDetector
 from astroml.validation.fairness.metrics import FairnessMetrics
 from astroml.validation.fairness.mitigation import BiasMitigation

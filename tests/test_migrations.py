@@ -12,6 +12,7 @@ import os
 from unittest.mock import patch
 
 import pytest
+import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
 
@@ -55,3 +56,66 @@ class TestMigrations:
             command.upgrade(alembic_config, "head")
             command.downgrade(alembic_config, "base")
             command.upgrade(alembic_config, "head")
+
+    def test_upgrade_actually_targets_the_ephemeral_database(
+        self, alembic_config: Config, tmp_path
+    ):
+        """The upgrade runs against the Config's own sqlalchemy.url, not
+        whatever ``config/database.yaml`` or ``ASTROML_DATABASE_URL``
+        happens to resolve to (issue #857).
+
+        ``config/database.yaml`` is checked into this repository pointing
+        at a real Postgres database, and used to take priority over an
+        explicit ``Config.set_main_option("sqlalchemy.url", ...)`` call in
+        ``migrations/env.py``'s URL resolution, so this fixture's temporary
+        SQLite file was silently ignored in favor of that real database.
+        This asserts the ephemeral file this test actually asked for was
+        the one written to.
+        """
+        db_path = tmp_path / "test.db"
+        assert not db_path.exists()
+
+        with patch.dict(os.environ, {"ASTROML_DATABASE_URL": ""}, clear=False):
+            command.upgrade(alembic_config, "head")
+
+        assert db_path.exists(), (
+            "alembic upgrade did not write to the ephemeral SQLite file "
+            "the test's own Config pointed it at"
+        )
+
+    def test_normalized_transactions_table_created_by_migrations(self, alembic_config: Config):
+        """``normalized_transactions`` (added by 012a) exists at head, with
+        the natural-key columns 013 adds on top of it.
+
+        This table has no corresponding ``op.create_table`` anywhere except
+        012a: the ORM model existed without one (the same class of gap
+        010a already fixed for ``models``/``model_versions``), so revisions
+        013 and 014 died with "no such table" the moment migrations
+        actually ran against a fresh database rather than the real,
+        already-populated Postgres database issue #857 was silently
+        testing against.
+        """
+        with patch.dict(os.environ, {"ASTROML_DATABASE_URL": ""}, clear=False):
+            command.upgrade(alembic_config, "head")
+
+        db_url = alembic_config.get_main_option("sqlalchemy.url")
+        assert db_url is not None
+        engine = sa.create_engine(db_url)
+        try:
+            inspector = sa.inspect(engine)
+            assert "normalized_transactions" in inspector.get_table_names()
+            columns = {c["name"] for c in inspector.get_columns("normalized_transactions")}
+            assert {
+                "id",
+                "transaction_hash",
+                "sender",
+                "receiver",
+                "asset",
+                "amount",
+                "timestamp",
+                "ledger_sequence",
+                "operation_id",
+                "hop_index",
+            }.issubset(columns)
+        finally:
+            engine.dispose()

@@ -32,17 +32,20 @@ def _collect_framework_metadata() -> dict[str, str]:
     }
     try:
         import torch  # type: ignore
+
         meta["torch_version"] = torch.__version__
         meta["torch_cuda_available"] = str(torch.cuda.is_available())
     except ImportError:
         pass
     try:
         import sklearn  # type: ignore
+
         meta["sklearn_version"] = sklearn.__version__
     except ImportError:
         pass
     try:
         import numpy as np  # type: ignore
+
         meta["numpy_version"] = np.__version__
     except ImportError:
         pass

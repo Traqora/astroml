@@ -1,6 +1,8 @@
-from typing import Any, Dict, List, Optional, Union, Callable
+from typing import Any, Callable, Dict, List, Optional, Union
+
+
 class PostgresCacheBackend:
-    def __init__(self, connection_string -> Any: str | None = None):
+    def __init__(self, connection_string: str | None = None) -> None:
         self.connection_string = connection_string
         self._store: dict[str, str] = {}
 

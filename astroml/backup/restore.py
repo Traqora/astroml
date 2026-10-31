@@ -1,5 +1,3 @@
-from typing import Any, Dict, List, Optional, Union, Callable
-from astroml.utils.exceptions import AstroMLError
 """Restore service for database and model artifacts (issue #304)."""
 
 from __future__ import annotations
@@ -10,17 +8,52 @@ import os
 import subprocess
 import tarfile
 from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Union
+
+from astroml.utils.exceptions import AstroMLError
+
+from astroml.utils.exceptions import AstroMLError
 
 from .encryption import decrypt_backup_file
 from .service import BackupConfig, BackupType
 
 logger = logging.getLogger(__name__)
 
+_KNOWN_BACKUP_PREFIXES = ("models_", "db_", "full_")
+
+
+def _backup_base_id(backup_id: str) -> str:
+    """Strip a known type prefix from ``backup_id``, returning the shared part.
+
+    ``db_20240101_000000`` and ``models_20240101_000000`` share the base
+    ``20240101_000000``, which is what lets :meth:`RestoreService.restore_full`
+    resolve both halves of a full backup from either ID.
+    """
+    for prefix in _KNOWN_BACKUP_PREFIXES:
+        if backup_id.startswith(prefix):
+            return backup_id[len(prefix) :]
+    return backup_id
+
+
+def _is_within(child: Path, parent: Path) -> bool:
+    """Whether ``child`` is ``parent`` or lives inside it.
+
+    Uses path-component comparison rather than a string prefix: with a string
+    prefix, ``/tmp/artifacts-evil`` would be accepted as "inside"
+    ``/tmp/artifacts``, which is exactly the directory-traversal hole an
+    archive member or a caller-supplied target could exploit.
+    """
+    try:
+        child.resolve().relative_to(parent.resolve())
+    except ValueError:
+        return False
+    return True
+
 
 class RestoreService:
     """Service for restoring from backups."""
 
-    def __init__(self, config -> Any: BackupConfig):
+    def __init__(self, config: BackupConfig) -> None:
         """Initialize restore service.
 
         Args:
@@ -202,11 +235,12 @@ class RestoreService:
             logger.error(f"Backup file not found: {backup_file}")
             return False
 
-        base_allowed = Path(self.config.model_artifacts_dir).resolve()
-        target_path = (Path(target_dir or self.config.model_artifacts_dir)).resolve()
-        if not str(target_path).startswith(str(base_allowed)):
+        base_allowed = Path(self.config.model_artifacts_dir)
+        target_path = Path(target_dir or self.config.model_artifacts_dir)
+        if not _is_within(target_path, base_allowed):
             logger.error(f"Invalid target directory: {target_dir}")
             return False
+        target_path = target_path.resolve()
         target_path.mkdir(parents=True, exist_ok=True)
 
         logger.info(f"Restoring model artifacts from backup: {backup_id}")
@@ -217,18 +251,20 @@ class RestoreService:
             backup_file = plaintext_file
 
         try:
-            # Extract tar.gz archive
+            # Extract tar.gz archive. Reject any member that would escape the
+            # target directory (``../`` or an absolute path) before extracting
+            # a single file, so a tampered archive cannot write outside it.
             with tarfile.open(backup_file, "r:gz") as tar:
                 for member in tar.getmembers():
-                    member_path = Path(member.name).resolve()
-                    if not str(member_path).startswith(str(target_path)):
+                    member_path = (target_path / member.name).resolve()
+                    if not _is_within(member_path, target_path):
                         raise ValueError(f"Invalid archive member path: {member.name}")
                 tar.extractall(path=target_path)
 
             logger.info(f"Model artifacts restored successfully from backup: {backup_id}")
             return True
 
-        except AstroMLError as e:
+        except (AstroMLError, ValueError, tarfile.TarError) as e:
             logger.error(f"Model artifacts restore failed: {e}")
             return False
         finally:
@@ -239,17 +275,19 @@ class RestoreService:
         """Restore full backup (database + model artifacts).
 
         Args:
-            backup_id: Base ID of the backup (without type suffix).
+            backup_id: Any ID belonging to the full backup — the shared base
+                ID, or the ``db_``/``models_``/``full_`` component ID. The
+                counterpart ID is derived from the shared base, matching how
+                :meth:`~astroml.backup.service.BackupService.create_full_backup`
+                names its two halves.
             drop_existing_db: Whether to drop existing database before restore.
 
         Returns:
             True if all restores were successful.
         """
-        db_backup_id = backup_id.replace("models_", "db_")
-        model_backup_id = backup_id.replace("db_", "models_")
-
-        db_success = self.restore_database(db_backup_id, drop_existing_db)
-        model_success = self.restore_model_artifacts(model_backup_id)
+        core_id = _backup_base_id(backup_id)
+        db_success = self.restore_database(f"db_{core_id}", drop_existing_db)
+        model_success = self.restore_model_artifacts(f"models_{core_id}")
 
         return db_success and model_success
 

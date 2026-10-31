@@ -267,7 +267,13 @@ class PredictiveAlertService:
 
             for tx in transactions:
                 date_key = tx.created_at.date()
-                daily_metrics[date_key].append({"amount": float(tx.amount or 0), "hash": tx.hash})
+                daily_metrics[date_key].append(
+                    {
+                        "amount": float(tx.amount or 0),
+                        "hash": tx.hash,
+                        "destination_account": tx.destination_account,
+                    }
+                )
 
             # Calculate daily aggregates
             daily_aggregates = {
@@ -280,7 +286,7 @@ class PredictiveAlertService:
             for date, txs in daily_metrics.items():
                 amounts = [tx["amount"] for tx in txs]
                 counterparts = list(
-                    set(tx.destination_account for tx in txs if tx.destination_account)
+                    {tx["destination_account"] for tx in txs if tx["destination_account"]}
                 )
 
                 daily_aggregates["daily_transaction_count"].append(len(txs))
@@ -323,8 +329,10 @@ class PredictiveAlertService:
             # Learn/update behavioral baselines
             learn_result = await self.learn_behavior_from_transactions(account_id, lookback_days)
 
-            if "error" in result:
-                return result
+            if "error" in learn_result:
+                return learn_result
+            if "message" in learn_result:
+                return {**learn_result, "account_id": account_id}
 
             # Get current metrics (last 24 hours)
             current_metrics = await self._get_current_metrics(account_id)

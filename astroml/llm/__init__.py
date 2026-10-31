@@ -1,52 +1,9 @@
-"""LLM Provider abstraction layer for AstroML.
+"""LLM package entrypoints for AstroML.
 
-This module provides a unified interface for LLM operations including:
-- Multi-provider embedding generation (OpenAI, Cohere, local models)
-- Embedding caching and drift monitoring
-- LLM feature generation for fraud detection
-- Tool execution and permission management
-- Conversation memory and context management
-
-Key components:
-- providers: Embedding provider implementations and routing
-- features: LLM-based feature computation
-- fine_tuning: Model fine-tuning utilities
-- testing: LLM testing utilities and fixtures
-- tools: Tool execution framework with permission checks
-
-Exports:
-- EmbeddingProvider: Base embedding provider interface
-- EmbeddingRouter: Multi-provider routing logic
-- EmbeddingCache: Caching layer for embeddings
-- ConversationMemory: Chat history management
-
-Dependencies:
-- openai: OpenAI API client
-- cohere: Cohere API client
-- sentence-transformers: Local embedding models
+The package exposes the public LLM interfaces lazily to keep the namespace import-safe
+when optional dependencies are not installed or when only a subset of the LLM stack
+is needed in tests.
 """
-
-from .blockchain_context import BlockchainContextBuilder
-from .embedding_cache import EmbeddingCache, EmbeddingCacheStats
-from .embedding_drift import (
-    DriftAlert,
-    DriftAlerter,
-    DriftDetector,
-    DriftReport,
-    EmbeddingDistributionTracker,
-    EmbeddingDriftMonitor,
-)
-from .memory import ConversationMemory
-from .providers.embedding_base import EmbeddingError, EmbeddingProvider
-from .providers.embedding_router import EmbeddingRouter, build_default_router
-from .tools import (
-    BaseTool,
-    PermissionChecker,
-    ToolAuditLog,
-    ToolExecutor,
-    ToolRegistry,
-    get_global_registry,
-)
 
 __all__ = [
     "BlockchainContextBuilder",
@@ -63,9 +20,6 @@ __all__ = [
     "EmbeddingError",
     "EmbeddingRouter",
     "build_default_router",
-    "features",
-    "fine_tuning",
-    "testing",
     "BaseTool",
     "ToolRegistry",
     "get_global_registry",
@@ -73,3 +27,56 @@ __all__ = [
     "PermissionChecker",
     "ToolAuditLog",
 ]
+
+
+def __getattr__(name: str):
+    if name == "BlockchainContextBuilder":
+        from .blockchain_context import BlockchainContextBuilder
+        return BlockchainContextBuilder
+    if name in {"EmbeddingCache", "EmbeddingCacheStats"}:
+        from .embedding_cache import EmbeddingCache, EmbeddingCacheStats
+        return {"EmbeddingCache": EmbeddingCache, "EmbeddingCacheStats": EmbeddingCacheStats}[name]
+    if name in {"DriftAlert", "DriftAlerter", "DriftDetector", "DriftReport", "EmbeddingDistributionTracker", "EmbeddingDriftMonitor"}:
+        from .embedding_drift import (
+            DriftAlert,
+            DriftAlerter,
+            DriftDetector,
+            DriftReport,
+            EmbeddingDistributionTracker,
+            EmbeddingDriftMonitor,
+        )
+        return {
+            "DriftAlert": DriftAlert,
+            "DriftAlerter": DriftAlerter,
+            "DriftDetector": DriftDetector,
+            "DriftReport": DriftReport,
+            "EmbeddingDistributionTracker": EmbeddingDistributionTracker,
+            "EmbeddingDriftMonitor": EmbeddingDriftMonitor,
+        }[name]
+    if name == "ConversationMemory":
+        from .memory import ConversationMemory
+        return ConversationMemory
+    if name in {"EmbeddingProvider", "EmbeddingError"}:
+        from .providers.embedding_base import EmbeddingError, EmbeddingProvider
+        return {"EmbeddingProvider": EmbeddingProvider, "EmbeddingError": EmbeddingError}[name]
+    if name in {"EmbeddingRouter", "build_default_router"}:
+        from .providers.embedding_router import EmbeddingRouter, build_default_router
+        return {"EmbeddingRouter": EmbeddingRouter, "build_default_router": build_default_router}[name]
+    if name in {"BaseTool", "PermissionChecker", "ToolAuditLog", "ToolExecutor", "ToolRegistry", "get_global_registry"}:
+        from .tools import (
+            BaseTool,
+            PermissionChecker,
+            ToolAuditLog,
+            ToolExecutor,
+            ToolRegistry,
+            get_global_registry,
+        )
+        return {
+            "BaseTool": BaseTool,
+            "PermissionChecker": PermissionChecker,
+            "ToolAuditLog": ToolAuditLog,
+            "ToolExecutor": ToolExecutor,
+            "ToolRegistry": ToolRegistry,
+            "get_global_registry": get_global_registry,
+        }[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

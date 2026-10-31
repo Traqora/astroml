@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Enhanced CLI for the robust Stellar ingestion service.
 
 Provides command-line interface for running enhanced streams with
@@ -19,6 +18,7 @@ from astroml.ingestion.enhanced_service import (
     run_single_stream,
 )
 from astroml.ingestion.state import StreamStateManager
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger("astroml.ingestion.enhanced_cli")
 

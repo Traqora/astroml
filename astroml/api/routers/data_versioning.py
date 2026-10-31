@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Data versioning API router for AstroML.
 
 Provides REST endpoints for dataset versioning, tagging, comparison,
@@ -14,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from astroml.storage.data_versioning import DataVersionControl
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -149,9 +149,7 @@ async def get_dataset(version_id: str) -> DatasetVersionResponse:
     response_model=DatasetVersionResponse,
     summary="Add tags to a dataset version",
 )
-async def add_tags(
-    version_id: str, request: TagRequest
-) -> DatasetVersionResponse:
+async def add_tags(version_id: str, request: TagRequest) -> DatasetVersionResponse:
     try:
         ver = _dvc.tag_version(version_id, request.tags)
         return _ver_to_response(ver)
@@ -167,9 +165,7 @@ async def add_tags(
     response_model=DatasetVersionResponse,
     summary="Add annotations to a dataset version",
 )
-async def add_annotations(
-    version_id: str, request: AnnotateRequest
-) -> DatasetVersionResponse:
+async def add_annotations(version_id: str, request: AnnotateRequest) -> DatasetVersionResponse:
     try:
         ver = _dvc.annotate(version_id, request.annotations)
         return _ver_to_response(ver)

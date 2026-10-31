@@ -1,5 +1,6 @@
 """Tests for structural importance metrics module."""
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -97,6 +98,24 @@ class TestStructuralImportance:
         # A should have higher PageRank due to more connections
         assert result["A"] > result["D"]
 
+    def test_sampled_pagerank_is_deterministic_and_normalized(self):
+        first = compute_pagerank(self.edges, sample_size=500)
+        second = compute_pagerank(self.edges, sample_size=500)
+
+        pd.testing.assert_series_equal(first, second)
+        assert set(first.index) == {"A", "B", "C", "D"}
+        assert first.sum() == pytest.approx(1.0)
+
+    def test_comprehensive_metrics_accept_pagerank_sample_size(self):
+        metrics = compute_structural_importance_metrics(
+            self.edges,
+            include_betweenness=False,
+            include_closeness=False,
+            pagerank_sample_size=500,
+        )
+
+        assert metrics["pagerank"].sum() == pytest.approx(1.0)
+
     def test_clustering_coefficient(self):
         """Test clustering coefficient computation."""
         # Complete graph should have clustering coefficient of 1
@@ -126,6 +145,18 @@ class TestStructuralImportance:
         assert result["leaf1"] == pytest.approx(0.0)
         assert result["leaf2"] == pytest.approx(0.0)
         assert result["leaf3"] == pytest.approx(0.0)
+
+    def test_sampled_betweenness_is_deterministic_without_changing_numpy_rng(self):
+        np.random.seed(123)
+        expected_next = np.random.random()
+        np.random.seed(123)
+
+        first = compute_betweenness_centrality(self.edges, sample_size=2)
+        actual_next = np.random.random()
+        second = compute_betweenness_centrality(self.edges, sample_size=2)
+
+        pd.testing.assert_series_equal(first, second)
+        assert actual_next == expected_next
 
     def test_closeness_centrality(self):
         """Test closeness centrality computation."""

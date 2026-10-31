@@ -66,3 +66,17 @@ class TestContactForm:
         resp = client.post("/api/v1/contact", json=VALID)
         assert resp.status_code == 201
         assert sent.get("reference") == resp.json()["ticket"]["reference"]
+
+    def test_email_failure_is_logged_and_submission_succeeds(self, client, monkeypatch, caplog):
+        from api.routers import contact as contact_module
+
+        async def _fail(_ticket):
+            raise RuntimeError("mail service unavailable")
+
+        monkeypatch.setattr(contact_module, "send_contact_emails", _fail)
+        with caplog.at_level("ERROR", logger="api.routers.contact"):
+            resp = client.post("/api/v1/contact", json=VALID)
+
+        assert resp.status_code == 201
+        assert "Failed to send contact emails" in caplog.text
+        assert "mail service unavailable" in caplog.text

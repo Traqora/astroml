@@ -6,7 +6,25 @@
 from __future__ import annotations
 
 from importlib import import_module
-from typing import Any
+from typing import Any, Callable, Dict, List, Optional, Union
+
+from .ab_testing import ABTestingFramework
+from .experiment_dashboard import (
+    Experiment,
+    ExperimentDashboard,
+    ExperimentReport,
+)
+from .llm_usage_tracker import (
+    LLMPrices,
+    LLMUsage,
+    LLMUsageTracker,
+    default_llm_usage_tracker,
+)
+from .mlflow_tracker import MLflowTracker
+from .model_registry import ModelRegistry
+from .run_comparator import RunComparator, RunMetrics
+from .training_report import EpochRecord, TrainingReport
+from .visualizations import ChartData, ExperimentVisualizer
 
 __all__ = [
     "ABTestingFramework",
@@ -70,7 +88,7 @@ _LAZY: dict[str, tuple[str, str]] = {
 }
 
 
-def __getattr__(name: str) -> Any:
+def __getattr__(name: str):
     if name in _LAZY:
         module_path, attr = _LAZY[name]
         module = import_module(module_path)

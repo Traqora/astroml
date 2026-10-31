@@ -7,6 +7,7 @@ confirmation to the submitter.
 
 from __future__ import annotations
 
+import logging
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -20,6 +21,7 @@ from api.services.email import send_contact_emails
 from api.services.recaptcha import verify_recaptcha
 
 router = APIRouter(prefix="/api/v1/contact", tags=["contact"])
+logger = logging.getLogger(__name__)
 
 
 def _generate_reference() -> str:
@@ -52,7 +54,7 @@ async def submit_contact_form(
     try:
         await send_contact_emails(ticket)
     except Exception:  # pragma: no cover - defensive
-        pass
+        logger.exception("Failed to send contact emails for ticket %s", ticket.reference)
 
     return ContactSubmitResponse(
         message="Your message has been received. We'll be in touch shortly.",

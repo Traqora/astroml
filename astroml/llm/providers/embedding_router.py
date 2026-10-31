@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Embedding router with automatic fallback and dimension normalisation.
 
 The ``EmbeddingRouter`` tries providers in priority order, falling back to
@@ -40,6 +39,8 @@ import logging
 import time
 
 import numpy as np
+
+from astroml.utils.exceptions import AstroMLError
 
 from .embedding_base import EmbeddingError, EmbeddingProvider
 

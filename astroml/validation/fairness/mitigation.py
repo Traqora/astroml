@@ -129,22 +129,36 @@ class BiasMitigation:
         y: np.ndarray,
         sensitive_features: np.ndarray,
         strategy: str = "undersampling",
+        random_state: int | None = 42,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Apply fair sampling (under/over) to balance groups.
+
+        Both strategies draw from a single seeded generator so that the same
+        inputs and ``random_state`` always produce the same resample. This
+        matters for an imbalance sampler: without a seed, two runs of
+        ``undersampling`` could hand different rows to a model, making a
+        fairness regression impossible to attribute.
 
         Args:
             X: Feature matrix.
             y: Ground truth binary labels.
             sensitive_features: Protected attribute values.
             strategy: Sampling strategy - 'undersampling' or 'oversampling'.
+            random_state: Seed for the sampling RNG. Pass ``None`` for a
+                non-deterministic draw.
 
         Returns:
             Tuple of (X_resampled, y_resampled, sensitive_features_resampled).
+            Rows are selected by index from the original inputs, so the
+            resample can never contain a row that was not in ``X``/``y``/
+            ``sensitive_features``. Oversampling only ever duplicates an
+            existing row, never synthesises one.
         """
         X = np.asarray(X)
         y = np.asarray(y).ravel()
         sensitive_features = np.asarray(sensitive_features).ravel()
         groups = np.unique(sensitive_features)
+        rng = np.random.default_rng(random_state)
 
         group_counts: dict[str, int] = {}
         for group in groups:
@@ -156,14 +170,11 @@ class BiasMitigation:
             for group in groups:
                 group_indices = np.where(sensitive_features == group)[0]
                 if len(group_indices) > target_count:
-                    group_indices = np.random.choice(
-                        group_indices, size=target_count, replace=False
-                    )
+                    group_indices = rng.choice(group_indices, size=target_count, replace=False)
                 selected_indices.extend(group_indices.tolist())
         elif strategy == "oversampling":
             target_count = max(group_counts.values())
             selected_indices = []
-            rng = np.random.default_rng(42)
             for group in groups:
                 group_indices = np.where(sensitive_features == group)[0]
                 if len(group_indices) < target_count:

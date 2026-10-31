@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Database query profiling and slow query detection.
 
 This module provides SQLAlchemy query profiling capabilities including:
@@ -18,6 +17,8 @@ from typing import Any
 
 from sqlalchemy import event
 from sqlalchemy.engine import Connection, Engine
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -274,7 +275,7 @@ def get_query_profiler() -> QueryProfiler | None:
 
 
 @contextmanager
-def profile_query_context(engine -> Any: Engine | None = None):
+def profile_query_context(engine: Engine | None = None):
     """Context manager for profiling a block of queries.
 
     Args:

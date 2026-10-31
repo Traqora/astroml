@@ -28,6 +28,22 @@ class TestCriticalUserJourneys:
         assert "status" in data
         assert data["status"] == "ok"
 
+    def test_metrics_endpoint_exports_db_pool_stats(self):
+        """The Prometheus scrape endpoint publishes live pool gauges (#833).
+
+        ``update_db_pool_metrics``/``DB_POOL_SIZE``/``DB_POOL_UTILIZATION``
+        and ``collect_pool_stats`` already existed with their own unit
+        tests, but nothing previously exercised the real ``/metrics`` route
+        end-to-end to confirm the gauges it samples from a live engine
+        actually land in the scraped output.
+        """
+        response = client.get("/metrics")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/plain")
+        body = response.text
+        assert "db_pool_size" in body
+        assert "db_pool_utilization_ratio" in body
+
 
 class TestAuthFlow:
     """Test authentication user journey."""

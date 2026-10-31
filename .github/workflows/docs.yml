@@ -54,6 +54,9 @@ jobs:
       - name: Check documentation links
         run: python scripts/check_doc_links.py
 
+      - name: Check i18n locale registry
+        run: python scripts/check_i18n_locales.py
+
       - name: Build HTML docs
         run: make html
         working-directory: docs

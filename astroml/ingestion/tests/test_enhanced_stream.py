@@ -1,10 +1,10 @@
-from typing import Any, Dict, List, Optional, Union, Callable
 """Tests for enhanced streaming service with robust error handling."""
 
 from __future__ import annotations
 
 import asyncio
 import time
+from typing import Any, Callable, Dict, List, Optional, Union
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -332,6 +332,62 @@ class TestEnhancedStellarStream:
 
             # Should have handled rate limit and continued
             assert mock_handle.called
+
+    def test_update_stream_state_sets_lag_seconds_gauge(self):
+        """``_update_stream_state`` publishes the current lag to the
+        ``astroml_ingestion_lag_seconds`` Prometheus gauge (issue #858).
+
+        The gauge existed in ``metrics.py`` but nothing ever called
+        ``.set()`` on it, so the ``IngestionLagHigh`` alert's metric was
+        permanently absent from Prometheus regardless of what the alert
+        expression itself said.
+
+        Uses its own ``horizon_url`` (distinct from the ``stream`` fixture
+        other tests in this class share) since ``STREAM_LAG_SECONDS`` is a
+        module-level Prometheus registry: a label set here would otherwise
+        leak its value into any other test using the same labels.
+        """
+        from astroml.ingestion.metrics import STREAM_LAG_SECONDS
+
+        config = EnhancedStreamConfig(
+            horizon_url="https://horizon-lag-gauge-test.example.org",
+            stream_type="effects",
+        )
+        stream = EnhancedStellarStream(config)
+        stream._last_record_created_at = time.time() - 42
+        stream._update_stream_state()
+
+        sample = STREAM_LAG_SECONDS.labels(
+            stream_type=config.stream_type, horizon_url=config.horizon_url
+        )
+        # A Gauge's current value is its only sample, with no suffix on
+        # the metric name.
+        value = sample._value.get()
+        assert value >= 42
+        assert value < 43  # generous slack for test execution time
+
+    def test_update_stream_state_leaves_lag_gauge_unset_before_first_record(self):
+        """No gauge sample should be published before any record has been
+        processed, since there is nothing yet to measure lag against.
+        """
+        from astroml.ingestion.metrics import STREAM_LAG_SECONDS
+
+        config = EnhancedStreamConfig(
+            horizon_url="https://horizon-lag-gauge-unset-test.example.org",
+            stream_type="effects",
+        )
+        stream = EnhancedStellarStream(config)
+        assert stream._last_record_created_at is None
+        stream._update_stream_state()
+
+        # Prometheus client Gauges default to 0.0 until .set() is called;
+        # confirming it's exactly the untouched default (rather than, say,
+        # a stale value from a previous test) is what distinguishes "never
+        # set" from "set to zero".
+        sample = STREAM_LAG_SECONDS.labels(
+            stream_type=config.stream_type, horizon_url=config.horizon_url
+        )
+        assert sample._value.get() == 0.0
 
     @pytest.mark.asyncio
     async def test_get_stats(self, stream):

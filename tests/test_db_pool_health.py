@@ -57,6 +57,32 @@ class _FakeAsyncEngine:
         self.sync_engine = _FakeEngine(pool)
 
 
+def test_module_source_has_future_annotations_as_first_statement() -> None:
+    """Guard against the `from __future__ import annotations` placement bug
+    this module once had (issue #833): a stray `from astroml.utils.exceptions
+    import AstroMLError` was placed before the module docstring, which pushed
+    `from __future__ import annotations` out of the file's first statement
+    and made the whole module fail to import with a SyntaxError. The import
+    at the top of this test file already exercises that the module imports
+    cleanly; this additionally pins down why, so a future edit that
+    re-introduces a statement above the docstring/future-import fails loudly
+    here instead of only showing up as an unrelated import crash elsewhere.
+    """
+    import ast
+    import inspect
+
+    import astroml.db.pool_health as pool_health_module
+
+    source = inspect.getsource(pool_health_module)
+    tree = ast.parse(source)
+    assert isinstance(tree.body[0], ast.Expr) and isinstance(
+        tree.body[0].value, ast.Constant
+    ), "module docstring must be the first statement"
+    assert (
+        isinstance(tree.body[1], ast.ImportFrom) and tree.body[1].module == "__future__"
+    ), "from __future__ import annotations must immediately follow the docstring"
+
+
 def _stats(**overrides: Any) -> PoolStats:
     values: dict[str, Any] = {
         "pool_size": 10,

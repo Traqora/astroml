@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 import logging
 from dataclasses import dataclass
 from datetime import datetime
@@ -9,6 +8,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
+
+from astroml.utils.exceptions import AstroMLError
 
 from ..models.temporal import (
     TemporalModelFactory,
@@ -83,7 +84,7 @@ class TemporalDataset(Dataset):
 class TemporalTrainer:
     """Trainer for temporal GNN models."""
 
-    def __init__(self, config -> Any: TemporalTrainingConfig):
+    def __init__(self, config: TemporalTrainingConfig) -> None:
         self.config = config
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -309,7 +310,7 @@ class TemporalTrainer:
 
         return self.training_history
 
-    def _save_checkpoint(self, epoch -> Any: int):
+    def _save_checkpoint(self, epoch: int):
         """Save model checkpoint."""
         checkpoint = {
             "epoch": epoch,
@@ -424,7 +425,7 @@ class TemporalTrainer:
 class TemporalHyperparameterSearch:
     """Hyperparameter search for temporal models."""
 
-    def __init__(self, search_space -> Any: dict[str, list[Any]]):
+    def __init__(self, search_space: dict[str, list[Any]]) -> None:
         self.search_space = search_space
         self.results = []
 
@@ -492,7 +493,7 @@ class TemporalHyperparameterSearch:
 class TemporalExperiment:
     """Experiment management for temporal models."""
 
-    def __init__(self, name -> Any: str, config: TemporalTrainingConfig):
+    def __init__(self, name: str, config: TemporalTrainingConfig) -> None:
         self.name = name
         self.config = config
         self.timestamp = datetime.now()
@@ -536,7 +537,7 @@ class TemporalExperiment:
 
         return self.results
 
-    def save_results(self, filepath -> Any: str):
+    def save_results(self, filepath: str):
         """Save experiment results."""
         import json
 

@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Graph Attention Network (GAT) model for node classification and transaction analysis.
 
 Implements multi-head graph attention networks for relational transaction networks,
@@ -14,6 +13,8 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
+
+from astroml.utils.exceptions import AstroMLError
 
 try:
     from torch_geometric.nn import GATConv as PyGGATConv

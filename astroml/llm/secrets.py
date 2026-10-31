@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Secret management for LLM API keys with encryption at rest, rotation, and audit logging."""
 
 import hashlib
@@ -6,6 +5,7 @@ import logging
 import os
 
 from jose import jwe
+from jose.exceptions import JWEError
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ def get_api_key(provider: str) -> str:
     if encrypted:
         try:
             return decrypt_key(encrypted)
-        except AstroMLError:
+        except JWEError:
             logger.error(
                 "Failed to decrypt stored API key. API keys are never exposed in error messages."
             )

@@ -5,10 +5,12 @@ from __future__ import annotations
 import logging
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+from astroml.utils.exceptions import AstroMLError
+
 if TYPE_CHECKING:  # pragma: no cover - typing only
     import torch.nn as nn
     from api.models.orm import ModelRegistry

@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """LLM Stream Processing Handler."""
 
 from __future__ import annotations
@@ -10,6 +9,7 @@ from collections.abc import AsyncIterator, Callable
 from typing import Any
 
 from astroml.llm.streaming.buffer import StreamBuffer
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class StreamHandler:
     """Manages an active LLM streaming generation session."""
 
-    def __init__(self, session_id -> Any: str, buffer_max_size: int = 100):
+    def __init__(self, session_id: str, buffer_max_size: int = 100) -> None:
         self.session_id = session_id
         self.buffer = StreamBuffer[str](max_size=buffer_max_size)
         self.start_time: float = 0.0

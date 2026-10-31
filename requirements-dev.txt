@@ -30,6 +30,16 @@ pre-commit>=3.7.0
 detect-secrets>=1.4.0
 interrogate>=1.7.0,<2.0
 
+# ── mypy stub packages (issue #862: strict mode needs these to type-check
+# third-party imports under api/ and astroml/ without import-untyped noise)
+pandas-stubs
+types-PyYAML
+types-python-jose
+types-passlib
+scipy-stubs
+types-Markdown
+scikit-learn-stubs
+
 # ── Code complexity analysis ─────────────────────────────────────────────
 radon>=6.0.1
 xenon>=0.9.1

@@ -16,7 +16,7 @@ services:
     volumes:
       - postgres-e2e-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U test"]
+      test: ["CMD-SHELL", "pg_isready -U test -d astroml_test"]
       interval: 10s
       timeout: 5s
       retries: 5

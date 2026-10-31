@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Optional, Union, Callable
+from typing import Any, Callable, Dict, List, Optional, Union
+
 """Tests for the LLM provider abstraction layer (issue #359)."""
 
 import sys
@@ -9,7 +10,7 @@ from unittest.mock import MagicMock
 from .factory import _PROVIDERS, get_llm_provider
 
 
-def _install_fake_module(name -> Any: str, **attrs):
+def _install_fake_module(name: str, **attrs):
     module = types.ModuleType(name)
     for key, value in attrs.items():
         setattr(module, key, value)

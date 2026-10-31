@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Buffering and backpressure handling for slow consumers."""
 
 from __future__ import annotations
@@ -6,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import Generic, TypeVar
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ class StreamBuffer(Generic[T]):
     If the queue grows too large, pushing is blocked or slower to handle backpressure.
     """
 
-    def __init__(self, max_size -> Any: int = 100):
+    def __init__(self, max_size: int = 100) -> None:
         self._queue: asyncio.Queue[T] = asyncio.Queue(maxsize=max_size)
         self._max_size = max_size
         self._aborted = False

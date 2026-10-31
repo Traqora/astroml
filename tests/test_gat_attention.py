@@ -51,3 +51,52 @@ def test_gat_export_attention():
     eidx, attn = exported
     assert eidx.shape == edge_index.shape
     assert attn.shape == (edge_index.size(1), 2)
+
+
+def test_gat_dropout_is_reproducible_under_a_fixed_seed():
+    """Same seed + training mode + nonzero dropout -> identical output on
+    every run (GitHub Issue #842). Neither existing test above exercises
+    dropout > 0 at all; without this, a change that broke determinism
+    (e.g. swapping nn.Dropout for a module that doesn't respect the global
+    RNG) would go unnoticed."""
+    from astroml.features.gnn.attention import GATConv
+
+    edge_index = torch.tensor([[0, 2, 1], [1, 1, 2]], dtype=torch.long)
+
+    def run_once():
+        torch.manual_seed(42)
+        x = torch.randn(3, 5)
+        layer = GATConv(in_dim=5, out_dim=4, heads=3, concat=True, dropout=0.5)
+        layer.train()
+        torch.manual_seed(123)  # separately seed the dropout mask draw
+        return layer(x, edge_index)
+
+    out1 = run_once()
+    out2 = run_once()
+    assert torch.equal(out1, out2), (
+        "GATConv with dropout > 0 produced different output across two runs "
+        "seeded identically, dropout masking is not deterministic"
+    )
+
+
+def test_gat_dropout_disabled_in_eval_mode():
+    """In eval() mode, dropout must be a no-op regardless of seed: calling
+    forward twice without reseeding must still produce identical output,
+    since there is no dropout mask being drawn (GitHub Issue #842)."""
+    from astroml.features.gnn.attention import GATConv
+
+    torch.manual_seed(7)
+    x = torch.randn(3, 5)
+    edge_index = torch.tensor([[0, 2, 1], [1, 1, 2]], dtype=torch.long)
+
+    layer = GATConv(in_dim=5, out_dim=4, heads=3, concat=True, dropout=0.5)
+    layer.eval()
+
+    with torch.no_grad():
+        out1 = layer(x, edge_index)
+        out2 = layer(x, edge_index)  # no reseed between calls
+
+    assert torch.equal(out1, out2), (
+        "GATConv produced different output across two eval()-mode calls "
+        "with no reseeding, dropout should be disabled in eval mode"
+    )

@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """FastAPI router for model debugging and error analysis endpoints."""
 
 from __future__ import annotations
@@ -14,6 +13,7 @@ from astroml.training.debugging.confusion_analysis import ConfusionAnalyzer
 from astroml.training.debugging.error_analysis import ErrorAnalyzer
 from astroml.training.debugging.failure_modes import FailureModeIdentifier
 from astroml.training.debugging.slice_analysis import SliceAnalyzer
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

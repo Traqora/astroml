@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Optional, Union, Callable
+from typing import Any, Callable, Dict, List, Optional, Union
+
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
@@ -10,7 +11,9 @@ class GCN(nn.Module):
     Architecture: GCNConv -> ReLU -> Dropout -> GCNConv -> log_softmax
     """
 
-    def __init__(self, input_dim -> Any: int, hidden_dim: int, output_dim: int, dropout: float = 0.5):
+    def __init__(
+        self, input_dim: int, hidden_dim: int, output_dim: int, dropout: float = 0.5
+    ) -> None:
         super().__init__()
         self.conv1 = GCNConv(input_dim, hidden_dim)
         self.conv2 = GCNConv(hidden_dim, output_dim)

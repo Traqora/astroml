@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """AutoML model selection pipeline.
 
 Searches a pool of candidate models under computational budget
@@ -8,6 +7,7 @@ full dataset.
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -23,6 +23,9 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 
 from astroml.training.model_selection.benchmark import BenchmarkResult, ModelBenchmark
+from astroml.utils.exceptions import AstroMLError
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_CLASSIFIERS: dict[str, Any] = {
     "logistic_regression": LogisticRegression(max_iter=1000),
@@ -132,7 +135,12 @@ class AutoMLPipeline:
                 )[0]
                 results.append(result)
                 searched += 1
-            except AstroMLError:
+            except AstroMLError as exc:
+                logger.warning(
+                    "Skipping candidate model %r after evaluation failed: %s",
+                    name,
+                    exc,
+                )
                 continue
 
         ranked = benchmark.compare(results)

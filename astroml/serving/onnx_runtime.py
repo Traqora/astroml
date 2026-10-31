@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """ONNX Runtime inference wrapper for model serving."""
 
 from __future__ import annotations
@@ -9,6 +8,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

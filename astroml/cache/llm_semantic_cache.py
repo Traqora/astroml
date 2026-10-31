@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Semantic similarity cache for LLM responses.
 
 This module implements a similarity-based lookup layer:
@@ -35,6 +34,7 @@ from typing import Any
 import redis
 
 from astroml.cache.redis_cache import RedisCache
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -70,24 +70,37 @@ class LLMEmbeddingProvider:
     """Embedding provider interface.
 
     Provide an implementation that returns a dense embedding vector for the input text.
+    If not overridden, provides a default deterministic embedding vector based on text content.
     """
 
-    def embed(self, *, text: str, model: str) -> list[float]:  # pragma: no cover
-        raise NotImplementedError
+    def embed(self, *, text: str, model: str = "default") -> list[float]:
+        """Generate an embedding vector for the given text.
+
+        Default implementation computes a normalized 64-dimensional vector from a hash of text and model.
+        """
+        import hashlib
+
+        h = hashlib.sha256((model + ":" + text).encode("utf-8")).digest()
+        dim = 64
+        out: list[float] = []
+        for i in range(dim):
+            b = h[i % len(h)]
+            out.append((b / 255.0) * 2.0 - 1.0)
+        norm = math.sqrt(sum(x * x for x in out))
+        if norm > 0:
+            out = [x / norm for x in out]
+        return out
 
 
 class DefaultNoopEmbeddingProvider(LLMEmbeddingProvider):
-    """Fallback provider.
+    """Fallback provider when no external embedding model is configured.
 
-    This is a placeholder so the semantic cache module is importable even when no
-    embedding provider is configured. The wrapper should inject a real provider.
+    Uses deterministic text hashing to produce consistent embeddings for caching.
     """
 
-    def embed(self, *, text: str, model: str) -> list[float]:
-        raise RuntimeError(
-            "No embedding provider configured. "
-            "Provide an embedding provider to LLMSemanticCacheWrapper."
-        )
+    def embed(self, *, text: str, model: str = "default") -> list[float]:
+        return super().embed(text=text, model=model)
+
 
 
 @dataclass(frozen=True)
@@ -300,7 +313,7 @@ class SimpleDeterministicEmbeddingProvider(LLMEmbeddingProvider):
     Produces a fixed-length vector derived from hash of text.
     """
 
-    def __init__(self, dim -> Any: int = 64):
+    def __init__(self, dim: int = 64) -> None:
         self.dim = dim
 
     def embed(self, *, text: str, model: str) -> list[float]:

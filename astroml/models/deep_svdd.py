@@ -4,6 +4,7 @@ Deep SVDD learns a hypersphere that encloses normal data points in feature space
 with anomalies falling outside this boundary. Ideal for fraud detection with
 limited labeled examples.
 """
+
 from __future__ import annotations
 
 from typing import Dict, Optional, Tuple, Union
@@ -19,18 +20,14 @@ from sklearn.preprocessing import StandardScaler
 class DeepSVDDNetwork(nn.Module):
     """Neural network for Deep SVDD feature extraction."""
 
-    def __init__(self, input_dim -> Any: int, hidden_dims: list, dropout: float = 0.1):
+    def __init__(self, input_dim: int, hidden_dims: list, dropout: float = 0.1) -> None:
         super().__init__()
 
         layers = []
         prev_dim = input_dim
 
         for hidden_dim in hidden_dims:
-            layers.extend([
-                nn.Linear(prev_dim, hidden_dim),
-                nn.ReLU(),
-                nn.Dropout(dropout)
-            ])
+            layers.extend([nn.Linear(prev_dim, hidden_dim), nn.ReLU(), nn.Dropout(dropout)])
             prev_dim = hidden_dim
 
         self.encoder = nn.Sequential(*layers)
@@ -50,7 +47,7 @@ class DeepSVDD(nn.Module, BaseEstimator):
         dropout: float = 0.1,
         nu: float = 0.1,
         center: Optional[torch.Tensor] = None,
-        device: str = 'cpu'
+        device: str = "cpu",
     ):
         super().__init__()
 
@@ -65,7 +62,7 @@ class DeepSVDD(nn.Module, BaseEstimator):
 
         self.to(device)
 
-    def init_center(self, data_loader -> Any: torch.utils.data.DataLoader):
+    def init_center(self, data_loader: torch.utils.data.DataLoader) -> None:
         """Initialize hypersphere center from normal data."""
         self.eval()
         with torch.no_grad():
@@ -105,8 +102,8 @@ class DeepSVDD(nn.Module, BaseEstimator):
         y: Optional[np.ndarray] = None,
         epochs: int = 100,
         batch_size: int = 128,
-        lr: float = 0.001
-    ) -> 'DeepSVDD':
+        lr: float = 0.001,
+    ) -> "DeepSVDD":
         """Fit Deep SVDD model."""
 
         # Scale data
@@ -114,12 +111,8 @@ class DeepSVDD(nn.Module, BaseEstimator):
         X_scaled = self.scaler.fit_transform(X)
 
         # Create dataset and dataloader
-        dataset = torch.utils.data.TensorDataset(
-            torch.FloatTensor(X_scaled)
-        )
-        dataloader = torch.utils.data.DataLoader(
-            dataset, batch_size=batch_size, shuffle=True
-        )
+        dataset = torch.utils.data.TensorDataset(torch.FloatTensor(X_scaled))
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
         # Initialize center
         self.init_center(dataloader)
@@ -131,7 +124,7 @@ class DeepSVDD(nn.Module, BaseEstimator):
             self.train()
             total_loss = 0
 
-            for batch, in dataloader:
+            for (batch,) in dataloader:
                 batch = batch[0].to(self.device)
 
                 optimizer.zero_grad()

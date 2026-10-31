@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Model invariant definitions and property-based test runner for ML models.
 
 Implements Procedure steps 1 and 3:
@@ -24,6 +23,7 @@ from astroml.testing.property_based.strategies import (
     feature_matrix_strategy,
     probability_output_strategy,
 )
+from astroml.utils.exceptions import AstroMLError
 
 # ── Type aliases ──────────────────────────────────────────────────────────────
 

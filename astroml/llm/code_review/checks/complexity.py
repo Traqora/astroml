@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Optional, Union, Callable
+from typing import Any, Callable, Dict, List, Optional, Union
+
 """
 Complexity checks for code review.
 
@@ -130,7 +131,7 @@ class ComplexityCheck(BaseCheck):
         """Check nesting depth of code blocks."""
 
         class NestingDepthVisitor(ast.NodeVisitor):
-            def __init__(self, max_depth -> Any: int):
+            def __init__(self, max_depth: int) -> None:
                 self.max_depth = max_depth
                 self.suggestions = []
                 self.current_depth = 0

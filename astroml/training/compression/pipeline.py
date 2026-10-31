@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """End-to-end model compression and quantization pipeline for edge deployments.
 
 Sequences pruning, distillation, and quantization, benchmarks speed/size reductions,
@@ -6,6 +5,8 @@ and exports optimized artifacts for edge inference.
 """
 
 from __future__ import annotations
+
+from astroml.utils.exceptions import AstroMLError
 
 import copy
 import io
@@ -18,6 +19,8 @@ from typing import Any, Literal
 import numpy as np
 import torch
 import torch.nn as nn
+
+from astroml.utils.exceptions import AstroMLError
 
 from .distillation import DistillationConfig, KnowledgeDistiller
 from .pruning import ModelPruner, PruningConfig
@@ -54,6 +57,9 @@ class CompressionBenchmarkResult:
     compressed_latency_p95_ms: float
     speedup_ratio: float
     target_hardware: str
+    original_accuracy_pct: float | None = None
+    compressed_accuracy_pct: float | None = None
+    accuracy_drop_pct: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert benchmark result to dictionary."""
@@ -68,6 +74,9 @@ class CompressionBenchmarkResult:
             "compressed_latency_p95_ms": round(self.compressed_latency_p95_ms, 3),
             "speedup_ratio": round(self.speedup_ratio, 2),
             "target_hardware": self.target_hardware,
+            "original_accuracy_pct": self.original_accuracy_pct,
+            "compressed_accuracy_pct": self.compressed_accuracy_pct,
+            "accuracy_drop_pct": self.accuracy_drop_pct,
         }
 
 
@@ -129,11 +138,14 @@ class CompressionPipeline:
         train_dataloader: Any | None = None,
         calibration_data: Any | None = None,
         sample_input: torch.Tensor | None = None,
+        validation_data: Any | None = None,
     ) -> tuple[nn.Module, CompressionBenchmarkResult]:
         """Execute configured compression pipeline and return compressed model + metrics."""
         compressed = copy.deepcopy(model)
         orig_size_mb = compute_model_size_mb(model)
         sparsity = 0.0
+        original_accuracy = None
+        compressed_accuracy = None
 
         # 1. Pruning
         if self.config.enable_pruning:
@@ -164,6 +176,23 @@ class CompressionPipeline:
                 config=self.config.quantization_config,
             )
 
+        accuracy_drop = None
+        if validation_data is not None:
+            validation_batches = list(validation_data)
+            original_accuracy = self._classification_accuracy(model, validation_batches)
+            compressed_accuracy = self._classification_accuracy(compressed, validation_batches)
+            accuracy_drop = original_accuracy - compressed_accuracy
+            if accuracy_drop > self.config.max_accuracy_drop_pct:
+                logger.warning(
+                    "Compression accuracy drop %.2f percentage points exceeds limit %.2f; "
+                    "using the original model",
+                    accuracy_drop,
+                    self.config.max_accuracy_drop_pct,
+                )
+                compressed = model
+                compressed_accuracy = original_accuracy
+                accuracy_drop = 0.0
+
         # 4. Benchmarking
         compressed_size_mb = compute_model_size_mb(compressed)
         if not self.config.enable_pruning:
@@ -190,6 +219,9 @@ class CompressionPipeline:
             compressed_latency_p95_ms=comp_bench["p95_ms"],
             speedup_ratio=speedup,
             target_hardware=self.config.target_hardware,
+            original_accuracy_pct=original_accuracy,
+            compressed_accuracy_pct=compressed_accuracy,
+            accuracy_drop_pct=accuracy_drop,
         )
 
         logger.info(
@@ -201,6 +233,29 @@ class CompressionPipeline:
         )
 
         return compressed, benchmark_result
+
+    @staticmethod
+    def _classification_accuracy(
+        model: nn.Module, batches: list[tuple[torch.Tensor, torch.Tensor]]
+    ) -> float:
+        """Calculate top-1 accuracy over labeled classification batches."""
+        was_training = model.training
+        model.eval()
+        correct = 0
+        total = 0
+        try:
+            with torch.no_grad():
+                for inputs, targets in batches:
+                    predictions = model(inputs)
+                    if predictions.ndim < 2 or predictions.shape[-1] < 2:
+                        raise ValueError("validation_data requires multiclass model outputs")
+                    correct += int((predictions.argmax(dim=-1) == targets).sum().item())
+                    total += int(targets.numel())
+        finally:
+            model.train(was_training)
+        if total == 0:
+            raise ValueError("validation_data must contain at least one labeled example")
+        return correct / total * 100.0
 
     def export_edge_model(
         self,

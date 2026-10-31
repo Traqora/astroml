@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Expectation suite execution and validation-result storage.
 
 Resolves part of #644.
@@ -24,6 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from astroml.utils.exceptions import AstroMLError
 from astroml.validation.great_expectations.suite_builder import (
     Expectation,
     ExpectationSuite,

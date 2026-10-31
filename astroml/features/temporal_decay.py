@@ -19,7 +19,7 @@ class TemporalDecayWeighter:
         0.3679
     """
 
-    def __init__(self, lambda_param -> Any: float = 0.01):
+    def __init__(self, lambda_param: float = 0.01) -> None:
         """Initialize temporal decay weighter.
 
         Args:

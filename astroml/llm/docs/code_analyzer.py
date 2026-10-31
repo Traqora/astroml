@@ -1,4 +1,5 @@
 from astroml.utils.exceptions import AstroMLError
+
 """
 Code analyzer for documentation generation.
 
@@ -362,7 +363,7 @@ class CodeAnalyzer:
 class DocumentationVisitor(ast.NodeVisitor):
     """AST visitor for extracting documentation elements."""
 
-    def __init__(self, analyzer -> Any: CodeAnalyzer):
+    def __init__(self, analyzer: CodeAnalyzer) -> None:
         self.analyzer = analyzer
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:

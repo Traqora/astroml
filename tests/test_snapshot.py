@@ -6,8 +6,11 @@ import pytest
 
 from astroml.features.graph.snapshot import (
     Edge,
+    SnapshotOrderingError,
     _build_snapshot_window,
+    _mask_account_id,
     snapshot_last_n_days,
+    validate_temporal_order,
     window_snapshot,
 )
 
@@ -249,3 +252,90 @@ def test_build_snapshot_window_logs_each_retry_attempt(monkeypatch, caplog):
         _build_snapshot_window(0, t0, t1, chunk_size=10, max_retries=3)
 
     assert any("attempt 1/4" in record.message for record in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# RAG citation check (#876) — verify edge src/dst citations are faithfully
+# preserved through the window pipeline and that the returned nodes set is
+# always exactly the union of those citations (no phantom or dropped nodes).
+# ---------------------------------------------------------------------------
+
+
+def test_window_snapshot_nodes_set_equals_union_of_edge_endpoints():
+    """nodes == {e.src for e in edges} | {e.dst for e in edges}."""
+    edges = [
+        Edge(src="GAAA", dst="GBBB", timestamp=100),
+        Edge(src="GBBB", dst="GCCC", timestamp=200),
+        Edge(src="GAAA", dst="GCCC", timestamp=300),
+    ]
+    nodes, win = window_snapshot(edges, start_ts=100, end_ts=300, presorted=True)
+    expected = {e.src for e in win} | {e.dst for e in win}
+    assert nodes == expected == {"GAAA", "GBBB", "GCCC"}
+
+
+def test_window_snapshot_src_dst_values_are_unchanged():
+    """src and dst pass through window_snapshot without modification."""
+    src = "GABCDE3WZSDLMOI3HPCL7XXTZJRKNHQP4IN5ZXFQ5OCXL3TYBNFZB5V"
+    dst = "GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCA"
+    edge = Edge(src=src, dst=dst, timestamp=1_000)
+    _, win = window_snapshot([edge], start_ts=1_000, end_ts=1_000, presorted=True)
+    assert len(win) == 1
+    assert win[0].src == src
+    assert win[0].dst == dst
+
+
+def test_window_snapshot_returns_no_phantom_nodes_outside_window():
+    """Nodes from edges outside the window must not appear in the returned set."""
+    edges = [
+        Edge(src="outside_src", dst="outside_dst", timestamp=50),
+        Edge(src="inside_src", dst="inside_dst", timestamp=200),
+        Edge(src="outside_src2", dst="outside_dst2", timestamp=400),
+    ]
+    nodes, win = window_snapshot(edges, start_ts=100, end_ts=300, presorted=True)
+    assert "outside_src" not in nodes
+    assert "outside_dst" not in nodes
+    assert "outside_src2" not in nodes
+    assert "inside_src" in nodes and "inside_dst" in nodes
+
+
+def test_window_snapshot_empty_range_returns_empty_citation_set():
+    """An out-of-range window returns an empty nodes set — no citations leaked."""
+    edges = make_edges(5, start_ts=1_000, step=100)
+    nodes, win = window_snapshot(edges, start_ts=9_000, end_ts=9_999, presorted=True)
+    assert nodes == set()
+    assert win == []
+
+
+def test_mask_account_id_redacts_middle_of_long_id():
+    """_mask_account_id keeps only a short prefix/suffix for log safety."""
+    account = "GABCDE3WZSDLMOI3HPCL7XXTZJRKNHQP4IN5ZXFQ5OCXL3TYBNFZB5V"
+    masked = _mask_account_id(account)
+    assert masked.startswith(account[:4])
+    assert masked.endswith(account[-4:])
+    assert account[4:-4] not in masked
+
+
+def test_mask_account_id_fully_redacts_short_ids():
+    """Short identifiers (≤8 chars) are entirely replaced with asterisks."""
+    assert _mask_account_id("GABC") == "****"
+    assert _mask_account_id("") == ""
+
+
+def test_validate_temporal_order_raises_on_out_of_order_edges():
+    """validate_temporal_order raises SnapshotOrderingError on inversion."""
+    edges = [
+        Edge(src="a", dst="b", timestamp=100),
+        Edge(src="c", dst="d", timestamp=50),
+    ]
+    with pytest.raises(SnapshotOrderingError, match="index 0"):
+        validate_temporal_order(edges)
+
+
+def test_validate_temporal_order_allows_timestamp_ties():
+    """Edges sharing a timestamp (same ledger) must not raise."""
+    edges = [
+        Edge(src="a", dst="b", timestamp=100),
+        Edge(src="c", dst="d", timestamp=100),
+        Edge(src="e", dst="f", timestamp=200),
+    ]
+    validate_temporal_order(edges)  # must not raise

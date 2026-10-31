@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Auto-scaling controller for model serving infrastructure.
 
 Issue #639 Step 1 & 5: Implements metrics-based autoscaling and
@@ -18,6 +17,8 @@ from enum import Enum, auto
 from typing import Any
 
 import numpy as np
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -307,7 +308,9 @@ class Autoscaler:
             std = np.std(recent_vals)
             mean = np.mean(recent_vals) if np.mean(recent_vals) > 0 else 1.0
             if std / mean > 0.5:  # High variability
-                logger.debug(f"Stabilization: high metric variability ({std / mean:.2f}), delaying scale")
+                logger.debug(
+                    f"Stabilization: high metric variability ({std / mean:.2f}), delaying scale"
+                )
                 return self._current_replicas
 
         return desired

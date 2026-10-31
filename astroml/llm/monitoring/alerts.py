@@ -46,7 +46,7 @@ class AlertManager:
 
         return self.alerts
 
-    def _add_alert(self, alert_type -> Any: str, message: str):
+    def _add_alert(self, alert_type: str, message: str):
         # Prevent duplicate alerts in a short span
         for alert in self.alerts:
             if alert["type"] == alert_type and alert["message"] == message:

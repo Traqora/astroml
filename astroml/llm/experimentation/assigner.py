@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Optional, Union, Callable
+from typing import Any, Callable, Dict, List, Optional, Union
+
 """Traffic assignment and randomization for experiments."""
 
 import hashlib
@@ -11,7 +12,7 @@ class TrafficAssigner:
     Uses consistent hashing to ensure users get same variant across requests.
     """
 
-    def __init__(self, experiment_id -> Any: str):
+    def __init__(self, experiment_id: str) -> None:
         """Initialize assigner."""
         self.experiment_id = experiment_id
 

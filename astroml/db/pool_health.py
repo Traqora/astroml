@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Connection pool health inspection (Issue #550).
 
 SQLAlchemy's ``QueuePool`` exposes counters but no policy: this module turns
@@ -17,6 +16,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.pool import Pool
 
 from astroml.observability.health import CheckResult, HealthStatus
+from astroml.utils.exceptions import AstroMLError
 
 #: Utilization ratio at or above which the pool is considered saturated.
 POOL_UTILIZATION_ALERT_THRESHOLD: Final[float] = 0.80

@@ -1,9 +1,10 @@
-from typing import Any, Dict, List, Optional, Union, Callable
+from typing import Any, Callable, Dict, List, Optional, Union
+
 import numpy as np
 
 
 class EmbeddingGenerator:
-    def __init__(self, model_name -> Any: str = "text-embedding-3-large"):
+    def __init__(self, model_name: str = "text-embedding-3-large") -> None:
         self.model_name = model_name
         self.dimension = 3072 if "large" in model_name else 1536
 

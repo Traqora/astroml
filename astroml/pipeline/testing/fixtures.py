@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Pipeline test fixtures and runner for data pipeline testing.
 
 Issue #638 Step 4 & 5: Implements reusable test fixtures for pipeline stages
@@ -19,6 +18,8 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -359,16 +360,12 @@ class PipelineTestRunner:
             # Check row count
             if fixture.expected_row_count is not None:
                 if len(output) != fixture.expected_row_count:
-                    return False, (
-                        f"Expected {fixture.expected_row_count} rows, got {len(output)}"
-                    )
+                    return False, (f"Expected {fixture.expected_row_count} rows, got {len(output)}")
 
             if fixture.expected_row_count_range is not None:
                 lo, hi = fixture.expected_row_count_range
                 if not (lo <= len(output) <= hi):
-                    return False, (
-                        f"Expected row count in [{lo}, {hi}], got {len(output)}"
-                    )
+                    return False, (f"Expected row count in [{lo}, {hi}], got {len(output)}")
 
         return True, ""
 

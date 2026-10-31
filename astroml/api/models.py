@@ -24,6 +24,45 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 # on SQLite and BigInteger on PostgreSQL/other dialects.
 _ID_TYPE = BigInteger().with_variant(Integer(), "sqlite")
 
+# Default anomaly-score thresholds for the low/medium/high buckets — issue
+# #838. These are deliberately asset-agnostic: a score of 0.8 means the same
+# thing whether the underlying transaction was in XLM or a stablecoin.
+#
+# Per-asset overrides exist because a fixed threshold is wrong for assets
+# whose normal activity looks nothing alike — a stablecoin used for routine,
+# large, regular transfers has a different "suspicious" baseline than a
+# thinly-traded custom asset, where the same score represents a much rarer
+# pattern. Overriding here means a model trained on scores alone can still
+# be bucketed sensibly per asset without retraining or rescaling the score
+# itself.
+DEFAULT_RISK_THRESHOLDS: dict[str, float] = {"high": 0.8, "medium": 0.5}
+
+# Asset code -> its own {"high": ..., "medium": ...} override. An asset
+# absent from this map uses ``DEFAULT_RISK_THRESHOLDS`` unchanged, so adding
+# an asset here only ever narrows or widens that one asset's buckets — it
+# never changes behavior for every other asset already in production.
+ASSET_RISK_THRESHOLDS: dict[str, dict[str, float]] = {}
+
+
+def risk_level_for_score(score: float, asset: str | None = None) -> str:
+    """Bucket a numeric anomaly score into a labelled risk level.
+
+    ``asset`` is optional and defaults to the global thresholds
+    (``DEFAULT_RISK_THRESHOLDS``) when omitted or when the given asset has
+    no entry in ``ASSET_RISK_THRESHOLDS`` — every existing caller that does
+    not pass ``asset`` keeps scoring exactly as before this parameter
+    existed.
+    """
+    if asset is not None:
+        thresholds = ASSET_RISK_THRESHOLDS.get(asset, DEFAULT_RISK_THRESHOLDS)
+    else:
+        thresholds = DEFAULT_RISK_THRESHOLDS
+    if score >= thresholds["high"]:
+        return "high"
+    if score >= thresholds["medium"]:
+        return "medium"
+    return "low"
+
 
 class APIBase(DeclarativeBase):
     """Declarative base for API-layer ORM models."""
@@ -61,10 +100,11 @@ class FraudAlert(APIBase):
     )
 
     @staticmethod
-    def risk_level_for_score(score: float) -> str:
-        """Bucket a numeric anomaly score into a labelled risk level."""
-        if score >= 0.8:
-            return "high"
-        if score >= 0.5:
-            return "medium"
-        return "low"
+    def risk_level_for_score(score: float, asset: str | None = None) -> str:
+        """Bucket a numeric anomaly score into a labelled risk level.
+
+        ``asset`` is optional (issue #838) — see
+        :func:`risk_level_for_score` (module level) for the per-asset
+        threshold lookup this delegates to.
+        """
+        return risk_level_for_score(score, asset)

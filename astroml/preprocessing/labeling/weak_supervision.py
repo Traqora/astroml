@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Weak supervision with labeling functions (issue #624).
 
 Provides a framework for programmatic labeling via labeling functions (LFs)
@@ -20,6 +19,8 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 import numpy as np
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

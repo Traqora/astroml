@@ -76,7 +76,7 @@ def path_payment_payload():
         "source_amount": "10.0",
         "asset_type": "credit_alphanum4",
         "asset_code": "USDC",
-        "asset_issuer": "G_ISSUER",
+        "asset_issuer": "G" + "I" * 55,
         "destination_amount": "9.5",
         "path": [{"asset_type": "native"}],
         "created_at": "2024-01-15T12:30:00Z",

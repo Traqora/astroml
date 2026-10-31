@@ -419,6 +419,7 @@ class TestGeConfig:
     def test_configured_suites_are_buildable(self) -> None:
         yaml = pytest.importorskip("yaml")
         config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+        assert set(config["ci"]["suites"]) <= set(config["suites"])
         for name, definition in config["suites"].items():
             built = ExpectationSuite.from_dict(
                 {

@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Cohere embedding provider.
 
 Uses ``embed-english-v3.0`` (1024-dim) by default.
@@ -20,6 +19,8 @@ Trade-offs
 from __future__ import annotations
 
 import os
+
+from astroml.utils.exceptions import AstroMLError
 
 from .embedding_base import EmbeddingError, EmbeddingProvider
 

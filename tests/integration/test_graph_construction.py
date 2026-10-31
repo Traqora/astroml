@@ -15,7 +15,9 @@ from astroml.db.schema import NormalizedTransaction, Operation
 from astroml.features.graph.snapshot import (
     Edge,
     SnapshotWindow,
+    iter_db_snapshot_edges,
     iter_db_snapshots,
+    parallel_build_snapshots,
     snapshot_last_n_days,
     window_snapshot,
 )
@@ -330,6 +332,246 @@ class TestDatabaseSnapshotIntegration:
 
         # Should have 10 snapshots (rolling with overlap)
         assert len(snapshots) == 10
+
+
+class TestSnapshotWindowBoundaries:
+    """Regression tests for DB-backed snapshot window boundaries (issue #834).
+
+    Two separate bugs hid behind every existing snapshot test here: none of
+    them put a transaction at the exact instant a non-overlapping window
+    boundary falls on, so neither was ever exercised.
+
+    1. ``iter_db_snapshots``/``iter_db_snapshot_edges``/``_build_snapshot_window``
+       all normalised ``t0``/``t_now`` to tz-*aware* UTC, then bound a
+       tz-aware ``window_start``/``window_end`` straight into a
+       ``WHERE timestamp >= :bound`` comparison against
+       ``normalized_transactions.timestamp``, a naive ``DateTime`` column.
+       psycopg converts a tz-aware bind to the *client's local timezone*
+       before dropping the tzinfo to match the naive column, so on any host
+       not running with ``TZ=UTC`` every window boundary silently shifted by
+       the host's UTC offset — a transaction could land in the wrong hour's
+       (or day's) window with nothing raising. Fixed by ``_naive_utc_bound``.
+
+    2. ``window_end = min(window_start + win_delta, t_now)`` makes window N's
+       end equal window N+1's start for non-overlapping windows. The query
+       for each window compared both sides with ``<=``, so a row landing
+       exactly on that shared instant matched both windows' filters and was
+       double-counted. Fixed by ``_end_bound_filter``: the right bound is
+       exclusive except on the very last window, where it stays inclusive
+       of ``t_now`` so a row at exactly the end of the whole range isn't
+       dropped.
+    """
+
+    def test_boundary_transaction_is_not_double_counted_across_adjacent_windows(
+        self,
+        test_session: Session,
+    ) -> None:
+        """A transaction exactly on a non-overlapping window boundary
+        belongs to the later window only, not both."""
+        base_time = datetime(2024, 1, 1)
+
+        transactions = [
+            NormalizedTransaction(
+                transaction_hash="tx_before",
+                sender="G" + "A" * 55,
+                receiver="G" + "B" * 55,
+                asset="XLM",
+                amount=100.0,
+                timestamp=base_time,
+            ),
+            NormalizedTransaction(
+                transaction_hash="tx_on_boundary",
+                sender="G" + "B" * 55,
+                receiver="G" + "C" * 55,
+                asset="XLM",
+                amount=50.0,
+                timestamp=base_time + timedelta(hours=1),
+            ),
+            NormalizedTransaction(
+                transaction_hash="tx_at_end",
+                sender="G" + "C" * 55,
+                receiver="G" + "D" * 55,
+                asset="XLM",
+                amount=25.0,
+                timestamp=base_time + timedelta(hours=3),
+            ),
+        ]
+        for tx in transactions:
+            test_session.add(tx)
+        test_session.commit()
+
+        t_now = base_time + timedelta(hours=3)
+        snapshots = list(
+            iter_db_snapshots(window="1h", t0=base_time, t_now=t_now, session=test_session)
+        )
+
+        total_edges = sum(len(s.edges) for s in snapshots)
+        assert total_edges == 3, (
+            f"expected each of the 3 transactions counted exactly once across "
+            f"all windows, got {total_edges} total edges"
+        )
+
+        # window 0 = [base_time, base_time+1h): only tx_before
+        assert [e.src for e in snapshots[0].edges] == [transactions[0].sender]
+        # window 1 = [base_time+1h, base_time+2h): only tx_on_boundary, not
+        # shared with window 0 or window 2
+        assert [e.src for e in snapshots[1].edges] == [transactions[1].sender]
+        # the final window's end equals t_now and stays inclusive, so the
+        # transaction landing exactly on t_now is still counted there
+        assert [e.src for e in snapshots[2].edges] == [transactions[2].sender]
+
+    def test_streaming_variant_does_not_double_count_boundary_transaction(
+        self,
+        test_session: Session,
+    ) -> None:
+        """iter_db_snapshot_edges (the streaming variant) applies the same
+        boundary fix as iter_db_snapshots."""
+        base_time = datetime(2024, 1, 1)
+
+        transactions = [
+            NormalizedTransaction(
+                transaction_hash="tx_before",
+                sender="G" + "A" * 55,
+                receiver="G" + "B" * 55,
+                asset="XLM",
+                amount=100.0,
+                timestamp=base_time,
+            ),
+            NormalizedTransaction(
+                transaction_hash="tx_on_boundary",
+                sender="G" + "B" * 55,
+                receiver="G" + "C" * 55,
+                asset="XLM",
+                amount=50.0,
+                timestamp=base_time + timedelta(hours=1),
+            ),
+        ]
+        for tx in transactions:
+            test_session.add(tx)
+        test_session.commit()
+
+        t_now = base_time + timedelta(hours=2)
+        total_edges = 0
+        per_window_counts = []
+        for _meta, edges_iter in iter_db_snapshot_edges(
+            window="1h", t0=base_time, t_now=t_now, session=test_session
+        ):
+            edges = list(edges_iter)
+            per_window_counts.append(len(edges))
+            total_edges += len(edges)
+
+        assert total_edges == 2, f"expected 2 total edges, got {total_edges}"
+        assert per_window_counts == [1, 1]
+
+    def test_parallel_build_snapshots_does_not_double_count_boundary_transaction(
+        self,
+        test_session: Session,
+    ) -> None:
+        """parallel_build_snapshots (the joblib-parallel builder) applies the
+        same boundary fix as the sequential and streaming variants."""
+        base_time = datetime(2024, 1, 1)
+
+        transactions = [
+            NormalizedTransaction(
+                transaction_hash="tx_before",
+                sender="G" + "A" * 55,
+                receiver="G" + "B" * 55,
+                asset="XLM",
+                amount=100.0,
+                timestamp=base_time,
+            ),
+            NormalizedTransaction(
+                transaction_hash="tx_on_boundary",
+                sender="G" + "B" * 55,
+                receiver="G" + "C" * 55,
+                asset="XLM",
+                amount=50.0,
+                timestamp=base_time + timedelta(hours=1),
+            ),
+        ]
+        for tx in transactions:
+            test_session.add(tx)
+        test_session.commit()
+
+        t_now = base_time + timedelta(hours=2)
+        windows = parallel_build_snapshots(window="1h", t0=base_time, t_now=t_now, n_jobs=1)
+
+        total_edges = sum(len(w.edges) for w in windows)
+        assert total_edges == 2, f"expected 2 total edges, got {total_edges}"
+
+    def test_rolling_windows_still_legitimately_overlap(
+        self,
+        test_session: Session,
+    ) -> None:
+        """The exclusive-end fix only removes the artefact between adjacent
+        *non-overlapping* windows; rolling windows (step < window) are meant
+        to share rows and must keep doing so."""
+        base_time = datetime(2024, 1, 1)
+
+        transactions = [
+            NormalizedTransaction(
+                transaction_hash=f"tx{i}",
+                sender=f"G{'A' * i}{'B' * (55 - i)}",
+                receiver=f"G{'C' * i}{'D' * (55 - i)}",
+                asset="XLM",
+                amount=10.0 * i,
+                timestamp=base_time + timedelta(hours=i),
+            )
+            for i in range(3)
+        ]
+        for tx in transactions:
+            test_session.add(tx)
+        test_session.commit()
+
+        t_now = base_time + timedelta(hours=2)
+        snapshots = list(
+            iter_db_snapshots(
+                window="2h", step="1h", t0=base_time, t_now=t_now, session=test_session
+            )
+        )
+
+        # window 0 = [base_time, base_time+2h] (last window, inclusive): tx0, tx1, tx2
+        # window 1 = [base_time+1h, base_time+2h] (last window, inclusive): tx1, tx2
+        assert len(snapshots[0].edges) == 3
+        assert len(snapshots[1].edges) == 2
+
+    def test_boundary_fix_does_not_change_total_transaction_count_vs_naive_sum(
+        self,
+        test_session: Session,
+    ) -> None:
+        """Sanity check at a larger scale: for non-overlapping windows, the
+        sum of each window's edge count must equal the total number of
+        transactions in range, with no row dropped or duplicated, even when
+        several fall exactly on window boundaries."""
+        base_time = datetime(2024, 1, 1)
+
+        # One transaction every 30 minutes for 5 hours: several land exactly
+        # on a 1-hour window boundary (hour marks), others fall mid-window.
+        transactions = [
+            NormalizedTransaction(
+                transaction_hash=f"tx{i}",
+                sender=f"G{'A' * (i % 50 + 1)}{'B' * (55 - (i % 50 + 1))}",
+                receiver=f"G{'C' * (i % 50 + 1)}{'D' * (55 - (i % 50 + 1))}",
+                asset="XLM",
+                amount=1.0,
+                timestamp=base_time + timedelta(minutes=30 * i),
+            )
+            for i in range(10)
+        ]
+        for tx in transactions:
+            test_session.add(tx)
+        test_session.commit()
+
+        t_now = base_time + timedelta(hours=4, minutes=30)
+        snapshots = list(
+            iter_db_snapshots(window="1h", t0=base_time, t_now=t_now, session=test_session)
+        )
+
+        total_edges = sum(len(s.edges) for s in snapshots)
+        assert total_edges == len(transactions), (
+            f"expected all {len(transactions)} transactions counted exactly "
+            f"once, got {total_edges} total edges across {len(snapshots)} windows"
+        )
 
 
 class TestGraphConstructionPipelineIntegration:

@@ -1,18 +1,18 @@
-from astroml.utils.exceptions import AstroMLError
-from datetime import datetime
+import math
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Tuple, Optional, Union
-from datetime import datetime, timedelta
-import math
 import polars as pl
+
+from astroml.utils.exceptions import AstroMLError
 
 
 class TemporalDataProcessor:
     """Utilities for processing temporal graph data."""
 
-    def __init__(self, time_window -> Any: int | None = None):
+    def __init__(self, time_window: int | None = None) -> None:
         self.time_window = time_window
         self.reference_time = None
 
@@ -158,7 +158,7 @@ class TemporalDataProcessor:
 class TemporalGraphBuilder:
     """Build temporal graphs from transaction data."""
 
-    def __init__(self, time_window_days -> Any: int = 30):
+    def __init__(self, time_window_days: int = 30) -> None:
         self.time_window_days = time_window_days
         self.processor = TemporalDataProcessor()
 
@@ -177,63 +177,83 @@ class TemporalGraphBuilder:
         if not transactions:
             empty_features = torch.empty((0, 0), dtype=torch.float32)
             return {
-                'edge_index': torch.empty((2, 0), dtype=torch.long),
-                'edge_times': torch.empty(0, dtype=torch.float32),
-                'edge_weights': torch.empty(0, dtype=torch.float32),
-                'edge_features': torch.empty((0, 2), dtype=torch.float32),
-                'node_features': empty_features,
-                'node_times': torch.empty(0, dtype=torch.float32),
-                'num_nodes': 0,
-                'node_mapping': {}
+                "edge_index": torch.empty((2, 0), dtype=torch.long),
+                "edge_times": torch.empty(0, dtype=torch.float32),
+                "edge_weights": torch.empty(0, dtype=torch.float32),
+                "edge_features": torch.empty((0, 2), dtype=torch.float32),
+                "node_features": empty_features,
+                "node_times": torch.empty(0, dtype=torch.float32),
+                "num_nodes": 0,
+                "node_mapping": {},
             }
 
         tx_frame = pl.DataFrame(transactions)
-        required = {'source_account', 'target_account', 'timestamp'}
+        required = {"source_account", "target_account", "timestamp"}
         missing = required.difference(tx_frame.columns)
         if missing:
             raise KeyError(f"transactions missing required columns: {sorted(missing)}")
 
-        if 'amount' not in tx_frame.columns:
-            tx_frame = tx_frame.with_columns(pl.lit(1.0).alias('amount'))
-        if 'operation_type' not in tx_frame.columns:
-            tx_frame = tx_frame.with_columns(pl.lit('payment').alias('operation_type'))
+        if "amount" not in tx_frame.columns:
+            tx_frame = tx_frame.with_columns(pl.lit(1.0).alias("amount"))
+        if "operation_type" not in tx_frame.columns:
+            tx_frame = tx_frame.with_columns(pl.lit("payment").alias("operation_type"))
 
-        node_series = pl.concat([
-            tx_frame.select(pl.col('source_account').alias('node')),
-            tx_frame.select(pl.col('target_account').alias('node')),
-        ]).get_column('node').unique(maintain_order=True)
+        node_series = (
+            pl.concat(
+                [
+                    tx_frame.select(pl.col("source_account").alias("node")),
+                    tx_frame.select(pl.col("target_account").alias("node")),
+                ]
+            )
+            .get_column("node")
+            .unique(maintain_order=True)
+        )
         node_list = node_series.to_list()
         node_to_idx = {node: i for i, node in enumerate(node_list)}
 
         indexed = tx_frame.with_columns(
-            source_idx=pl.col('source_account').replace(node_to_idx).cast(pl.Int64),
-            target_idx=pl.col('target_account').replace(node_to_idx).cast(pl.Int64),
-            amount_filled=pl.col('amount').fill_null(1.0).cast(pl.Float32),
-            feature_amount=pl.col('amount').fill_null(0.0).cast(pl.Float32),
+            source_idx=pl.col("source_account").replace(node_to_idx).cast(pl.Int64),
+            target_idx=pl.col("target_account").replace(node_to_idx).cast(pl.Int64),
+            amount_filled=pl.col("amount").fill_null(1.0).cast(pl.Float32),
+            feature_amount=pl.col("amount").fill_null(0.0).cast(pl.Float32),
         )
 
-        edge_index_np = indexed.select(['source_idx', 'target_idx']).to_numpy().T
+        edge_index_np = indexed.select(["source_idx", "target_idx"]).to_numpy().T
         edge_index = torch.from_numpy(np.ascontiguousarray(edge_index_np, dtype=np.int64))
-        edge_times = torch.from_numpy(indexed.get_column('timestamp').cast(pl.Float32).to_numpy())
-        edge_weights = torch.from_numpy(indexed.get_column('amount_filled').to_numpy())
+        edge_times = torch.from_numpy(indexed.get_column("timestamp").cast(pl.Float32).to_numpy())
+        edge_weights = torch.from_numpy(indexed.get_column("amount_filled").to_numpy())
 
-        operation_hash = indexed.get_column('operation_type').map_elements(
-            lambda value: hash(value if value is not None else 'payment') % 1000 / 1000.0,
-            return_dtype=pl.Float32,
-        ).to_numpy()
-        edge_features_np = np.column_stack([
-            indexed.get_column('feature_amount').to_numpy(),
-            operation_hash,
-        ]).astype(np.float32, copy=False)
+        operation_hash = (
+            indexed.get_column("operation_type")
+            .map_elements(
+                lambda value: hash(value if value is not None else "payment") % 1000 / 1000.0,
+                return_dtype=pl.Float32,
+            )
+            .to_numpy()
+        )
+        edge_features_np = np.column_stack(
+            [
+                indexed.get_column("feature_amount").to_numpy(),
+                operation_hash,
+            ]
+        ).astype(np.float32, copy=False)
         edge_features = torch.from_numpy(edge_features_np)
 
-        activity = pl.concat([
-            indexed.select(pl.col('source_idx').alias('node_idx'), pl.col('timestamp')),
-            indexed.select(pl.col('target_idx').alias('node_idx'), pl.col('timestamp')),
-        ]).group_by('node_idx').agg(pl.col('timestamp').max().alias('last_timestamp'))
+        activity = (
+            pl.concat(
+                [
+                    indexed.select(pl.col("source_idx").alias("node_idx"), pl.col("timestamp")),
+                    indexed.select(pl.col("target_idx").alias("node_idx"), pl.col("timestamp")),
+                ]
+            )
+            .group_by("node_idx")
+            .agg(pl.col("timestamp").max().alias("last_timestamp"))
+        )
         node_timestamps_np = np.zeros(len(node_list), dtype=np.float32)
-        activity_idx = activity.get_column('node_idx').to_numpy().astype(np.int64, copy=False)
-        node_timestamps_np[activity_idx] = activity.get_column('last_timestamp').cast(pl.Float32).to_numpy()
+        activity_idx = activity.get_column("node_idx").to_numpy().astype(np.int64, copy=False)
+        node_timestamps_np[activity_idx] = (
+            activity.get_column("last_timestamp").cast(pl.Float32).to_numpy()
+        )
         node_timestamps = torch.from_numpy(node_timestamps_np)
 
         # Normalize timestamps
@@ -269,18 +289,18 @@ class TemporalGraphBuilder:
             return torch.empty((0, 4), dtype=torch.float32)
 
         tx_frame = pl.DataFrame(transactions)
-        if 'amount' not in tx_frame.columns:
-            tx_frame = tx_frame.with_columns(pl.lit(0.0).alias('amount'))
+        if "amount" not in tx_frame.columns:
+            tx_frame = tx_frame.with_columns(pl.lit(0.0).alias("amount"))
 
         node_to_idx = {node: i for i, node in enumerate(nodes)}
         indexed = tx_frame.with_columns(
-            source_idx=pl.col('source_account').replace(node_to_idx).cast(pl.Int64),
-            target_idx=pl.col('target_account').replace(node_to_idx).cast(pl.Int64),
-            amount_filled=pl.col('amount').fill_null(0.0).cast(pl.Float32),
+            source_idx=pl.col("source_account").replace(node_to_idx).cast(pl.Int64),
+            target_idx=pl.col("target_account").replace(node_to_idx).cast(pl.Int64),
+            amount_filled=pl.col("amount").fill_null(0.0).cast(pl.Float32),
         )
-        source_idx = indexed.get_column('source_idx').to_numpy().astype(np.int64, copy=False)
-        target_idx = indexed.get_column('target_idx').to_numpy().astype(np.int64, copy=False)
-        amounts = indexed.get_column('amount_filled').to_numpy()
+        source_idx = indexed.get_column("source_idx").to_numpy().astype(np.int64, copy=False)
+        target_idx = indexed.get_column("target_idx").to_numpy().astype(np.int64, copy=False)
+        amounts = indexed.get_column("amount_filled").to_numpy()
 
         features_np = np.zeros((num_nodes, 4), dtype=np.float32)
         np.add.at(features_np[:, 0], source_idx, 1.0)

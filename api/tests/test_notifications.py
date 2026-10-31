@@ -6,8 +6,14 @@ from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from api.models.orm import Notification, NotificationPreference
+from astroml.contributors.notifications import (
+    NotificationEvent,
+    NotificationService,
+    NotificationType,
+)
 
 
 @pytest.fixture()
@@ -127,3 +133,102 @@ def test_get_digest(client: TestClient, db_session, seeded_notifications):
     data = response.json()
     assert data["period"] == "weekly"
     assert "notifications_count" in data
+
+
+def test_notifications_batching(db_session: Session):
+    """Test that notifications are batched efficiently with single flush."""
+    service = NotificationService(db_session)
+
+    # Create multiple notification events
+    events = [
+        NotificationEvent(
+            event_type=NotificationType.PR_MENTION,
+            user_id=1,
+            title="PR mention 1",
+            content="Content 1",
+            link="https://github.com/pr/1",
+            actor="alice",
+        ),
+        NotificationEvent(
+            event_type=NotificationType.PR_MENTION,
+            user_id=2,
+            title="PR mention 2",
+            content="Content 2",
+            link="https://github.com/pr/1",
+            actor="alice",
+        ),
+        NotificationEvent(
+            event_type=NotificationType.ISSUE_MENTION,
+            user_id=3,
+            title="Issue mention 1",
+            content="Content 3",
+            link="https://github.com/issue/1",
+            actor="bob",
+        ),
+    ]
+
+    # Send notifications in batch
+    notification_ids = service.send_notifications_batch(events)
+
+    # Verify all notifications were created
+    assert len(notification_ids) == 3
+    assert all(isinstance(nid, int) for nid in notification_ids)
+
+    # Verify notifications exist in database
+    notifications = (
+        db_session.query(Notification)
+        .filter(Notification.id.in_(notification_ids))
+        .all()
+    )
+    assert len(notifications) == 3
+
+    # Verify notification details
+    assert notifications[0].user_id == 1
+    assert notifications[0].title == "PR mention 1"
+    assert notifications[1].user_id == 2
+    assert notifications[1].title == "PR mention 2"
+    assert notifications[2].user_id == 3
+    assert notifications[2].title == "Issue mention 1"
+
+    db_session.commit()
+
+
+def test_notifications_batching_with_multiple_mentions(db_session: Session):
+    """Test webhook handler with multiple mentions uses batching."""
+    from astroml.contributors.notifications import GitHubWebhookHandler
+
+    handler = GitHubWebhookHandler(db_session)
+
+    # Simulate a PR comment with multiple mentions
+    webhook_data = {
+        "pr_number": 42,
+        "commenter": "alice",
+        "content": "Great work @bob, @charlie, and @dave!",
+        "repo": "astroml",
+        "link": "https://github.com/astroml/pull/42",
+    }
+
+    # Before handling, count notifications
+    initial_count = db_session.query(Notification).count()
+
+    # Handle the webhook (should batch 3 notifications)
+    handler.handle_pr_comment(**webhook_data)
+
+    # Verify 3 new notifications were created
+    new_count = db_session.query(Notification).count()
+    assert new_count == initial_count + 3
+
+    # Verify all notifications have correct data
+    notifications = (
+        db_session.query(Notification)
+        .filter(Notification.event_type == "pr_mention")
+        .all()
+    )
+    assert len(notifications) == 3
+    for notif in notifications:
+        assert notif.actor == "alice"
+        assert "PR #42" in notif.title
+        assert notif.link == "https://github.com/astroml/pull/42"
+
+    db_session.commit()
+

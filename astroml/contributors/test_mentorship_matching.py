@@ -1,4 +1,3 @@
-from typing import Any, Dict, List, Optional, Union, Callable
 """Unit tests for mentorship matching algorithm.
 
 Tests the core logic for:
@@ -9,6 +8,8 @@ Tests the core logic for:
 """
 
 from __future__ import annotations
+
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from astroml.contributors.mentorship import MentorshipMatcher
 

@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Content-addressable cache key generation for ML pipeline caching.
 
 Issue #636: Implements intelligent content-addressable cache keys that uniquely
@@ -15,6 +14,8 @@ from datetime import datetime, timezone
 from typing import Any, TypeVar
 
 import numpy as np
+
+from astroml.utils.exceptions import AstroMLError
 
 _T = TypeVar("_T")
 
@@ -134,7 +135,9 @@ class ContentAddressableCache:
         self.namespace = namespace
         self.version = version
         self._hash_algo = hash_algorithm
-        self._dependencies: dict[str, set[str]] = {}  # key fingerprint -> set of parent fingerprints
+        self._dependencies: dict[str, set[str]] = (
+            {}
+        )  # key fingerprint -> set of parent fingerprints
         self._store: dict[str, Any] = {}
 
     def make_key(

@@ -1,4 +1,5 @@
 from astroml.utils.exceptions import AstroMLError
+
 """LLM CLI command implementations."""
 
 import sys
@@ -18,7 +19,7 @@ from .formatters import (
 from .interactive import run_chat
 
 
-def get_provider(provider_name -> Any: str = "", model: str = "", **kwargs: Any):
+def get_provider(provider_name: str = "", model: str = "", **kwargs: Any):
     """Create a provider from CLI args, config, and env."""
     cfg = load_cli_config()
     prov = provider_name or cfg.get("provider", "openai")

@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Ray-based distributed training (issue #625).
 
 Provides hyperparameter tuning with Ray Tune and distributed training
@@ -29,6 +28,7 @@ from astroml.training.distributed.strategy import (
     ParallelismType,
     create_strategy,
 )
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +141,9 @@ class RayTrainer:
     def initialize(self) -> None:
         """Initialize Ray cluster."""
         self.cluster_manager.initialize()
-        logger.info("RayTrainer initialized with %s parallelism", self.strategy.get_parallelism_type())
+        logger.info(
+            "RayTrainer initialized with %s parallelism", self.strategy.get_parallelism_type()
+        )
 
     def train_distributed(
         self,
@@ -266,16 +268,12 @@ class RayTuner:
             trial_config = self._sample_config(i)
             try:
                 value = self.objective_fn(trial_config)
-                is_better = (
-                    value < best_value if self.config.mode == "min" else value > best_value
-                )
+                is_better = value < best_value if self.config.mode == "min" else value > best_value
                 if is_better:
                     best_value = value
                     best_config = trial_config
 
-                trials.append(
-                    TrialResult(trial_id=i, config=trial_config, metric_value=value)
-                )
+                trials.append(TrialResult(trial_id=i, config=trial_config, metric_value=value))
             except Exception as exc:
                 logger.error("Trial %d failed: %s", i, exc)
                 trials.append(

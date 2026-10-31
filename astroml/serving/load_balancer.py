@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Load balancer for model serving infrastructure.
 
 Issue #639 Step 2: Implements intelligent request routing across
@@ -16,6 +15,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -281,7 +282,9 @@ class LoadBalancer:
         """Route to replica with lowest average latency."""
         if not replicas:
             return None
-        return min(replicas, key=lambda r: r.avg_latency_ms if r.avg_latency_ms > 0 else float("inf"))
+        return min(
+            replicas, key=lambda r: r.avg_latency_ms if r.avg_latency_ms > 0 else float("inf")
+        )
 
     def _route_weighted(self, replicas: list[Replica]) -> Replica | None:
         """Weighted random selection."""

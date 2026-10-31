@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """HuggingFace embedding provider.
 
 Uses the HuggingFace Inference API with ``sentence-transformers/all-MiniLM-L6-v2``
@@ -21,6 +20,8 @@ Trade-offs
 from __future__ import annotations
 
 import os
+
+from astroml.utils.exceptions import AstroMLError
 
 from .embedding_base import EmbeddingError, EmbeddingProvider
 

@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Run comparison engine for experiment tracking.
 
 Provides parallel coordinate plotting, hyperparameter importance analysis,
@@ -14,6 +13,8 @@ from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
+
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +121,10 @@ class RunComparator:
 
         summary_lines = [f"Compared {len(runs)} runs on metric: {target_metric}"]
         if best:
-            summary_lines.append(f"Best: {best.run_name} ({best.run_id}) " f"with {target_metric}={best.metrics.get(target_metric, 'N/A')}")
+            summary_lines.append(
+                f"Best: {best.run_name} ({best.run_id}) "
+                f"with {target_metric}={best.metrics.get(target_metric, 'N/A')}"
+            )
 
         return ComparisonResult(
             runs=runs,
@@ -282,13 +286,9 @@ class RunComparator:
     def _param_importance(
         self, runs: list[RunMetrics], target_metric: str
     ) -> list[tuple[str, float]]:
-        return self.hyperparameter_importance(
-            [r.run_id for r in runs], target_metric
-        )
+        return self.hyperparameter_importance([r.run_id for r in runs], target_metric)
 
-    def _metric_correlations(
-        self, runs: list[RunMetrics], target_metric: str
-    ) -> dict[str, float]:
+    def _metric_correlations(self, runs: list[RunMetrics], target_metric: str) -> dict[str, float]:
         """Compute Pearson correlation of each metric with target_metric."""
         target = [r.metrics[target_metric] for r in runs if target_metric in r.metrics]
         if len(target) < 3:

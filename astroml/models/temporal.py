@@ -11,7 +11,7 @@ from torch_geometric.utils import degree
 class TemporalEncoding(nn.Module):
     """Temporal encoding using sinusoidal functions."""
 
-    def __init__(self, temporal_dim -> Any: int, max_time: float = 1000.0):
+    def __init__(self, temporal_dim: int, max_time: float = 1000.0) -> None:
         super().__init__()
         self.temporal_dim = temporal_dim
         self.max_time = max_time
@@ -49,7 +49,7 @@ class TemporalEncoding(nn.Module):
 class TemporalAttention(nn.Module):
     """Temporal attention mechanism for time-aware node representations."""
 
-    def __init__(self, input_dim -> Any: int, temporal_dim: int, heads: int = 8):
+    def __init__(self, input_dim: int, temporal_dim: int, heads: int = 8) -> None:
         super().__init__()
         self.input_dim = input_dim
         self.temporal_dim = temporal_dim

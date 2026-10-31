@@ -6,6 +6,7 @@ secure connections in production environments.
 
 from __future__ import annotations
 
+import os
 from typing import Callable
 
 from fastapi import Request, Response
@@ -125,3 +126,44 @@ class HSTSMiddleware(BaseHTTPMiddleware):
 
         response.headers["Strict-Transport-Security"] = "; ".join(hsts_parts)
         return response
+
+
+def enforce_https_in_production(https_enabled: bool, hsts_enabled: bool) -> None:
+    """Enforce HTTPS/HSTS enforcement in production (#869).
+
+    ``Settings.https_enabled`` and ``Settings.hsts_enabled`` both default to
+    ``False`` ("production only", per their own docstring in ``api/config.py``)
+    and rely entirely on an operator remembering to set the corresponding
+    env vars when deploying. There was previously no code-level guarantee
+    that HTTPS enforcement is actually active in production — it was
+    "secure if configured correctly", not "secure by default in prod".
+
+    Mirrors ``api.auth.hardening.enforce_jwt_secret``: reads ``ENV`` (not
+    ``Settings``, so this check can run before/independently of Settings
+    construction, same as the JWT check) and raises ``RuntimeError`` at
+    startup — rather than silently serving plaintext HTTP in production —
+    when ``ENV=production`` but either flag is left off.
+
+    Args:
+        https_enabled: the resolved ``Settings.https_enabled`` value.
+        hsts_enabled: the resolved ``Settings.hsts_enabled`` value.
+
+    Raises:
+        RuntimeError: if ``ENV=production`` and either flag is ``False``.
+    """
+    env = os.environ.get("ENV", "development")
+    if env != "production":
+        return
+
+    missing = []
+    if not https_enabled:
+        missing.append("HTTPS_ENABLED")
+    if not hsts_enabled:
+        missing.append("HSTS_ENABLED")
+
+    if missing:
+        raise RuntimeError(
+            f"{' and '.join(missing)} must be set to true in production (ENV=production). "
+            "Running in production without HTTPS redirect / HSTS enforcement "
+            "leaves traffic vulnerable to downgrade attacks."
+        )

@@ -23,6 +23,24 @@ For edge lists built in memory, the same contract is enforced on the
 from the caller, and a broken promise silently returned the wrong window
 because the binary search ran over an unsorted array; it now raises
 :class:`SnapshotOrderingError`.
+
+Lineage
+-------
+:func:`snapshot_lineage` (and :meth:`SnapshotWindow.lineage`) exposes the
+provenance of a built window — its source table, time bounds, counts, ordering
+contract and whether the payload honours it — without copying the edge list.
+This is the record downstream lineage/audit tooling should persist; it is a
+pure function of the window, so rebuilding the same window yields the same
+lineage (and the same default ``snapshot_id``).
+
+Environment drift
+-----------------
+Snapshot construction reads its database URL, cache backend and window
+defaults from the environment.  When those values diverge between the
+training, backfill and serving hosts the *same* window can be built from a
+different database or cache.  See ``docs/environment-drift.md`` for the
+reference matrix and drift checks; :class:`SnapshotLineage` records the
+window itself so two environments can be compared after the fact.
 """
 
 from __future__ import annotations
@@ -39,6 +57,7 @@ from itertools import islice
 from typing import Any
 
 from ...cache import cached_graph_snapshot
+from ...storage.artifact_metadata import detect_git_commit
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +65,18 @@ logger = logging.getLogger(__name__)
 # fetches rows from the DB in batches of this many; the iterator yields each
 # edge individually so callers never see a fully-materialised window list.
 DEFAULT_STREAM_CHUNK_SIZE = 5_000
+
+# Source table and total-order columns every DB-backed snapshot is built from.
+# Kept as plain names (rather than ORM columns) so the lineage record is a pure,
+# serialisable value that does not import the database layer.
+SNAPSHOT_SOURCE = "normalized_transactions"
+SNAPSHOT_ORDER_COLUMNS: tuple[str, ...] = (
+    "timestamp",
+    "ledger_sequence",
+    "operation_id",
+    "hop_index",
+    "id",
+)
 
 # RFC 7807 (application/problem+json) "type" base for this module's problems
 # — issue #949. These raise sites previously raised bare ``ValueError``s
@@ -279,8 +310,9 @@ def window_snapshot(
         SnapshotOrderingError: ``presorted=True`` and the edges are not in
             non-decreasing timestamp order.
 
-    Efficiency:
-      Uses binary search to find left/right indices and then slices, O(log N + K).
+        Efficiency:
+            Binary search finds the window boundaries without allocating a separate
+            timestamp array; the returned slice costs O(K).
     """
     if start_ts > end_ts:
         raise _invalid_window_bounds_error(start_ts, end_ts)
@@ -291,21 +323,16 @@ def window_snapshot(
     # is the concern in the first place.
     if presorted:
         sorted_edges = edges if isinstance(edges, list) else list(edges)
-        # The scan below allocates nothing and is linear like the timestamp
-        # array built a few lines down, so checking costs about what the array
-        # already costs — while an unchecked violation would return a window
-        # that is quietly wrong, since bisect only works on sorted input.
+        # Reject invalid promises before binary search, which requires ordered
+        # input to return correct window boundaries.
         validate_temporal_order(sorted_edges, context="edges passed with presorted=True")
     else:
         sorted_edges = _ensure_sorted_by_ts(edges)
 
-    # Build an array of timestamps for bisect, referencing the same order.
-    ts = [e.timestamp for e in sorted_edges]
-
     # Left bound: first index with timestamp >= start_ts
-    left = bisect.bisect_left(ts, start_ts)
+    left = bisect.bisect_left(sorted_edges, start_ts, key=lambda edge: edge.timestamp)
     # Right bound: last index with timestamp <= end_ts -> use bisect_right and subtract 1
-    right_exclusive = bisect.bisect_right(ts, end_ts)
+    right_exclusive = bisect.bisect_right(sorted_edges, end_ts, key=lambda edge: edge.timestamp)
 
     if left >= right_exclusive:
         return set(), []
@@ -360,6 +387,137 @@ class SnapshotWindow:
     end: datetime
     edges: list[Edge]
     nodes: set[str]
+
+    def lineage(
+        self, *, snapshot_id: str | None = None, seed: int | None = None
+    ) -> "SnapshotLineage":
+        """Return this window's provenance record — issue #888.
+
+        Args:
+            snapshot_id: Optional stable identifier; defaults to a deterministic
+                value derived from the source, index and bounds.
+            seed: RNG seed used for this run, recorded on the returned
+                lineage so a result can be traced back to the seed that
+                produced it (#840).
+
+        Returns:
+            A :class:`SnapshotLineage` describing this window.
+        """
+        return snapshot_lineage(self, snapshot_id=snapshot_id, seed=seed)
+
+
+@dataclass(frozen=True)
+class SnapshotLineage:
+    """Provenance of one snapshot window — issue #888.
+
+    A complete lineage record lets an audit or debugging tool answer "which
+    slice of which table produced this training example?" without loading the
+    edge payload.  Every field through ``temporal_order_valid`` is a pure
+    function of the window, so rebuilding the same window produces an equal
+    lineage record. ``seed`` and ``git_commit`` (#840) are not: they capture
+    the *run's* environment (the RNG seed passed by the caller, the code
+    revision in the working tree when the run happened), answering "is this
+    result reproducible, and from which code" rather than "which rows".
+
+    Attributes:
+        snapshot_id: Stable identifier for this window.
+        source: Source table the edges were read from.
+        window_index: Zero-based position of the window in the build sequence.
+        start: Inclusive UTC start bound.
+        end: Inclusive UTC end bound.
+        edge_count: Number of edges in the payload.
+        node_count: Number of distinct nodes in the payload.
+        first_timestamp: Epoch seconds of the first edge, or None if empty.
+        last_timestamp: Epoch seconds of the last edge, or None if empty.
+        order_by: Columns defining the snapshot's total order.
+        temporal_order_valid: Whether edges are in non-decreasing time order.
+        seed: RNG seed the caller used for this run, or None if not supplied.
+        git_commit: Git commit hash of the working tree at run time, or None
+            if unavailable (not a git checkout, git not installed, etc.).
+    """
+
+    snapshot_id: str
+    source: str
+    window_index: int
+    start: datetime
+    end: datetime
+    edge_count: int
+    node_count: int
+    first_timestamp: int | None
+    last_timestamp: int | None
+    order_by: tuple[str, ...]
+    temporal_order_valid: bool
+    seed: int | None = None
+    git_commit: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the lineage record as a JSON-serialisable dict."""
+        return {
+            "snapshot_id": self.snapshot_id,
+            "source": self.source,
+            "window_index": self.window_index,
+            "start": self.start.isoformat(),
+            "end": self.end.isoformat(),
+            "edge_count": self.edge_count,
+            "node_count": self.node_count,
+            "first_timestamp": self.first_timestamp,
+            "last_timestamp": self.last_timestamp,
+            "order_by": list(self.order_by),
+            "temporal_order_valid": self.temporal_order_valid,
+            "seed": self.seed,
+            "git_commit": self.git_commit,
+        }
+
+
+def snapshot_lineage(
+    window: SnapshotWindow,
+    *,
+    snapshot_id: str | None = None,
+    source: str = SNAPSHOT_SOURCE,
+    seed: int | None = None,
+) -> SnapshotLineage:
+    """Build a complete lineage record for ``window`` — issue #888.
+
+    Args:
+        window: The snapshot window to describe.
+        snapshot_id: Optional identifier. When omitted a deterministic id is
+            derived from ``source``, the window index and its bounds, so the
+            same window always maps to the same id across runs.
+        source: Source table name, defaults to :data:`SNAPSHOT_SOURCE`.
+        seed: RNG seed used for this run (#840). Recorded as-is on the
+            returned lineage; pass the same seed given to
+            ``torch.manual_seed``/the training config so results can be
+            traced back to the seed that produced them. ``git_commit`` is
+            captured automatically via :func:`detect_git_commit`.
+
+    Returns:
+        A :class:`SnapshotLineage` with counts, bounds, ordering contract and
+        temporal-order validation for the window.  Empty windows are valid and
+        report ``first_timestamp``/``last_timestamp`` as ``None``.
+    """
+    if snapshot_id is None:
+        snapshot_id = (
+            f"{source}:{window.index}:{window.start.isoformat()}:{window.end.isoformat()}"
+        )
+
+    first_timestamp = window.edges[0].timestamp if window.edges else None
+    last_timestamp = window.edges[-1].timestamp if window.edges else None
+
+    return SnapshotLineage(
+        snapshot_id=snapshot_id,
+        source=source,
+        window_index=window.index,
+        start=window.start,
+        end=window.end,
+        edge_count=len(window.edges),
+        node_count=len(window.nodes),
+        first_timestamp=first_timestamp,
+        last_timestamp=last_timestamp,
+        order_by=SNAPSHOT_ORDER_COLUMNS,
+        temporal_order_valid=_first_inversion(window.edges) < 0,
+        seed=seed,
+        git_commit=detect_git_commit(),
+    )
 
 
 def _parse_window_size(window: str) -> timedelta:
@@ -424,6 +582,53 @@ def _snapshot_ordering() -> tuple:
     )
 
 
+def _naive_utc_bound(moment: datetime) -> datetime:
+    """Convert a window bound to naive UTC for comparison against the DB column.
+
+    ``normalized_transactions.timestamp`` is a naive ``DateTime`` column —
+    every row in it is UTC by convention, but carries no tzinfo. The window
+    builders below normalise ``t0``/``t_now`` to tz-*aware* UTC first so that
+    ``window_start += step_delta`` arithmetic is unambiguous; binding one of
+    those aware datetimes straight into a ``WHERE timestamp >= :bound``
+    comparison hands psycopg a tz-aware value, which it converts to the
+    client's local timezone before dropping the tzinfo to match the naive
+    column. On any host not running with ``TZ=UTC`` that silently shifts
+    every window boundary by the host's UTC offset, so a window could read
+    the wrong hour's (or day's) rows without raising anything.
+
+    Converting to UTC and stripping tzinfo here, right before the bound is
+    used in a query, keeps the aware datetime everywhere else (arithmetic,
+    the ``SnapshotWindow``/``SnapshotMeta`` the caller sees) while making the
+    bound that actually reaches the database match the column's own naive
+    UTC convention regardless of the host's local timezone.
+    """
+    if moment.tzinfo is None:
+        return moment
+    return moment.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _end_bound_filter(column, window_end: datetime, t_now: datetime):
+    """The upper-bound comparison for a DB-backed window query.
+
+    ``window_end = min(window_start + win_delta, t_now)`` makes consecutive
+    non-overlapping windows share an endpoint — window N's end equals window
+    N+1's start. Comparing both sides with ``<=``/``>=`` (as each did before
+    this fix) therefore matched a row landing exactly on that shared instant
+    against both windows, double-counting it in whichever edge list, node
+    set or training batch two adjacent windows both fed. Rolling windows
+    (``step < window``) are *meant* to overlap, so this isn't about ties in
+    general — only about the artefact at a boundary that should not overlap.
+
+    Making the upper bound exclusive (``<``) removes that double count, but
+    the very last window must stay inclusive of ``t_now`` itself — otherwise
+    a row landing exactly on the end of the whole requested range would fall
+    into no window at all rather than just the final one.
+    """
+    if window_end >= t_now:
+        return column <= _naive_utc_bound(window_end)
+    return column < _naive_utc_bound(window_end)
+
+
 def validate_snapshot_window(window: SnapshotWindow) -> None:
     """Raise :class:`SnapshotOrderingError` unless a window is time-ordered.
 
@@ -477,6 +682,11 @@ def iter_db_snapshot_edges(
     Use this in place of :func:`iter_db_snapshots` whenever a window may
     plausibly contain enough edges to risk OOM on the training machine.
 
+    Window bounds — issue #834:
+        Same contract as :func:`iter_db_snapshots`: each window is
+        ``[window_start, window_end)`` except the last, whose end is
+        ``t_now`` itself and inclusive. See :func:`_end_bound_filter`.
+
     Ordering — issue #732:
         Each edge iterator yields the window's rows in the blockchain's total
         order (see :func:`_snapshot_ordering`), so the sequence is
@@ -524,8 +734,8 @@ def iter_db_snapshot_edges(
                 NormalizedTransaction.timestamp,
             )
             .where(
-                NormalizedTransaction.timestamp >= window_start,
-                NormalizedTransaction.timestamp <= window_end,
+                NormalizedTransaction.timestamp >= _naive_utc_bound(window_start),
+                _end_bound_filter(NormalizedTransaction.timestamp, window_end, t_now),
                 NormalizedTransaction.receiver.isnot(None),
                 NormalizedTransaction.sender != NormalizedTransaction.receiver,
             )
@@ -557,6 +767,7 @@ def _build_snapshot_window(
     window_start: datetime,
     window_end: datetime,
     chunk_size: int,
+    t_now: datetime,
     max_retries: int = DEFAULT_SNAPSHOT_BUILD_MAX_RETRIES,
 ) -> SnapshotWindow:
     """Build a single snapshot window from the database.
@@ -568,6 +779,10 @@ def _build_snapshot_window(
     its attempt number and error context; once retries are exhausted the
     final exception is re-raised so genuine (non-transient) failures still
     surface to the caller.
+
+    ``t_now`` is the end of the whole requested range (not just this
+    window's own end) so :func:`_end_bound_filter` can tell whether this is
+    the final window — see issue #834.
     """
     from sqlalchemy import select
 
@@ -586,8 +801,8 @@ def _build_snapshot_window(
                     NormalizedTransaction.timestamp,
                 )
                 .where(
-                    NormalizedTransaction.timestamp >= window_start,
-                    NormalizedTransaction.timestamp <= window_end,
+                    NormalizedTransaction.timestamp >= _naive_utc_bound(window_start),
+                    _end_bound_filter(NormalizedTransaction.timestamp, window_end, t_now),
                     NormalizedTransaction.receiver.isnot(None),
                     NormalizedTransaction.sender != NormalizedTransaction.receiver,
                 )
@@ -650,6 +865,7 @@ def _build_snapshot_window_with_retry(
     window_start: datetime,
     window_end: datetime,
     chunk_size: int,
+    t_now: datetime,
     max_attempts: int = SNAPSHOT_MAX_ATTEMPTS,
 ) -> SnapshotWindow:
     """Build a snapshot window, retrying transient failures (issue #979).
@@ -661,7 +877,7 @@ def _build_snapshot_window_with_retry(
         raise ValueError("max_attempts must be >= 1")
     for attempt in range(1, max_attempts + 1):
         try:
-            return _build_snapshot_window(index, window_start, window_end, chunk_size)
+            return _build_snapshot_window(index, window_start, window_end, chunk_size, t_now)
         except Exception:
             logger.warning(
                 "snapshot window build failed",
@@ -686,6 +902,24 @@ def iter_db_snapshots(
 
     Slices ``normalized_transactions`` into non-overlapping (or rolling)
     windows from ``t0`` to ``t_now``, each of size ``window``.
+
+    Window bounds — issue #834:
+        Each window is ``[window_start, window_end)``: the start is
+        inclusive, the end is exclusive, *except* for the last window, whose
+        end is ``t_now`` itself and is inclusive, so a row landing exactly
+        on ``t_now`` is still counted. Consecutive non-overlapping windows
+        (the default, ``step`` unset) therefore partition ``[t0, t_now]``
+        with no row double-counted at a shared boundary — window N's end is
+        window N+1's start, and a row at exactly that instant belongs to
+        window N+1, not both. Rolling windows (``step`` smaller than
+        ``window``) still overlap as intended; only the boundary artefact
+        between *adjacent, non-overlapping* windows is affected.
+
+        All comparisons are done in naive UTC to match
+        ``normalized_transactions.timestamp``'s own naive-UTC convention —
+        binding a tz-aware bound directly against that column let the
+        database client's local timezone shift every window by its UTC
+        offset (see :func:`_naive_utc_bound`).
 
     Args:
         window: Window size string, e.g. ``'7d'``, ``'24h'``, ``'3600s'``.
@@ -758,6 +992,7 @@ def iter_db_snapshots(
                         window_start,
                         window_end,
                         chunk_size,
+                        t_now,
                     )
                     futures[index] = future
                     window_start += step_delta
@@ -787,10 +1022,9 @@ def iter_db_snapshots(
                 NormalizedTransaction.sender,
                 NormalizedTransaction.receiver,
                 NormalizedTransaction.timestamp,
-            )
-            .where(
-                NormalizedTransaction.timestamp >= window_start,
-                NormalizedTransaction.timestamp <= window_end,
+            ).where(
+                NormalizedTransaction.timestamp >= _naive_utc_bound(window_start),
+                _end_bound_filter(NormalizedTransaction.timestamp, window_end, t_now),
                 NormalizedTransaction.receiver.isnot(None),
                 NormalizedTransaction.sender != NormalizedTransaction.receiver,
             )
@@ -837,8 +1071,8 @@ def iter_db_snapshots(
 
 def _build_snapshot_window_single(args: tuple) -> SnapshotWindow:
     """Build a single snapshot window — top-level for pickling by joblib."""
-    index, window_start, window_end, chunk_size = args
-    return _build_snapshot_window(index, window_start, window_end, chunk_size)
+    index, window_start, window_end, chunk_size, t_now = args
+    return _build_snapshot_window(index, window_start, window_end, chunk_size, t_now)
 
 
 def parallel_build_snapshots(
@@ -856,6 +1090,11 @@ def parallel_build_snapshots(
     This speeds up snapshot construction for large time ranges by distributing
     independent window builds across CPU cores.  Determinism is preserved:
     results are returned in chronological order regardless of completion time.
+
+    Window bounds — issue #834:
+        Same contract as :func:`iter_db_snapshots`: each window is
+        ``[window_start, window_end)`` except the last, whose end is
+        ``t_now`` itself and inclusive. See :func:`_end_bound_filter`.
 
     Args:
         window: Window size string, e.g. ``'7d'``, ``'24h'``, ``'3600s'``.
@@ -876,9 +1115,7 @@ def parallel_build_snapshots(
     try:
         from joblib import Parallel, delayed
     except ImportError:
-        logger.warning(
-            "joblib not installed — falling back to sequential snapshot build"
-        )
+        logger.warning("joblib not installed — falling back to sequential snapshot build")
         return list(
             iter_db_snapshots(
                 window=window,
@@ -906,9 +1143,7 @@ def parallel_build_snapshots(
             t_now = datetime.now(timezone.utc)
 
         if t0 is None:
-            result = session.execute(
-                select(sqlfunc.min(NormalizedTransaction.timestamp))
-            ).scalar()
+            result = session.execute(select(sqlfunc.min(NormalizedTransaction.timestamp))).scalar()
             if result is None:
                 return []  # empty DB
             t0 = result if result.tzinfo else result.replace(tzinfo=timezone.utc)
@@ -921,12 +1156,12 @@ def parallel_build_snapshots(
         session.close()
 
     # Pre-compute all window arguments
-    windows_args: list[tuple[int, datetime, datetime, int]] = []
+    windows_args: list[tuple[int, datetime, datetime, int, datetime]] = []
     window_start = t0
     index = 0
     while window_start < t_now:
         window_end = min(window_start + win_delta, t_now)
-        windows_args.append((index, window_start, window_end, chunk_size))
+        windows_args.append((index, window_start, window_end, chunk_size, t_now))
         window_start += step_delta
         index += 1
 

@@ -1,4 +1,3 @@
-from typing import Any, Dict, List, Optional, Union, Callable
 """Pipeline testing framework for data quality, schema validation, and integrity checks.
 
 Issue #638: Comprehensive testing framework for data pipelines.
@@ -7,6 +6,7 @@ Issue #638: Comprehensive testing framework for data pipelines.
 from __future__ import annotations
 
 from importlib import import_module
+from typing import Any, Callable, Dict, List, Optional, Union
 
 __all__ = [
     "DataTestSuite",
@@ -27,7 +27,10 @@ _LAZY: dict[str, tuple[str, str]] = {
     "DataTestResult": ("astroml.pipeline.testing.data_tests", "DataTestResult"),
     "DataAssertion": ("astroml.pipeline.testing.data_tests", "DataAssertion"),
     "SchemaValidator": ("astroml.pipeline.testing.schema_validator", "SchemaValidator"),
-    "SchemaValidationResult": ("astroml.pipeline.testing.schema_validator", "SchemaValidationResult"),
+    "SchemaValidationResult": (
+        "astroml.pipeline.testing.schema_validator",
+        "SchemaValidationResult",
+    ),
     "IntegrityChecker": ("astroml.pipeline.testing.integrity", "IntegrityChecker"),
     "IntegrityReport": ("astroml.pipeline.testing.integrity", "IntegrityReport"),
     "PipelineFixture": ("astroml.pipeline.testing.fixtures", "PipelineFixture"),
@@ -37,7 +40,7 @@ _LAZY: dict[str, tuple[str, str]] = {
 }
 
 
-def __getattr__(name -> Any: str):
+def __getattr__(name: str):
     if name in _LAZY:
         module_path, attr = _LAZY[name]
         module = import_module(module_path)

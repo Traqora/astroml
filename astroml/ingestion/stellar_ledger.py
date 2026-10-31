@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Module for downloading historical Stellar ledger data."""
 
 from __future__ import annotations
@@ -12,6 +11,7 @@ from typing import Any
 import aiohttp
 
 from astroml.ingestion.config import StreamConfig
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger("astroml.ingestion.stellar_ledger")
 
@@ -150,7 +150,9 @@ async def main() -> None:
     parser.add_argument("--end", type=int, required=True, help="End ledger sequence")
     parser.add_argument("--output", default="data/ledgers", help="Output directory")
     parser.add_argument("--format", choices=["json", "xdr"], default="json", help="Output format")
-    parser.add_argument("--partition-size", type=int, default=None, help="Number of ledgers per partition directory")
+    parser.add_argument(
+        "--partition-size", type=int, default=None, help="Number of ledgers per partition directory"
+    )
 
     args = parser.parse_args()
 
@@ -165,7 +167,7 @@ async def main() -> None:
             await downloader.download_range(
                 args.start, args.end, args.output, args.format, args.partition_size
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - top-level CLI handler: log and exit cleanly
             logger.error("Download failed: %s", e)
             sys.exit(1)
 

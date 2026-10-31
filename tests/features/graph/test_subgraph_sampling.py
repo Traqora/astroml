@@ -124,6 +124,28 @@ class TestBudget:
 
         assert set(subgraph.nodes) == {"a1", "a2", "a3"}
 
+    def test_oversized_node_budget_does_not_create_an_oversized_walk_budget(self, monkeypatch):
+        sampler = SubgraphSampler([{"src": "a", "dst": "b"}])
+        picks = 0
+        original_pick = sampler._pick_neighbour
+
+        def count_picks(candidates, rng, degree_bias):
+            nonlocal picks
+            picks += 1
+            return original_pick(candidates, rng, degree_bias)
+
+        monkeypatch.setattr(sampler, "_pick_neighbour", count_picks)
+        subgraph = sampler.sample(
+            10**12,
+            seed_node="a",
+            strategy="random_walk",
+            seed=1,
+            restart_probability=0.0,
+        )
+
+        assert set(subgraph.nodes) == {"a", "b"}
+        assert picks <= 64
+
 
 class TestDeterminism:
     @pytest.mark.parametrize("strategy", STRATEGIES)

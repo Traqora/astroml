@@ -11,7 +11,14 @@ from astroml.llm.exceptions import (
 from astroml.llm.providers.anthropic import AnthropicProvider
 from astroml.llm.providers.factory import get_llm_provider
 from astroml.llm.rate_limiter import CostBudgetManager, ProviderRateLimiter
-from astroml.llm.secrets import decrypt_key, encrypt_key, get_api_key, rotate_api_key, store_api_key
+from astroml.llm.secrets import (
+    _ENCRYPTED_KEYS_STORE,
+    decrypt_key,
+    encrypt_key,
+    get_api_key,
+    rotate_api_key,
+    store_api_key,
+)
 
 
 class SecretsTests(unittest.TestCase):
@@ -34,6 +41,13 @@ class SecretsTests(unittest.TestCase):
 
         rotate_api_key("test_provider", "second-key")
         self.assertEqual(get_api_key("test_provider"), "second-key")
+
+    def test_get_api_key_raises_value_error_on_corrupted_stored_key(self) -> Any:
+        store_api_key("corrupted_provider", "original-key")
+        _ENCRYPTED_KEYS_STORE["corrupted_provider"] = "not-a-valid-jwe-token"
+
+        with self.assertRaises(ValueError):
+            get_api_key("corrupted_provider")
 
 
 class RateLimiterTests(unittest.TestCase):

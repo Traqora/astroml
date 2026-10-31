@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 """Safe SQL query executor with timeouts and audit logging."""
 
 from __future__ import annotations
@@ -11,6 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astroml.llm.query.validator import QueryValidationError, validate_query_safety
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

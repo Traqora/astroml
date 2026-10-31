@@ -12,6 +12,7 @@ from api.auth.rate_limit import (
     RateLimitConfig,
     RateLimiter,
     RateLimitResult,
+    SlidingWindowCounter,
     TokenBucket,
 )
 from api.validation import InputValidator, ValidationError
@@ -384,6 +385,19 @@ class TestRateLimiter:
         limiter.is_allowed("user:reset", "/test")
         limiter.reset_metrics()
         assert limiter.get_metrics() == {}
+
+    def test_redis_failure_falls_back_to_memory(self, caplog: pytest.LogCaptureFixture) -> None:
+        redis_client = MagicMock()
+        redis_client.zremrangebyscore.side_effect = ConnectionError("Redis unavailable")
+
+        with patch("api.auth.rate_limit.REDIS_RATE_LIMIT_ENABLED", True):
+            counter = SlidingWindowCounter(redis_client)
+            first = counter.is_allowed("user:fallback", window_seconds=60, max_requests=1)
+            second = counter.is_allowed("user:fallback", window_seconds=60, max_requests=1)
+
+        assert first == (True, 0, 0)
+        assert second[0] is False
+        assert "Redis rate limit failed, falling back to memory" in caplog.text
 
 
 class TestRateLimitHeaders:

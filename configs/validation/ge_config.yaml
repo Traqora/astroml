@@ -88,6 +88,17 @@ suites:
       - expectation_type: expect_column_values_to_be_between
         kwargs: { column: balance, min_value: 0, max_value: null }
 
+  features:
+    expectations:
+      - expectation_type: expect_column_to_exist
+        kwargs: { column: entity_id }
+      - expectation_type: expect_column_to_exist
+        kwargs: { column: timestamp }
+      - expectation_type: expect_column_values_to_not_be_null
+        kwargs: { column: entity_id }
+      - expectation_type: expect_column_values_to_not_be_null
+        kwargs: { column: timestamp }
+
 # ── CI/CD gate ───────────────────────────────────────────────────────────────
 ci:
   # Fail the pipeline when any expectation in these suites fails.

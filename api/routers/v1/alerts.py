@@ -89,7 +89,7 @@ def get_prioritized_alerts(
 
 
 @router.get("/predictive", response_model=PredictiveAlertResponse)
-def get_predictive_alerts(
+async def get_predictive_alerts(
     account_id: str,
     lookback_days: int = Query(30, ge=1, le=365),
     metrics: Optional[List[str]] = Query(None),
@@ -109,11 +109,14 @@ def get_predictive_alerts(
         )
 
     # Use the predictive alert service
-    result = predictive_alert_service.generate_predictive_alerts(
+    result = await predictive_alert_service.generate_predictive_alerts(
         account_id=account_id, lookback_days=lookback_days, metrics=metrics, sensitivity=sensitivity
     )
 
-    # Check if service returned an error
+    # Check if service returned an error. This is a server-side failure
+    # (DB error, bad detector state, etc) distinct from "no data yet for
+    # this account", which is reported via "message" below and is not an
+    # error at all.
     if "error" in result:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result["error"]

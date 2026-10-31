@@ -192,7 +192,7 @@ class ReportGenerator:
         """Generate PDF from Markdown (placeholder)."""
         try:
             import markdown
-            from weasyprint import HTML
+            from weasyprint import HTML  # type: ignore[import-untyped]
 
             html_content = markdown.markdown(markdown_content, extensions=["tables"])
             html = HTML(string=f"""

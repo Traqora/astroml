@@ -107,6 +107,44 @@ def test_validate_split_empty_partitions():
     assert leakage.validate_temporal_split(df, empty, "timestamp") is True
 
 
+def test_ratio_split_with_a_tied_timestamp_at_the_boundary_is_flagged_as_leakage():
+    """Temporal split leakage guard (issue #837).
+
+    The classic silent-leakage case this guard exists for: two rows share
+    the exact same timestamp, and a plain index-based ratio split happens
+    to put one in train and the other in test. Both rows carry the same
+    time value, so the test set is not strictly "the future" relative to
+    train — `train_max >= test_min` must catch this exactly like any other
+    overlap, not treat a tie as a clean boundary.
+    """
+    df = pd.DataFrame(
+        {
+            # Index 4 and 5 share the same timestamp; a 0.5 ratio split on
+            # 10 rows cuts exactly between them.
+            "timestamp": [0, 1, 2, 3, 4, 4, 6, 7, 8, 9],
+            "amount": np.arange(10, dtype=float),
+        }
+    )
+    train, test = leakage.temporal_train_test_split(df, "timestamp", train_ratio=0.5)
+    assert train["timestamp"].tolist() == [0, 1, 2, 3, 4]
+    assert test["timestamp"].tolist() == [4, 6, 7, 8, 9]
+
+    with pytest.raises(leakage.LeakageError, match="overlap"):
+        leakage.validate_temporal_split(train, test, "timestamp")
+
+
+def test_cutoff_split_with_a_row_exactly_at_the_cutoff_goes_to_test_and_is_clean():
+    """Cutoff mode's `< cutoff` (strict) comparison means a row exactly at
+    the cutoff value lands in test, not train — so, unlike ratio mode, an
+    exact-cutoff tie is not leakage: train's rows are all strictly earlier.
+    This is the deliberate complement to the ratio-mode tie case above."""
+    df = pd.DataFrame({"timestamp": [0, 1, 2, 3, 4], "amount": np.arange(5, dtype=float)})
+    train, test = leakage.temporal_train_test_split(df, "timestamp", cutoff=3)
+    assert train["timestamp"].tolist() == [0, 1, 2]
+    assert test["timestamp"].tolist() == [3, 4]
+    assert leakage.validate_temporal_split(train, test, "timestamp") is True
+
+
 # ---------------------------------------------------------------------------
 # check_feature_leakage
 # ---------------------------------------------------------------------------

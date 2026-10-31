@@ -1,4 +1,3 @@
-from astroml.utils.exceptions import AstroMLError
 from __future__ import annotations
 
 import logging
@@ -11,6 +10,7 @@ import pandas as pd
 from astroml.pipeline.contracts.quality_contract import QualityContract, QualityValidationResult
 from astroml.pipeline.contracts.schema_contract import SchemaContract, SchemaValidationResult
 from astroml.pipeline.contracts.semantic_contract import SemanticContract, SemanticValidationResult
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 

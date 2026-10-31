@@ -6,7 +6,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from api.middleware.https import HSTSMiddleware, HTTPSRedirectMiddleware
+from api.middleware.https import (
+    HSTSMiddleware,
+    HTTPSRedirectMiddleware,
+    enforce_https_in_production,
+)
 
 
 @pytest.fixture
@@ -259,3 +263,73 @@ def test_https_redirect_preserves_query_params(app_with_https_redirect: FastAPI)
     assert response.status_code == 301
     assert "param=value" in response.headers["location"]
     assert response.headers["location"].startswith("https://")
+
+
+# ---------------------------------------------------------------------------
+# enforce_https_in_production (#869)
+#
+# api.config.Settings.https_enabled / hsts_enabled both default to False
+# ("production only", per their own docstring) with no code-level guarantee
+# that either is actually turned on when running in production — it was
+# "secure if configured correctly", not "secure by default in prod". These
+# tests both pin that default-off behavior explicitly (so a future change
+# to the defaults is a deliberate, visible decision) and cover the new
+# enforce_https_in_production startup guard, mirroring the
+# api.auth.hardening.enforce_jwt_secret / test_auth_hardening.py pattern
+# already used for the equivalent JWT-secret-in-production check.
+# ---------------------------------------------------------------------------
+
+
+class TestHTTPSSettingsDefaultOff:
+    """Documents and locks in the current operator-facing defaults."""
+
+    def test_https_enabled_defaults_to_false(self) -> None:
+        from api.config import Settings
+
+        assert Settings().https_enabled is False
+
+    def test_hsts_enabled_defaults_to_false(self) -> None:
+        from api.config import Settings
+
+        assert Settings().hsts_enabled is False
+
+
+class TestEnforceHttpsInProduction:
+    """Unit tests for the enforce_https_in_production startup guard."""
+
+    def test_dev_mode_allows_both_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("ENV", "development")
+        enforce_https_in_production(https_enabled=False, hsts_enabled=False)  # no raise
+
+    def test_no_env_var_defaults_to_dev_and_allows_both_disabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("ENV", raising=False)
+        enforce_https_in_production(https_enabled=False, hsts_enabled=False)  # no raise
+
+    def test_prod_requires_https_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("ENV", "production")
+        with pytest.raises(RuntimeError, match="HTTPS_ENABLED"):
+            enforce_https_in_production(https_enabled=False, hsts_enabled=True)
+
+    def test_prod_requires_hsts_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("ENV", "production")
+        with pytest.raises(RuntimeError, match="HSTS_ENABLED"):
+            enforce_https_in_production(https_enabled=True, hsts_enabled=False)
+
+    def test_prod_requires_both_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("ENV", "production")
+        with pytest.raises(RuntimeError, match="HTTPS_ENABLED and HSTS_ENABLED"):
+            enforce_https_in_production(https_enabled=False, hsts_enabled=False)
+
+    def test_prod_accepts_both_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("ENV", "production")
+        enforce_https_in_production(https_enabled=True, hsts_enabled=True)  # no raise
+
+    def test_non_production_env_value_allows_both_disabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Only the literal 'production' value triggers enforcement —
+        matches enforce_jwt_secret's exact-match behavior for ENV."""
+        monkeypatch.setenv("ENV", "staging")
+        enforce_https_in_production(https_enabled=False, hsts_enabled=False)  # no raise

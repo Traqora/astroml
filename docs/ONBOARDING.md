@@ -15,8 +15,9 @@ convenience wrapper does not work yet, that is stated rather than glossed over.
 - Python 3.10 or newer (the classifiers and `black`/`ruff` configs target
   `py310`).
 - Git, and a GitHub account.
-- Docker with the compose plugin — only for the database-backed steps. Most
-  tests do not need it.
+- Docker with the compose plugin is optional. It is only needed if you want to
+  run PostgreSQL/Redis-backed workflows locally; the Python-only sample-data
+  path below does not start or connect to either service.
 
 ## 1. Fork and clone
 
@@ -46,18 +47,37 @@ maintainers can assign it to you.
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -r requirements-cpu.txt -r requirements-dev.txt
+pip install -e .
 ```
 
-!!! warning "Do not use `make install`"
-    `Makefile` defines `install:` twice. GNU Make keeps the **last** recipe,
-    which is `pip install -e "[dev]"` — missing the `.` package path, so it
-    fails. The `pip install -e ".[dev]"` line above is the first, correct
-    definition.
+The CPU profile includes the Python runtime dependencies (including CPU
+PyTorch); the dev profile adds pytest and developer tools. These install
+Python packages only and do not start any services. Do not use `make install`:
+the last of two `install` recipes in the Makefile is malformed.
 
-The dev extra brings in `pytest`, `black`, `ruff`, `mypy`, and `interrogate`.
+## 4. Verify the Python-only sample workflow
 
-## 4. Run the tests you touched
+This example reads the bundled CSV fixtures and exercises ingestion state,
+graph construction, and feature calculation locally. It uses no Docker,
+PostgreSQL, Redis, or live Stellar endpoint:
+
+```bash
+pytest tests/integration/test_e2e_sample_data.py -m e2e -q
+```
+
+For code changes, run the focused tests that cover the changed behavior.
+`make test` runs the entire suite and is not required for this Python-only
+workflow; see the baseline limitations below.
+
+The separate `make quickstart` / `python -m astroml.quick_start` demo is
+**not** a Python-only workflow: it opens a database session using
+`ASTROML_DATABASE_URL` or `config/database.yaml` and needs a reachable
+PostgreSQL server. Without that service, its first database operation fails;
+the wrapper returns a failure exit code. The failure behavior is covered by
+`tests/test_quick_start_smoke.py::test_run_quickstart_returns_failure_when_session_creation_fails`.
+
+## 5. Run the tests you touched
 
 `make test` is `pytest tests/ -v`, but do not reach for it while iterating —
 see the note below. Target a path instead, which is also the fastest loop:
@@ -112,7 +132,7 @@ outside `tests/` and are run with `make test-api`
     `test_snapshot_rfc7807.py` (4 failures) already fail on `main`.
 
 
-## 5. The Docker database, when you need it
+## 6. The Docker database, when you need it
 
 Only ingestion and DB-backed graph tests need PostgreSQL. Bring up just those
 services — `docker compose up -d` with no arguments also starts the API,
@@ -165,7 +185,7 @@ data.
     those last two calls fail with exit 126, and both are placeholders that only
     `echo` — they seed nothing and check nothing. Use the explicit steps above.
 
-## 6. Checks before you push
+## 7. Checks before you push
 
 ```bash
 make format       # black + ruff --fix --select I on astroml/, tests/, api/
@@ -185,7 +205,7 @@ Docs get built the same way CI does:
 cd docs && pip install -r requirements.txt && make html
 ```
 
-## 7. Open the pull request
+## 8. Open the pull request
 
 ```bash
 git add <paths>            # avoid `git add -A`; it picks up build junk

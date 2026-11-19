@@ -275,7 +275,7 @@ Before running AstroML ensure you have the following installed:
 | Requirement | Minimum version | Notes |
 |---|---|---|
 | Python | 3.10+ | 3.11 recommended; 3.12 supported |
-| Docker & Docker Compose | 24+ | Required for the database and cache containers |
+| Docker & Docker Compose | 24+ | Optional; only needed to run local PostgreSQL/Redis services |
 | Git | any | For cloning the repository |
 | Make | any | Optional but recommended; used for convenience targets |
 | CUDA toolkit | 11.8+ | Optional; only needed for GPU-accelerated training |
@@ -284,12 +284,11 @@ Verify your Python version before proceeding:
 
 ```bash
 python --version   # must print 3.10 or higher
-docker --version   # must be available
 ```
 
 ### Requirements files
 
-Three `requirements` files are provided — pick the one that matches your workflow:
+Several `requirements` files are provided — pick the profile that matches your workflow:
 
 | File | When to use |
 |---|---|
@@ -300,9 +299,31 @@ Three `requirements` files are provided — pick the one that matches your workf
 | `requirements-dev.txt` | Development + testing; adds linting/typing tools on top of `requirements.txt` |
 | `requirements-minimal.txt` | Config parsing only — useful in CI stages that don't run training |
 
-> **Tip:** If you only want to explore the quick start without training, `requirements-minimal.txt` + `requirements-api.txt` is the lightest combination.
+> `requirements-minimal.txt` is for configuration parsing; it is not sufficient
+> for the quick-start pipeline, which trains a model and requires a database.
 
 See [REQUIREMENTS.md](REQUIREMENTS.md) for a detailed breakdown of every package.
+
+### Python-only sample workflow (no Docker)
+
+To run the bundled sample-data ingestion/graph/features workflow, install the
+CPU runtime and development/test dependencies in a virtual environment. This
+path does not require Docker, PostgreSQL, Redis, or a live Stellar endpoint:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-cpu.txt -r requirements-dev.txt
+pip install -e .
+pytest tests/integration/test_e2e_sample_data.py -m e2e -q
+```
+
+The database-backed `make quickstart` and `python -m astroml.quick_start`
+commands below are a separate workflow. They require a reachable PostgreSQL
+database configured with `ASTROML_DATABASE_URL` or `config/database.yaml`;
+Docker is one way to provide that database, not a prerequisite for the
+Python-only sample workflow. See [Contributor Onboarding](docs/ONBOARDING.md)
+for the supported boundary and test-suite notes.
 
 ### Option 1: Using Make (Recommended)
 
@@ -505,13 +526,15 @@ pip install -r requirements.txt
 
 ### 3. Configure database
 
-A lightweight Docker Compose setup is provided to spin up PostgreSQL and Redis with persistent volumes. Simply run:
+A Docker Compose setup can provide PostgreSQL and Redis for workflows that need
+those services. Start only those dependencies with:
 
 ```bash
-docker compose up -d
+docker compose up -d postgres redis
 ```
 
-This starts only the database and cache, letting you run Python scripts and training natively on your machine. Alternatively, you can configure your own database and update `config/database.yaml`.
+Alternatively, configure your own PostgreSQL database and update
+`config/database.yaml`.
 
 ---
 

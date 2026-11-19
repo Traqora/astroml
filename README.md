@@ -513,6 +513,29 @@ docker compose up -d
 
 This starts only the database and cache, letting you run Python scripts and training natively on your machine. Alternatively, you can configure your own database and update `config/database.yaml`.
 
+### Clean local reset
+
+For a repeatable reset of the v1 local workflow, use:
+
+```bash
+make reset-local
+```
+
+This stops and recreates the API, PostgreSQL, and Redis containers with
+`docker compose` while preserving PostgreSQL, Redis, feature-store, logs,
+models, and other named volumes. It does not start optional GPU, monitoring,
+production, development, or full-profile services.
+
+The destructive equivalent is not run accidentally:
+
+```bash
+make reset-local-data
+```
+
+The command requires an explicit `DELETE_LOCAL_USER_DATA` confirmation and
+removes named project volumes. Back up data first. Docker must be running and
+at least 2 CPU cores and 4 GB RAM are recommended for the core v1 stack.
+
 ---
 
 ## 🤖 LLM Agent Framework

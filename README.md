@@ -275,7 +275,7 @@ Before running AstroML ensure you have the following installed:
 | Requirement | Minimum version | Notes |
 |---|---|---|
 | Python | 3.10+ | 3.11 recommended; 3.12 supported |
-| Docker & Docker Compose | 24+ | Required for the database and cache containers |
+| PostgreSQL | 13+ | Required by the quick-start database-backed pipeline |
 | Git | any | For cloning the repository |
 | Make | any | Optional but recommended; used for convenience targets |
 | CUDA toolkit | 11.8+ | Optional; only needed for GPU-accelerated training |
@@ -284,8 +284,13 @@ Verify your Python version before proceeding:
 
 ```bash
 python --version   # must print 3.10 or higher
-docker --version   # must be available
+psql --version     # PostgreSQL client, optional for database setup
 ```
+
+Before running quick start, create or use a PostgreSQL database and provide its
+connection through `config/database.yaml` or `ASTROML_DATABASE_URL`. The database
+must include the AstroML schema. Quick start does not require Redis, MLflow, the
+API server, or a GPU.
 
 ### Requirements files
 
@@ -300,36 +305,24 @@ Three `requirements` files are provided — pick the one that matches your workf
 | `requirements-dev.txt` | Development + testing; adds linting/typing tools on top of `requirements.txt` |
 | `requirements-minimal.txt` | Config parsing only — useful in CI stages that don't run training |
 
-> **Tip:** If you only want to explore the quick start without training, `requirements-minimal.txt` + `requirements-api.txt` is the lightest combination.
+> **Tip:** Use `requirements.txt` for the complete quick-start workflow. Use
+> `requirements-cpu.txt` instead when you need CPU-only training.
 
 See [REQUIREMENTS.md](REQUIREMENTS.md) for a detailed breakdown of every package.
 
-### Option 1: Using Make (Recommended)
+### Run the v1 Quick Start
+
+The canonical command is the top-level CLI module:
 
 ```bash
-# Run quick start with default settings (100 ledgers, 50 accounts, 10 epochs)
-make quickstart
-
-# Run with more data for thorough testing
-make quickstart-verbose
-```
-
-### Option 2: Using Python Module
-
-```bash
-# Run quick start with default settings
-python -m astroml.quick_start
-
-# Run with custom parameters
-python -m astroml.quick_start --num-ledgers 200 --num-accounts 100 --epochs 20 --seed 42
-```
-
-### Option 3: Using CLI
-
-```bash
-# Run quick start command
 python -m astroml quickstart --num-ledgers 100 --num-accounts 50 --epochs 10 --seed 42
 ```
+
+Use `python -m astroml.cli quickstart --help` to verify the supported flags.
+The defaults are `--num-ledgers 100`, `--num-accounts 50`, `--epochs 10`, and
+`--seed 42`. Ledger, account, and epoch values must be greater than zero.
+Make is optional; `make quickstart` and `make quickstart-verbose` run the same
+CLI implementation.
 
 ### What Quick Start Does
 

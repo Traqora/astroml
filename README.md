@@ -636,6 +636,29 @@ AstroML emphasizes:
 
 ---
 
+## 🧪 Testing
+
+The default test suite is intended to run without optional external services.
+Tests that require a live API, PostgreSQL, Redis, MLflow, or a deployed
+application are marked with `external` (or `external_service`).
+
+```bash
+# Fast, local/default suite
+pytest -m "not external and not external_service"
+
+# Run external-service tests explicitly
+pytest --run-external
+
+# Environment-based opt-in (for CI and wrappers)
+ASTROML_RUN_EXTERNAL_TESTS=1 pytest
+```
+
+Mocked HTTP/database behavior remains in the default suite. External tests
+must declare their service configuration and fail or skip clearly when the
+service is unavailable.
+
+---
+
 ## 📌 Roadmap
 
 - [ ] Real-time streaming ingestion

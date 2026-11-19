@@ -82,7 +82,7 @@ jobs:
 
       - name: Run pytest (CPU)
         if: matrix.flavor == 'cpu'
-        run: pytest -v -m "not gpu" -p no:randomly --tb=short --continue-on-collection-errors --cov=astroml --cov-report=xml --cov-report=term
+        run: pytest -v -m "not gpu and not external and not external_service" -p no:randomly --tb=short --continue-on-collection-errors --cov=astroml --cov-report=xml --cov-report=term
 
       - name: Upload coverage to Codecov
         if: matrix.flavor == 'cpu' && matrix.python-version == '3.11' && matrix.torch-version == '2.1'
@@ -144,4 +144,4 @@ jobs:
           pip install -e . --no-deps
 
       - name: Run API integration tests
-        run: pytest api/tests/ -v --tb=short -p no:randomly
+        run: pytest api/tests/ -v -m "not external and not external_service" --tb=short -p no:randomly

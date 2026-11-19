@@ -29,6 +29,8 @@ testpaths = ["tests"]
 markers = [
     "gpu: requires a CUDA-capable runner; auto-skipped on CPU-only environments",
     "e2e: end-to-end pipeline test (#193)",
+    "external: requires an external service (database, API, or deployed application)",
+    "external_service: alias for external-service tests",
 ]
 
 [tool.coverage.run]

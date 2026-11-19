@@ -10,7 +10,7 @@ import json
 import logging
 import time
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +22,65 @@ import pandas as pd
 from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class IngestionToSnapshotFixture:
+    """Reusable database-only fixture for the ingestion-to-snapshot v1 path.
+
+    The fixture accepts raw Horizon-style operation dictionaries, normalizes
+    them, idempotently writes ``NormalizedTransaction`` rows, and builds
+    database-backed snapshots from that persisted state.
+
+    Supported boundary:
+    - SQLAlchemy is supplied by the caller; PostgreSQL and external Horizon
+      services are not required.
+    - Payment and path-payment operation payloads supported by
+      :func:`normalize_path_payment_hops` are covered.
+    - Ledger ingestion is not fetched or replayed; callers ingest normalized
+      operation payloads directly.
+    - Invalid/missing operation fields raise ``ValueError``.
+    """
+
+    session: Any
+
+    def ingest_payloads(self, payloads: Sequence[Mapping[str, Any]]) -> int:
+        """Normalize and upsert operation payloads, returning rows touched."""
+        from astroml.db.repositories import NormalizedTransactionRepository
+        from astroml.ingestion.normalizer import normalize_path_payment_hops
+
+        records = []
+        try:
+            for payload in payloads:
+                records.extend(normalize_path_payment_hops(dict(payload)))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid ingestion payload: {exc}") from exc
+
+        repository = NormalizedTransactionRepository(self.session)
+        touched = repository.batch_upsert(records)
+        self.session.commit()
+        return touched
+
+    def build_snapshots(
+        self,
+        *,
+        window: str = "1h",
+        t0: datetime | None = None,
+        t_now: datetime | None = None,
+        step: str | None = None,
+    ) -> list[Any]:
+        """Build and return snapshots from the fixture's normalized rows."""
+        from astroml.features.graph.snapshot import iter_db_snapshots
+
+        return list(
+            iter_db_snapshots(
+                window=window,
+                t0=t0,
+                t_now=t_now,
+                step=step,
+                session=self.session,
+            )
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -391,6 +450,7 @@ class PipelineTestRunner:
 
 
 __all__ = [
+    "IngestionToSnapshotFixture",
     "PipelineFixture",
     "PipelineTestRun",
     "PipelineTestReport",

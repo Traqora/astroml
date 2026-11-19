@@ -574,6 +574,22 @@ Create a rolling time window graph:
 python -m astroml.graph.build_snapshot --window 30d
 ```
 
+### Ingestion-to-snapshot integration fixture
+
+The v1 integration fixture exercises raw operation normalization, idempotent
+database persistence, and database-backed snapshot construction without
+PostgreSQL, Horizon, Redis, or other optional services:
+
+```bash
+pytest -q tests/integration/test_ingestion_to_snapshot_fixture.py
+```
+
+The pytest fixture is available as `ingestion_to_snapshot_fixture` (and the
+short alias `ingestion_to_snapshot`). It supports Horizon-style payment and
+path-payment operation dictionaries. It ingests operation payloads directly;
+it does not fetch ledgers or require network access. Missing or invalid
+required operation fields raise `ValueError` instead of producing a snapshot.
+
 ---
 
 ## 🧪 Synthetic Fraud Pattern Injection

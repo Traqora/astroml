@@ -11,6 +11,8 @@ from api.database import check_database_connection, get_db, get_db_status, get_p
 
 router = APIRouter(tags=["health"])
 
+V1_HEALTH_METRICS = ("uptime_seconds", "db_available", "active_jobs", "feature_failures")
+
 
 @router.get("/health", status_code=status.HTTP_200_OK)
 async def health_check():

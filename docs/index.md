@@ -21,6 +21,7 @@ AstroML is a comprehensive machine learning framework for the Stellar network, p
 - [Model Interpretability](model-interpretability.md)
 - [Explainability Reports](explainability-reports.md)
 - [Data Quality Validation](DATA_QUALITY_VALIDATION.md)
+- [V1 Training Metrics](v1-training-metrics.md)
 
 ### Autonomous Agents
 - [LLM Agent Framework](agent-framework.md)

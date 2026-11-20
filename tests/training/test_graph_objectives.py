@@ -494,7 +494,15 @@ class TestEvaluate:
 
         report = objective.evaluate(scores, labels)
 
-        assert set(report) == {"loss", "auc", "average_precision", "accuracy"}
+        assert set(report) == {
+            "loss",
+            "auc",
+            "auc_defined",
+            "average_precision",
+            "accuracy",
+            "precision",
+            "recall",
+        }
         assert all(isinstance(value, float) for value in report.values())
 
     def test_evaluate_does_not_build_a_graph(self):

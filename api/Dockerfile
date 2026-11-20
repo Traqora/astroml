@@ -48,8 +48,8 @@ COPY --chown=appuser:appgroup api/ ./api/
 COPY --chown=appuser:appgroup astroml/ ./astroml/
 COPY --chown=appuser:appgroup migrations/ ./migrations/
 
-# Create logs directory
-RUN mkdir -p /app/logs && chown appuser:appgroup /app/logs
+# Create logs directory and ensure /app itself is owned by appuser
+RUN mkdir -p /app/logs && chown appuser:appgroup /app /app/logs
 
 # Expose ports
 EXPOSE 8000 8443

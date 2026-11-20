@@ -22,6 +22,8 @@ plugins:
 nav:
   - Home: index.md
   - API Reference: api/index.md
+  - API Authentication: API_AUTHENTICATION.md
+  - API Errors: API_ERRORS.md
   - Model Registry: model-registry.md
   - Feature Store: FEATURE_STORE.md
   - Model Cards: models/index.md

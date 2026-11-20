@@ -9,7 +9,7 @@ and how to configure CORS for local development versus production.
 | Variable | Type | Default | Description |
 |---|---|---|---|
 | `CORS_ORIGINS` | Comma-separated URLs | _(empty — deny all)_ | Allowed cross-origin hosts. Set to your frontend URL(s) in production. |
-| `CORS_CREDENTIALS` | `true` / `false` | `true` | Whether to include credentials (cookies, `Authorization` header) in cross-origin requests. Automatically disabled when `CORS_ORIGINS` is empty. |
+| `CORS_CREDENTIALS` | `true` / `false` | `false` | Whether to include credentials (cookies, `Authorization` header) in cross-origin requests. Set to `true` to opt in to credential sharing with the listed origins. |
 
 ## Safe defaults
 

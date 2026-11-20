@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # CORS — deny all by default; set CORS_ORIGINS in production/dev .env
     # e.g. CORS_ORIGINS=https://app.example.com,https://admin.example.com
     cors_origins: list[str] = []
-    cors_credentials: bool = True
+    cors_credentials: bool = False
 
     @model_validator(mode="after")
     def _cors_wildcard_credentials_guard(self) -> "Settings":

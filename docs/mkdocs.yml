@@ -31,6 +31,7 @@ nav:
     - PostgreSQL Disaster Recovery: runbooks/postgres_disaster_recovery.md
     - Disaster-Recovery Drill: runbooks/disaster_recovery_drill.md
   - Environment Drift: environment-drift.md
+  - V1 Persistent Volumes: v1-persistent-volumes.md
 
 markdown_extensions:
   - admonition

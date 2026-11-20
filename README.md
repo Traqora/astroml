@@ -536,6 +536,10 @@ docker compose up -d postgres redis
 Alternatively, configure your own PostgreSQL database and update
 `config/database.yaml`.
 
+For the supported v1 Docker Compose deployment profile, including named
+volumes, recovery procedures, and resource expectations, see
+[V1 Persistent Volumes](docs/v1-persistent-volumes.md).
+
 ---
 
 ## 🤖 LLM Agent Framework

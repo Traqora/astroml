@@ -48,6 +48,8 @@ services:
     container_name: astroml-redis-prod
     restart: always
     command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
     ports:
       - "${REDIS_PORT:-6379}:6379"
     networks:
@@ -66,38 +68,6 @@ services:
         reservations:
           cpus: '0.25'
           memory: 128M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-networks:
-  astroml-network:
-    driver: bridge
-
-volumes:
-  postgres_data:
-    volumes:
-      - redis_data:/data
-    networks:
-      - astroml-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-    start_period: 10s
-    restart: unless-stopped
     logging:
       driver: "json-file"
       options:
@@ -134,8 +104,10 @@ volumes:
       DATABASE_URL: postgresql://${POSTGRES_USER:-astroml}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-astroml}
       REDIS_URL: redis://redis:6379/0
       FEATURE_STORE_PATH: /app/feature_store
+      LOG_LEVEL: INFO
+      APP_ENV: production
     volumes:
-      - feature_store:/app/feature_store
+      - feature_store_data:/app/feature_store
       - ./config:/app/config:ro
     networks:
       - astroml-network
@@ -150,12 +122,7 @@ volumes:
       timeout: 10s
       retries: 3
       start_period: 60s
-  ingestion:
-    # Production ingestion service
     restart: unless-stopped
-    environment:
-      - LOG_LEVEL=INFO
-      - APP_ENV=production
     deploy:
       resources:
         limits:
@@ -199,7 +166,7 @@ volumes:
       FEATURE_STORE_PATH: /app/feature_store
       CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-0}
     volumes:
-      - feature_store:/app/feature_store
+      - feature_store_data:/app/feature_store
       - ./config:/app/config:ro
       - model_store:/app/models
     networks:
@@ -245,7 +212,7 @@ volumes:
     ports:
       - "${FEATURE_STORE_PORT:-8000}:8000"
     volumes:
-      - feature_store:/app/feature_store
+      - feature_store_data:/app/feature_store
     networks:
       - astroml-network
     depends_on:
@@ -336,16 +303,11 @@ volumes:
     driver: local
   redis_data:
     driver: local
-volumes:
   prometheus_data:
     driver: local
   grafana_data:
     driver: local
-  feature_store:
+  feature_store_data:
     driver: local
   model_store:
     driver: local
-
-networks:
-  astroml-network:
-    driver: bridge

@@ -4,6 +4,9 @@ This document defines the persistent-storage contract for the supported v1
 Docker Compose deployment. It does not cover Kubernetes or optional monitoring
 and development profiles.
 
+Downloaded ledger files are temporary v1 ingestion input and are not part of the persistence contract.
+Purge them after checkpoints and derived features are durably committed.
+
 ## Supported v1 boundary
 
 The v1 profile consists of:

@@ -143,3 +143,8 @@ class TestValidateConfig:
     def test_config_validation_catches_port_error(self):
         with pytest.raises(Exception):
             Settings(port=80)
+
+
+def test_malformed_training_record_rejected():
+    with pytest.raises(ValidationError):
+        TrainingSettings(learning_rate=0.01, epochs=-1)

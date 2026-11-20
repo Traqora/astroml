@@ -74,3 +74,9 @@ def test_baseline_is_audited_and_free_of_real_secrets() -> None:
     assert report.new_secrets == []
     assert report.unaudited_secrets == []
     assert report.true_positive_secrets == []
+
+
+def test_detect_secrets_hook_has_no_path_restriction() -> None:
+    config = _text(PRE_COMMIT_CONFIG)
+    hook = config.split("id: detect-secrets", 1)[1].split("- repo:", 1)[0]
+    assert "files:" not in hook

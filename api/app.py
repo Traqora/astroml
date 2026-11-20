@@ -43,6 +43,7 @@ from api.middleware.errors import (
     request_validation_exception_handler,
     unhandled_exception_handler,
 )
+from api.middleware.size_limit import ContentSizeLimitMiddleware
 from api.middleware.https import (
     HSTSMiddleware,
     HTTPSRedirectMiddleware,
@@ -299,6 +300,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
+app.add_middleware(ContentSizeLimitMiddleware, max_body_size=settings.max_request_body_size)
 
 
 def _route_template(request: Request) -> str:

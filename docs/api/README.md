@@ -252,7 +252,10 @@ print(f"Found {len(anomalies)} anomalies")
 
 ## API Reference
 
+- [Error Responses](errors.md)
+- [CORS Configuration](cors.md)
 - [Container Runtime Users](../operations/containers.md)
+- [API Limits](limits.md)
 
 ### Ingestion Module
 

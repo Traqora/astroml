@@ -87,5 +87,10 @@ class Settings(BaseSettings):
     llm_provider: str = "openai"
     llm_encryption_key: str = "change-me-in-production-llm-key-32b"
 
+    # Request / pagination limits (issue #1247)
+    max_request_body_size: int = 10 * 1024 * 1024  # 10 MB; env var MAX_REQUEST_BODY_SIZE
+    max_page_size: int = 100  # env var MAX_PAGE_SIZE
+    default_page_size: int = 20  # env var DEFAULT_PAGE_SIZE
+
 
 settings = Settings()

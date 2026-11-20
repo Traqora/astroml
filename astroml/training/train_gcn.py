@@ -9,6 +9,7 @@ from astroml.tracking.training_report import TrainingReport
 from astroml.training.graph_objectives import (
     GraphObjective,
     NodeClassificationObjective,
+    ensure_finite_loss,
     validate_edge_index,
     validate_masks,
 )
@@ -85,20 +86,31 @@ def train(
         optimizer.zero_grad()
         out = model(data.x, data.edge_index)
         loss = objective.loss(out[data.train_mask], data.y[data.train_mask])
+        # Before backward(): a NaN or infinite loss gives non-finite gradients, and
+        # a single optimiser step on them ruins the weights (#1212).
+        train_loss = ensure_finite_loss(loss, epoch=epoch, phase="train")
         loss.backward()
         optimizer.step()
 
         # Update training metrics
         TRAINING_EPOCHS_TOTAL.labels(model_type="gcn", dataset="cora").inc()
-        TRAINING_LOSS.labels(model_type="gcn", dataset="cora", phase="train").set(loss.item())
+        TRAINING_LOSS.labels(model_type="gcn", dataset="cora", phase="train").set(train_loss)
 
-        train_metrics = {"loss": float(loss)}
-        val_metrics: dict[str, float] = {}
+        train_metrics = {"loss": train_loss}
+
+        # Validation loss is recorded every epoch (#1207), so a curve can show
+        # where it turns around; the full metric set stays on the eval cadence.
+        model.eval()
+        with torch.no_grad():
+            logits = model(data.x, data.edge_index)
+            val_loss = ensure_finite_loss(
+                objective.loss(logits[data.val_mask], data.y[data.val_mask]),
+                epoch=epoch,
+                phase="val",
+            )
+        val_metrics: dict[str, float] = {"loss": val_loss}
 
         if epoch % eval_every == 0 or epoch == epochs:
-            model.eval()
-            with torch.no_grad():
-                logits = model(data.x, data.edge_index)
             val_metrics = objective.evaluate(logits[data.val_mask], data.y[data.val_mask])
             TRAINING_ACCURACY.labels(model_type="gcn", dataset="cora", phase="val").set(
                 val_metrics.get("accuracy", 0.0)

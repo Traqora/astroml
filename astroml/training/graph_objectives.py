@@ -16,9 +16,36 @@ Two are provided:
 * :class:`NodeClassificationObjective` — cross-entropy over class logits, with
   accuracy and macro-F1.
 * :class:`LinkPredictionObjective` — binary cross-entropy over edge scores,
-  with ROC-AUC and average precision.
+  with ROC-AUC, average precision, and accuracy, precision and recall at a
+  documented threshold.
 
 Register your own with :func:`register_objective`.
+
+Link prediction metric definitions
+----------------------------------
+Scores are logits. An edge is *predicted* when its probability is greater than
+``threshold`` (default 0.5, which is a logit above zero). ``accuracy``,
+``precision`` and ``recall`` all use that one rule.
+
+* ``auc`` — ROC-AUC. It needs at least one positive and one negative edge. With
+  only one class present it is undefined: ``auc`` is reported as 0.5 (a coin
+  flip) and ``auc_defined`` is 0.0, so the number can be told apart from a model
+  that genuinely scored 0.5. ``auc_defined`` is 1.0 otherwise. A
+  :class:`~astroml.tracking.training_report.TrainingReport` never picks the best
+  epoch by a monitored metric whose ``<name>_defined`` is 0.0.
+* ``average_precision`` — 0.0 when there are no positive edges.
+* ``precision`` — true positives over predicted positives; 0.0 when nothing is
+  predicted positive.
+* ``recall`` — true positives over actual positives; 0.0 when there are no
+  positive edges.
+
+Non-finite loss
+---------------
+A loss that is NaN or infinite means the run has diverged (a learning rate that
+is too high, an overflow, bad features). Continuing corrupts the weights and
+writes NaN into the report, which is not valid JSON. :func:`ensure_finite_loss`
+turns it into a :class:`NonFiniteLossError`, a training failure the caller can
+catch, and the trainers in this package call it every epoch.
 
 Large graphs
 ------------
@@ -34,11 +61,14 @@ every edge in the graph. The loss is never subsampled.
 from __future__ import annotations
 
 import logging
+import math
 from abc import ABC, abstractmethod
-from typing import Callable, Iterable
+from typing import Callable, ClassVar, Iterable
 
 import torch
 import torch.nn.functional as F
+
+from astroml.utils.exceptions import ModelError
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +76,50 @@ __all__ = [
     "GraphObjective",
     "LinkPredictionObjective",
     "NodeClassificationObjective",
+    "NonFiniteLossError",
     "available_objectives",
+    "ensure_finite_loss",
     "get_objective",
     "register_objective",
     "validate_edge_index",
     "validate_masks",
 ]
+
+
+class NonFiniteLossError(ModelError):
+    """The loss is NaN or infinite, so the run has diverged and training must stop.
+
+    ``context`` carries ``epoch``, ``phase`` and ``value`` for logs. The public
+    form shows only the stable code and a generic message.
+    """
+
+    code: ClassVar[str] = "NON_FINITE_LOSS"
+    public_message: ClassVar[str] = "Training stopped because the loss was not a finite number."
+
+
+def ensure_finite_loss(loss: torch.Tensor | float, *, epoch: int, phase: str = "train") -> float:
+    """Return ``loss`` as a float, or raise if it is NaN or infinite.
+
+    Call this on the loss *before* ``backward()``: a non-finite loss produces
+    non-finite gradients, and one optimiser step is enough to ruin the weights.
+
+    Args:
+        loss: A scalar tensor or number.
+        epoch: 1-based epoch, for the error.
+        phase: Which split produced the loss (``"train"`` or ``"val"``).
+
+    Returns:
+        The loss as a plain float.
+
+    Raises:
+        NonFiniteLossError: If the value is NaN, ``+inf`` or ``-inf``.
+    """
+    value = float(loss)
+    if not math.isfinite(value):
+        raise NonFiniteLossError(
+            f"{phase} loss is {value} at epoch {epoch}", epoch=epoch, phase=phase, value=value
+        )
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -380,6 +448,9 @@ class LinkPredictionObjective(GraphObjective):
     Args:
         pos_weight: Weight on the positive class, for the usual case where
             negatives are sampled at a multiple of the positives.
+        threshold: Probability above which an edge counts as predicted, strictly
+            between 0 and 1. ``accuracy``, ``precision`` and ``recall`` use it;
+            ranking metrics (``auc``, ``average_precision``) do not.
     """
 
     name = "link_prediction"
@@ -390,11 +461,17 @@ class LinkPredictionObjective(GraphObjective):
         self,
         *,
         pos_weight: float | None = None,
+        threshold: float = 0.5,
         max_metric_samples: int = 1_000_000,
         seed: int = 42,
     ) -> None:
         super().__init__(max_metric_samples=max_metric_samples, seed=seed)
+        if not 0.0 < threshold < 1.0:
+            raise ValueError(f"threshold must be strictly between 0 and 1, got {threshold}")
         self.pos_weight = pos_weight
+        self.threshold = threshold
+        # Scores are logits, so compare against the logit of the probability.
+        self._logit_threshold = math.log(threshold / (1.0 - threshold))
 
     def loss(self, outputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         self._check(outputs, targets)
@@ -410,21 +487,47 @@ class LinkPredictionObjective(GraphObjective):
     def metrics(self, outputs: torch.Tensor, targets: torch.Tensor) -> dict[str, float]:
         self._check(outputs, targets)
         if outputs.numel() == 0:
-            return {"auc": 0.5, "average_precision": 0.0, "accuracy": 0.0}
+            return {
+                "auc": 0.5,
+                "auc_defined": 0.0,
+                "average_precision": 0.0,
+                "accuracy": 0.0,
+                "precision": 0.0,
+                "recall": 0.0,
+            }
 
         with torch.no_grad():
             scores, labels = _subsample(
                 outputs.detach(), targets, self.max_metric_samples, self.seed
             )
             labels = labels.to(torch.float64)
+            positives = labels > 0.5
+            n_positive = int(positives.sum())
+            n_negative = int(labels.numel() - n_positive)
+
             # Ranking metrics are invariant under the sigmoid, so scoring the
             # logits directly saves a pass over every edge.
             auc = _roc_auc(scores, labels)
+            auc_defined = 1.0 if n_positive and n_negative else 0.0
             average_precision = _average_precision(scores, labels)
-            # A logit above zero is a probability above one half.
-            accuracy = float(((scores > 0).to(torch.float64) == labels).to(torch.float64).mean())
 
-        return {"auc": auc, "average_precision": average_precision, "accuracy": accuracy}
+            # Predicted when the probability exceeds ``threshold``; at the default
+            # 0.5 that is a logit above zero.
+            predicted = scores > self._logit_threshold
+            true_positive = int((predicted & positives).sum())
+            predicted_positive = int(predicted.sum())
+            precision = true_positive / predicted_positive if predicted_positive else 0.0
+            recall = true_positive / n_positive if n_positive else 0.0
+            accuracy = float((predicted == positives).to(torch.float64).mean())
+
+        return {
+            "auc": auc,
+            "auc_defined": auc_defined,
+            "average_precision": average_precision,
+            "accuracy": accuracy,
+            "precision": precision,
+            "recall": recall,
+        }
 
     @staticmethod
     def _check(outputs: torch.Tensor, targets: torch.Tensor) -> None:

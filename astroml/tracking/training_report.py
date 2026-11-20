@@ -179,11 +179,17 @@ class TrainingReport:
         Validation is what "best" should mean; training is the fallback for a
         loop that never evaluates, where the alternative is no best epoch at
         all.
+
+        An epoch whose ``<monitor>_defined`` flag is ``0.0`` has no meaningful
+        value (for example ROC-AUC on a split with a single class, reported as
+        0.5). It is skipped rather than ranked, so a degenerate validation split
+        can never be chosen as the best epoch.
         """
-        if self.monitor in record.val:
-            return record.val[self.monitor]
-        if self.monitor in record.train:
-            return record.train[self.monitor]
+        for split in (record.val, record.train):
+            if self.monitor in split:
+                if split.get(f"{self.monitor}_defined", 1.0) == 0.0:
+                    return None
+                return split[self.monitor]
         return None
 
     @property

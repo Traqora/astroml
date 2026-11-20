@@ -9,6 +9,7 @@ from torch.optim import Adam
 from astroml.features.graph.snapshot import Edge
 from astroml.models.link_prediction import LinkPredictor
 from astroml.tasks.link_prediction_task import LinkPredictionTask
+from astroml.training.graph_objectives import ensure_finite_loss
 
 
 def _build_synthetic_ledger_edges(
@@ -72,7 +73,11 @@ def train_link_prediction(
         total_loss = 0.0
         for split in splits:
             node_features = build_node_features(split.num_nodes).to(device)
-            loss = task.train_step(model, optimizer, split, node_features)
+            # ``train_step`` has already stepped the optimiser, so this stops the
+            # run on divergence (#1212) but cannot prevent that one step.
+            loss = ensure_finite_loss(
+                task.train_step(model, optimizer, split, node_features), epoch=epoch
+            )
             total_loss += loss
 
         avg_loss = total_loss / len(splits)

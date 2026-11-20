@@ -3,6 +3,9 @@
 The ingestion pipeline exposes metrics and health checks so operators can
 monitor backfills and detect stalls.
 
+Each ingestion batch logs its duration and accepted/rejected record counts at INFO level.
+A batch that fails validation logs the same counts with an ERROR before ingestion stops.
+
 ## Heartbeat check
 
 `astroml.observability.ingestion.check_ingestion_heartbeat` compares the

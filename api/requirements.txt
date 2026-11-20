@@ -24,7 +24,7 @@ python-multipart>=0.0.7
 # file uninstallable; removed while wiring up requirements-api.txt (#561).
 
 # HTTP Client
-httpx==0.25.2
+httpx==0.28.1
 
 # Observability - OpenTelemetry (issue #336)
 opentelemetry-api==1.21.0

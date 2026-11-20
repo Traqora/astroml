@@ -16,5 +16,10 @@ if ($RuntimeUser -eq '0') {
     exit 1
 }
 
+if ($RuntimeUser -ne '1000') {
+    Write-Host "FAIL: container runtime user uid=$RuntimeUser, expected 1000"
+    exit 1
+}
+
 Write-Host "PASS: container runtime user is uid=$RuntimeUser (not root)"
 exit 0

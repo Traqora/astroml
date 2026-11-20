@@ -17,5 +17,10 @@ if [ "$RUNTIME_USER" = "0" ]; then
   exit 1
 fi
 
+if [ "$RUNTIME_USER" != "1000" ]; then
+  echo "FAIL: container runtime user uid=$RUNTIME_USER, expected 1000"
+  exit 1
+fi
+
 echo "PASS: container runtime user is uid=$RUNTIME_USER (not root)"
 exit 0

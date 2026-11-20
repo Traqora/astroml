@@ -17,8 +17,10 @@ RUN apt-get update && apt-get install -y \
 # — this build context intentionally keeps using the file directly.
 COPY api/requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --user -r requirements.txt
+# Install Python dependencies into a virtualenv to avoid root-relative paths
+RUN python -m venv /opt/venv
+ENV PATH=/opt/venv/bin:$PATH
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Stage 2: Runtime stage
 FROM python:3.11-slim
@@ -33,13 +35,13 @@ RUN apt-get update && apt-get install -y \
 
 # Create non-root user and group for runtime security (issue #1249)
 RUN groupadd --gid 1000 appgroup && \
-    useradd --uid 1000 --gid 1000 --no-create-home --shell /bin/false appuser
+    useradd --uid 1000 --gid 1000 --create-home --shell /bin/false appuser
 
-# Copy Python packages from builder stage
-COPY --from=builder --chown=appuser:appgroup /root/.local /home/appuser/.local
+# Copy virtualenv from builder stage (no root-relative paths)
+COPY --from=builder --chown=appuser:appgroup /opt/venv /opt/venv
 
-# Make sure scripts in .local are usable
-ENV PATH=/home/appuser/.local/bin:$PATH
+# Make sure scripts in the venv are usable
+ENV PATH=/opt/venv/bin:$PATH
 
 # Copy application code
 COPY --chown=appuser:appgroup api/ ./api/

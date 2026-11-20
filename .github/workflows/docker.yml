@@ -46,24 +46,18 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Verify non-root runtime user (api image)
-        if: github.event_name == 'push'
+        # Build api/Dockerfile locally on every event so the check always targets
+        # the API service image, not the root ./Dockerfile image (issue #1249).
         run: |
-          IMAGE="${{env.REGISTRY}}/${{env.IMAGE_NAME}}:sha-${{github.sha}}"
-          RUNTIME_USER=$(docker run --rm --entrypoint id "$IMAGE" -u)
+          docker build -t astroml-api-user-check -f api/Dockerfile .
+          RUNTIME_USER=$(docker run --rm --entrypoint id astroml-api-user-check -u)
+          docker rmi astroml-api-user-check >/dev/null 2>&1 || true
           if [ "$RUNTIME_USER" = '0' ]; then
             echo "FAIL: api image runs as root (uid=0)"
             exit 1
           fi
-          echo "PASS: api image runtime user uid=$RUNTIME_USER"
-
-      - name: Build api image locally for user check (PR only)
-        if: github.event_name == 'pull_request'
-        run: |
-          docker build -t astroml-api-pr-check -f api/Dockerfile .
-          RUNTIME_USER=$(docker run --rm --entrypoint id astroml-api-pr-check -u)
-          if [ "$RUNTIME_USER" = '0' ]; then
-            echo "FAIL: api image runs as root (uid=0)"
+          if [ "$RUNTIME_USER" != '1000' ]; then
+            echo "FAIL: api image runtime user uid=$RUNTIME_USER, expected 1000"
             exit 1
           fi
           echo "PASS: api image runtime user uid=$RUNTIME_USER"
-          docker rmi astroml-api-pr-check

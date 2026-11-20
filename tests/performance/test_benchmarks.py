@@ -82,6 +82,7 @@ def test_feature_computation_1000_nodes(benchmark):
 
 
 @pytest.mark.benchmark(group="database-query")
+@pytest.mark.external
 def test_database_query_1000_records(benchmark, db_session):
     """Benchmark database query for 1000 records.
 

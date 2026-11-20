@@ -147,3 +147,34 @@ class TestProblemDetailBackwardCompatibility:
     def test_detail_carries_the_former_message(self, rfc7807_client):
         resp = rfc7807_client.post("/api/v1/errors/report", json={"message": ""})
         assert resp.json()["detail"] == "Request validation failed"
+
+    def test_detail_items_have_v1_shape_on_invalid_value(self, rfc7807_client):
+        """Test B-style: invalid field value → details items have v1 field/message/code shape."""
+        resp = rfc7807_client.post("/api/v1/errors/report", json={"message": ""})
+        assert resp.status_code == 422
+        body = resp.json()
+        assert {"type", "title", "status", "code", "details"}.issubset(body.keys())
+        assert isinstance(body["details"], list) and len(body["details"]) > 0
+        item = body["details"][0]
+        assert set(item.keys()) == {"field", "message", "code"}
+        assert isinstance(item["field"], str)
+        assert "." not in item["field"] or item["field"].replace(".", "").isidentifier()
+        assert item["field"] != ""
+        assert isinstance(item["message"], str)
+        assert isinstance(item["code"], str)
+        assert "loc" not in item
+        assert "type" not in item
+
+    def test_detail_items_have_v1_shape_on_missing_field(self, rfc7807_client):
+        """Test C-style: missing required field → details[0]["field"] names the field."""
+        resp = rfc7807_client.post("/api/v1/errors/report", json={})
+        assert resp.status_code == 422
+        body = resp.json()
+        assert {"type", "title", "status", "code", "details"}.issubset(body.keys())
+        assert isinstance(body["details"], list) and len(body["details"]) > 0
+        item = body["details"][0]
+        assert set(item.keys()) == {"field", "message", "code"}
+        assert isinstance(item["field"], str)
+        assert item["field"] == "message"
+        assert "loc" not in item
+        assert "type" not in item

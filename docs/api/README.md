@@ -17,6 +17,7 @@ AstroML is a research-driven Python framework for building dynamic graph machine
 3. [Configuration](#configuration)
 4. [Usage Examples](#usage-examples)
 5. [API Reference](#api-reference)
+   - [Error Responses](errors.md)
 
 ## Architecture Overview
 

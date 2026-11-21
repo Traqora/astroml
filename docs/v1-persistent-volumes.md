@@ -131,3 +131,5 @@ docker compose ps
 - Application log volumes are not required to recover v1 operation.
 - Rehearse restore on a throwaway database and record achieved RPO and RTO.
   The PostgreSQL runbook has detailed PITR instructions.
+
+The supported local profile is the five-service set above; no optional services are required.

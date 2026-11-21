@@ -29,6 +29,9 @@ nav:
   - Model Cards: models/index.md
   - Pipelines: pipelines/index.md
   - Contributor Roadmap: contributor-roadmap.md
+  - Which Workflows Need PostgreSQL: CI_DATABASE_REQUIREMENTS.md
+  - Roadmap: ROADMAP.md
+  - Troubleshooting: TROUBLESHOOTING.md
   - Runbooks:
     - PostgreSQL Disaster Recovery: runbooks/postgres_disaster_recovery.md
     - Disaster-Recovery Drill: runbooks/disaster_recovery_drill.md

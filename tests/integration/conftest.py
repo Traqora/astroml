@@ -28,6 +28,7 @@ from astroml.db.schema import (
     Operation,
     Transaction,
 )
+from astroml.pipeline.testing.fixtures import IngestionToSnapshotFixture
 
 # ---------------------------------------------------------------------------
 # Database fixtures
@@ -57,6 +58,23 @@ def test_session(test_engine) -> Session:
     session = factory()
     yield session
     session.close()
+
+
+@pytest.fixture
+def ingestion_to_snapshot_fixture(test_session: Session) -> IngestionToSnapshotFixture:
+    """Database-only ingestion-to-snapshot integration fixture.
+
+    This fixture deliberately does not require Horizon, PostgreSQL, Redis,
+    MLflow, or an external network service.
+    """
+    return IngestionToSnapshotFixture(test_session)
+
+
+# Descriptive alias for tests that read fixture names in plain language.
+@pytest.fixture
+def ingestion_to_snapshot(test_session: Session) -> IngestionToSnapshotFixture:
+    """Alias of :func:`ingestion_to_snapshot_fixture`."""
+    return IngestionToSnapshotFixture(test_session)
 
 
 @pytest.fixture(scope="function")

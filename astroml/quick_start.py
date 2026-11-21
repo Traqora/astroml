@@ -22,6 +22,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from sqlalchemy.exc import SQLAlchemyError
 
 from .benchmarking.core import BenchmarkConfig, BenchmarkResult
 from .db.schema import Account, Asset, Ledger, Operation, Transaction
@@ -363,7 +364,7 @@ def run_quickstart() -> int:
 
         return 0
 
-    except Exception as e:
+    except (AstroMLError, SQLAlchemyError) as e:
         logger.error(f"Quick start failed: {e}", exc_info=True)
         return 1
     finally:

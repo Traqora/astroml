@@ -27,6 +27,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Dependency vulnerability check
+        uses: pypa/gh-action-pip-audit@v1.1.0
+
       - name: Extract version metadata
         id: meta
         run: |

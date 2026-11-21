@@ -27,6 +27,7 @@ AstroML is a comprehensive machine learning framework for the Stellar network, p
 
 ### Configuration & Experiments
 - [Configuration Reference](CONFIGURATION.md)
+- [V1 Errors](v1-errors.md)
 - [Experiment Configuration](experiment-configs.md)
 - [Hydra Config Management (ADR 004)](adr/004-hydra-config-management.md)
 
@@ -44,6 +45,8 @@ AstroML is a comprehensive machine learning framework for the Stellar network, p
 - [GitOps Workflow](gitops-workflow.md)
 
 ### Operations
+- [API Authentication for Deployed Inference](API_AUTHENTICATION.md)
+- [API Errors and Operator Actions](API_ERRORS.md)
 - [Alerting](ALERTING.md)
 - [Health Checks](HEALTH_CHECKS.md)
 - [Metrics Reference](METRICS_REFERENCE.md)

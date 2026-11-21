@@ -14,13 +14,18 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
-from api.database import get_db
+from api.auth.dependencies import AuthContext, require_scopes
+from api.auth.features import KNOWN_FEATURES
+from api.database import get_db, get_sync_db
+from api.models.orm import ApiAccount
 from api.schemas import (
     AccountOut,
     AccountsResponse,
@@ -29,9 +34,6 @@ from api.schemas import (
     TransactionOut,
     TransactionsResponse,
 )
-
-if TYPE_CHECKING:
-    from api.models.orm import ApiAccount
 
 # Issue #330: Import caching infrastructure
 try:
@@ -269,3 +271,60 @@ def get_cache_metrics() -> dict[str, Any]:
     except Exception:  # noqa: BLE001 - cache stats are best-effort observability, not critical path
         logger.warning("Failed to retrieve cache stats", exc_info=True)
         return {"hits": 0, "misses": 0, "hit_rate": 0.0, "errors": 0, "available": False}
+
+
+# ─── Account Feature Management (issue #1230) ────────────────────────────────
+
+
+class AccountFeaturesIn(BaseModel):
+    enabled_features: list[str]
+
+
+class AccountFeaturesOut(BaseModel):
+    public_key: str
+    enabled_features: list[str]
+
+
+@router.put("/{public_key}/features", response_model=AccountFeaturesOut)
+def update_account_features(
+    public_key: str,
+    body: AccountFeaturesIn,
+    _auth: AuthContext = Depends(require_scopes("admin")),
+    db: Session = Depends(get_sync_db),
+) -> AccountFeaturesOut:
+    """Set the enabled_features list for an account (admin only).
+
+    Returns 422 for unknown feature names, 404 when the account does not exist.
+    """
+    unknown = [f for f in body.enabled_features if f not in KNOWN_FEATURES]
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "VALIDATION_ERROR",
+                "message": f"Unknown feature name(s): {unknown}.",
+                "details": {
+                    "unknown_features": unknown,
+                    "known_features": sorted(KNOWN_FEATURES),
+                },
+            },
+        )
+
+    account = db.scalar(select(ApiAccount).where(ApiAccount.public_key == public_key))
+    if account is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "ACCOUNT_NOT_FOUND",
+                "message": f"Account '{public_key}' not found.",
+                "details": {"public_key": public_key},
+            },
+        )
+
+    account.enabled_features = body.enabled_features
+    db.commit()
+    db.refresh(account)
+    return AccountFeaturesOut(
+        public_key=account.public_key,
+        enabled_features=account.enabled_features or [],
+    )

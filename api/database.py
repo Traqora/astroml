@@ -357,6 +357,8 @@ async def check_database_connection() -> Dict[str, Any]:
     """
     import logging
 
+    from api.config import settings
+
     logger = logging.getLogger(__name__)
     health_config = _load_health_check_config()
 
@@ -366,17 +368,15 @@ async def check_database_connection() -> Dict[str, Any]:
         "pool_stats": {},
         "metrics": {},
         "error": None,
+        "error_code": None,
     }
 
-    try:
+    async def _ping() -> float:
         start_time = time.time()
         async with get_async_session_factory()() as session:
-            # Execute a simple query to check connection
             await session.execute(text("SELECT 1"))
             latency_ms = (time.time() - start_time) * 1000
-            result["latency_ms"] = round(latency_ms, 2)
 
-            # Get pool statistics
             pool = session.get_bind().pool
             if hasattr(pool, "size"):
                 result["pool_stats"] = {
@@ -386,20 +386,33 @@ async def check_database_connection() -> Dict[str, Any]:
                     "total": pool.total(),
                     "max_size": pool.size() + pool.overflow(),
                 }
+        return latency_ms
 
-            # Get metrics
-            result["metrics"] = {
-                "avg_acquire_time_ms": round(_pool_metrics.get_average_acquire_time() * 1000, 2),
-                "connection_errors": _pool_metrics.get_error_counts()["connection_errors"],
-                "health_check_failures": _pool_metrics.get_error_counts()["health_check_failures"],
-            }
-
-            if health_config.log_enabled:
-                logger.info(f"Database health check passed (latency: {result['latency_ms']}ms)")
-
+    try:
+        latency_ms = await asyncio.wait_for(_ping(), timeout=settings.db_query_timeout_seconds)
+        result["latency_ms"] = round(latency_ms, 2)
+        result["metrics"] = {
+            "avg_acquire_time_ms": round(_pool_metrics.get_average_acquire_time() * 1000, 2),
+            "connection_errors": _pool_metrics.get_error_counts()["connection_errors"],
+            "health_check_failures": _pool_metrics.get_error_counts()["health_check_failures"],
+        }
+        if health_config.log_enabled:
+            logger.info(f"Database health check passed (latency: {result['latency_ms']}ms)")
+    except asyncio.TimeoutError:
+        result["status"] = "unhealthy"
+        result["pool_stats"] = {}
+        result["error"] = "DB query exceeded timeout"
+        result["error_code"] = "DB_TIMEOUT"
+        _pool_metrics.record_health_check_failure()
+        if health_config.log_enabled:
+            logger.warning(
+                "Database health check timed out after %ds",
+                settings.db_query_timeout_seconds,
+            )
     except Exception as e:
         result["status"] = "unhealthy"
         result["error"] = str(e)
+        result["error_code"] = "DB_ERROR"
         _pool_metrics.record_health_check_failure()
         if health_config.log_enabled:
             logger.error(f"Database health check failed: {e}")

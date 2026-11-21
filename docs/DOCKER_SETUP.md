@@ -781,3 +781,5 @@ Docker Compose Documentation
 AstroML Repository & Docs
 
 Feature Store Documentation
+
+Start the documented v1 profile with `docker compose up -d` and confirm with `docker compose ps`.

@@ -222,3 +222,5 @@ See `docker-compose.yml` extension fields (`x-graceful-shutdown`,
 - Pool internals: `astroml/db/pool_health.py`
 - Probe implementation: `api/routers/healthz.py`
 - Heartbeat check: `astroml/observability/ingestion.py`
+
+Health probes read cached state only and never trigger ingestion, training, or other expensive work.

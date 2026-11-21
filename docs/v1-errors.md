@@ -125,3 +125,6 @@ This change defines the types. Using them at existing call sites is tracked sepa
 
 Until those land, parsers still raise their original `KeyError`/`ValueError`, and routers that
 build a response from `str(exc)` are unchanged.
+
+To inspect a failed v1 run, read the service logs (`docker compose logs <service>`) and match the
+error `code` above; keep internal `context` out of client responses.

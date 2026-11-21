@@ -16,7 +16,7 @@ import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -24,7 +24,11 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from api.database import get_sync_db
+from api.auth.features import AccountFeatureContext, require_account_feature
+from api.config import settings
 from api.models.orm import ModelRegistry
+from api.timeouts import set_sync_db_timeout
+from sqlalchemy.exc import OperationalError
 from api.schemas.model_registry import (
     DeploymentEnvironment,
     ModelComparisonIn,
@@ -175,9 +179,18 @@ def create_model(body: ModelRegistryIn, db: Session = Depends(get_sync_db)):
 
 
 @router.get("/{model_id}", response_model=ModelRegistryOut)
-def get_model(model_id: int, db: Session = Depends(get_sync_db)):
+def get_model(model_id: int, db: Session = Depends(get_sync_db), _account: Union[ModelRegistry, AccountFeatureContext] = Depends(require_account_feature("model_readiness"))):
     """Get a specific model by ID."""
-    entry = db.scalar(select(ModelRegistry).where(ModelRegistry.id == model_id))
+    set_sync_db_timeout(db, settings.db_query_timeout_seconds)
+    try:
+        entry = db.scalar(select(ModelRegistry).where(ModelRegistry.id == model_id))
+    except OperationalError as exc:
+        if "timeout" in str(exc).lower():
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "DB_TIMEOUT", "message": "Database query timed out", "details": {}},
+            ) from exc
+        raise
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model not found")
     return entry
@@ -337,9 +350,18 @@ def compare_models(body: ModelComparisonIn, db: Session = Depends(get_sync_db)):
 
 
 @router.post("/{model_id}/activate", response_model=ModelRegistryOut)
-def activate_model(model_id: int, db: Session = Depends(get_sync_db)):
+def activate_model(model_id: int, db: Session = Depends(get_sync_db), _account: Union[ModelRegistry, AccountFeatureContext] = Depends(require_account_feature("model_readiness"))):
     """Activate a model version and switch serving to its checkpoint."""
-    entry = db.scalar(select(ModelRegistry).where(ModelRegistry.id == model_id))
+    set_sync_db_timeout(db, settings.db_query_timeout_seconds)
+    try:
+        entry = db.scalar(select(ModelRegistry).where(ModelRegistry.id == model_id))
+    except OperationalError as exc:
+        if "timeout" in str(exc).lower():
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "DB_TIMEOUT", "message": "Database query timed out", "details": {}},
+            ) from exc
+        raise
     if entry is None:
         raise HTTPException(status_code=404, detail="Model not found")
 
@@ -356,9 +378,18 @@ def activate_model(model_id: int, db: Session = Depends(get_sync_db)):
 
 
 @router.get("/{model_id}/metrics")
-def model_metrics(model_id: int, db: Session = Depends(get_sync_db)):
+def model_metrics(model_id: int, db: Session = Depends(get_sync_db), _account: Union[ModelRegistry, AccountFeatureContext] = Depends(require_account_feature("model_readiness"))):
     """Return stored metrics for a specific model version."""
-    entry = db.scalar(select(ModelRegistry).where(ModelRegistry.id == model_id))
+    set_sync_db_timeout(db, settings.db_query_timeout_seconds)
+    try:
+        entry = db.scalar(select(ModelRegistry).where(ModelRegistry.id == model_id))
+    except OperationalError as exc:
+        if "timeout" in str(exc).lower():
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "DB_TIMEOUT", "message": "Database query timed out", "details": {}},
+            ) from exc
+        raise
     if entry is None:
         raise HTTPException(status_code=404, detail="Model not found")
     return {

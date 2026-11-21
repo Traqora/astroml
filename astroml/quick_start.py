@@ -11,6 +11,7 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import random
@@ -23,10 +24,7 @@ import numpy as np
 import torch
 from sqlalchemy.exc import SQLAlchemyError
 
-from astroml.utils.exceptions import AstroMLError
-
-from .benchmarking.config import BenchmarkConfig
-from .benchmarking.core import BenchmarkResult
+from .benchmarking.core import BenchmarkConfig, BenchmarkResult
 from .db.schema import Account, Asset, Ledger, Operation, Transaction
 from .db.session import get_session
 from .features.graph.snapshot import Edge
@@ -374,5 +372,31 @@ def run_quickstart() -> int:
             session.close()
 
 
+def _positive_int(value: str) -> int:
+    """Parse an argparse integer that must be greater than zero."""
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be greater than zero")
+    return parsed
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the quick-start module with command-line parameters."""
+    parser = argparse.ArgumentParser(
+        description="AstroML quick start: generate sample data, build a graph, and train",
+    )
+    parser.add_argument("--num-ledgers", type=_positive_int, default=100)
+    parser.add_argument("--num-accounts", type=_positive_int, default=50)
+    parser.add_argument("--epochs", type=_positive_int, default=10)
+    parser.add_argument("--seed", type=int, default=42)
+    args = parser.parse_args(argv)
+
+    QuickStartConfig.NUM_SAMPLE_LEDGERS = args.num_ledgers
+    QuickStartConfig.NUM_ACCOUNTS = args.num_accounts
+    QuickStartConfig.TRAIN_EPOCHS = args.epochs
+    QuickStartConfig.RANDOM_SEED = args.seed
+    return run_quickstart()
+
+
 if __name__ == "__main__":
-    sys.exit(run_quickstart())
+    sys.exit(main())

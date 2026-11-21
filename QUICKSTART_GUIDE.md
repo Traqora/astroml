@@ -50,7 +50,7 @@ python -m astroml.quick_start \
 
 ```bash
 # Via CLI command
-python -m astroml quickstart \
+python -m astroml.cli quickstart \
   --num-ledgers 100 \
   --num-accounts 50 \
   --epochs 10 \

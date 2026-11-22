@@ -17,6 +17,8 @@ from typing import Any, Dict
 import pytest
 import requests
 
+pytestmark = pytest.mark.external
+
 
 class TestDeploymentSmoke:
     """Smoke tests to verify deployment success."""

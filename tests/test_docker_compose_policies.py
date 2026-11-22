@@ -95,6 +95,52 @@ class TestDockerComposePolicies:
     def main_compose(self) -> dict:
         return _load_compose(REPO_ROOT / "docker-compose.yml")
 
+    def test_v1_persistent_volumes_are_declared_and_mounted(self, main_compose: dict):
+        """Core v1 state has named volumes rather than container-local storage."""
+        named_volume_mounts = {
+            "postgres": "postgres_data:/var/lib/postgresql/data",
+            "redis": "redis_data:/data",
+            "feature-store": "feature_store_data:/app/feature_store",
+            "ingestion": "ingestion_data:/app/data",
+        }
+
+        declared = main_compose.get("volumes", {})
+        for service_name, mount in named_volume_mounts.items():
+            service = main_compose["services"].get(service_name)
+            assert service is not None, f"{service_name} is required for v1"
+            assert mount in service.get("volumes", []), (
+                f"{service_name} must mount {mount}"
+            )
+
+            volume_name = mount.split(":", 1)[0]
+            assert volume_name in declared, f"{volume_name} must be declared"
+            assert declared[volume_name].get("driver") == "local"
+
+    def test_v1_profile_requires_no_optional_monitoring_volume(self, main_compose: dict):
+        """The core v1 profile must not depend on monitoring or development volumes."""
+        core_services = {"postgres", "redis", "api", "feature-store", "ingestion"}
+        for service_name in core_services:
+            service = main_compose["services"].get(service_name)
+            assert service is not None
+
+        optional_volumes = {
+            "prometheus_data",
+            "grafana_data",
+            "dev_data",
+            "dev_logs",
+            "soroban_data",
+        }
+        used_optional = optional_volumes.intersection(main_compose["volumes"])
+        for volume_name in used_optional:
+            # Optional declarations are not a dependency unless a core service mounts it.
+            mounted = [
+                service_name
+                for service_name in core_services
+                for mount in main_compose["services"][service_name].get("volumes", [])
+                if mount.split(":", 1)[0] == volume_name
+            ]
+            assert not mounted, f"core v1 service unexpectedly mounts {volume_name}: {mounted}"
+
     def test_every_service_has_restart_policy(self, main_compose: dict):
         missing: list[str] = []
         for name, service in main_compose["services"].items():

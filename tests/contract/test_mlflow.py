@@ -11,6 +11,7 @@ MLFLOW_URL = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000")
     not os.environ.get("MLFLOW_TRACKING_URI"),
     reason="Requires MLFLOW_TRACKING_URI or local mlflow to be running.",
 )
+@pytest.mark.external
 def test_mlflow_api_health():
     """Verify the MLflow API is reachable."""
     try:

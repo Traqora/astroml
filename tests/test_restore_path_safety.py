@@ -13,7 +13,7 @@ def _config(backup_dir: str, artifacts: str) -> BackupConfig:
     return BackupConfig(
         database_url="postgresql://u:p@localhost/db",
         database_name="db",
-        backup_dir=backup_dir,
+        local_backup_dir=backup_dir,
         model_artifacts_dir=artifacts,
     )
 

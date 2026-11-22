@@ -297,9 +297,18 @@ class BackupService:
                 for item in artifacts_dir.iterdir():
                     tar.add(item, arcname=item.name)
 
-        # Checksum the plaintext tar.gz before encryption at rest
-        # (issues #958 and #965).
+        # Checksum and verification describe the tar.gz produced above, so
+        # both run on the plaintext archive before encryption at rest
+        # (issues #958 and #965). Verifying the ciphertext against a plaintext
+        # checksum would always fail. Model backups previously ran no verifier
+        # at all, so corruption was only discovered at restore time.
         checksum = self._calculate_checksum(backup_file)
+        is_verified = False
+        if self.config.verify_after_backup:
+            from .verification import BackupVerifier
+
+            verifier = BackupVerifier(self.config)
+            is_verified = verifier.verify_backup(backup_file, checksum)
 
         backup_file, is_encrypted = _encrypt_if_enabled(self.config, backup_file)
         size_bytes = backup_file.stat().st_size
@@ -313,7 +322,7 @@ class BackupService:
             checksum=checksum,
             storage_path=str(backup_file),
             storage_backend=StorageBackend.LOCAL,
-            is_verified=False,
+            is_verified=is_verified,
             description=description,
             is_encrypted=is_encrypted,
         )
@@ -323,16 +332,6 @@ class BackupService:
         # Upload to cloud storage if configured
         if self.config.storage_backend != StorageBackend.LOCAL:
             self._upload_to_storage(backup_file, backup_id)
-
-        # Verify backup if enabled. The database path has always done this;
-        # model backups previously never ran the verifier, so a corrupted or
-        # truncated artifact archive was only discovered at restore time.
-        if self.config.verify_after_backup:
-            from .verification import BackupVerifier
-
-            verifier = BackupVerifier(self.config)
-            metadata.is_verified = verifier.verify_backup(backup_file, checksum)
-            self._save_metadata(metadata)
 
         logger.info(f"Model artifacts backup created successfully: {backup_id}")
         return metadata

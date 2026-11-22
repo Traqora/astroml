@@ -287,12 +287,6 @@ class RestoreService:
         except AstroMLError as e:
             logger.error(f"Database restore failed: {e}")
             return False
-        finally:
-            # The decrypted copy is transient: it must not outlive this
-            # restore attempt regardless of outcome, or the encryption
-            # this module exists to provide is undone by a leftover file.
-            if plaintext_file is not None:
-                plaintext_file.unlink(missing_ok=True)
 
     def restore_model_artifacts(self, backup_id: str, target_dir: str | None = None) -> bool:
         """Restore model artifacts from a backup.

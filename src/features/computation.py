@@ -1,6 +1,11 @@
 import polars as pl
 import numpy as np
 
+def log_feature_duration(name, started, error=None):
+    import time
+    from src.utils.logger import log_structured
+    log_structured("feature_computation", {"name": name, "duration_ms": round((time.perf_counter() - started) * 1000, 2), "status": "failed" if error else "ok"})
+
 def compute_features_vectorized(df: pl.DataFrame) -> pl.DataFrame:
     # Fix: Vectorize feature computation with Polars/NumPy
     return df.with_columns([

@@ -20,6 +20,10 @@ connection pool health checks from Issue #550.
 The legacy `GET /health` and `GET /health/*` endpoints are unchanged; nothing
 that points at them needs to move.
 
+The minimum v1 service health metrics are uptime, request failures, feature-computation failures, and the ingestion heartbeat.
+They are available through `/healthz` without any optional monitoring service.
+Absent optional dependencies do not change this baseline.
+
 ## Response envelope
 
 Every probe answers with the same JSON shape:

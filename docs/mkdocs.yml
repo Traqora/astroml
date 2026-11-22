@@ -22,6 +22,8 @@ plugins:
 nav:
   - Home: index.md
   - API Reference: api/index.md
+  - API Authentication: API_AUTHENTICATION.md
+  - API Errors: API_ERRORS.md
   - Model Registry: model-registry.md
   - Feature Store: FEATURE_STORE.md
   - Model Cards: models/index.md
@@ -31,6 +33,8 @@ nav:
     - PostgreSQL Disaster Recovery: runbooks/postgres_disaster_recovery.md
     - Disaster-Recovery Drill: runbooks/disaster_recovery_drill.md
   - Environment Drift: environment-drift.md
+  - V1 Persistent Volumes: v1-persistent-volumes.md
+  - V1 Errors: v1-errors.md
 
 markdown_extensions:
   - admonition

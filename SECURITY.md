@@ -10,6 +10,9 @@ AstroML provides security fixes for the current development branch and the lates
 | Latest tagged release | Supported |
 | Older releases | Best effort only |
 
+Public-chain ledger data is non-secret once published and is not treated as a credential.
+API keys, signing material, and private configuration remain confidential under this policy.
+
 ## Reporting a Vulnerability
 
 Please report security issues privately rather than through public issues or pull requests.

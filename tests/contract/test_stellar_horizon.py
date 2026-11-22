@@ -1,4 +1,7 @@
+import pytest
 import requests
+
+pytestmark = pytest.mark.external
 
 # We assume Horizon runs locally for tests or we use the testnet.
 HORIZON_URL = "https://horizon-testnet.stellar.org"

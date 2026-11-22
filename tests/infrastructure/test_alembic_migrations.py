@@ -141,6 +141,7 @@ class TestAlembicChainIntegrity:
             assert callable(getattr(meta["module"], "downgrade", None)), f"{rev} lacks downgrade()"
 
 
+@pytest.mark.external
 class TestAlembicRoundTrip:
     def test_each_revision_round_trips(self, pristine_db_url):
         """Upgrade → downgrade → upgrade per revision on a pristine DB."""

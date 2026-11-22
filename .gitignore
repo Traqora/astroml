@@ -8,7 +8,12 @@ build/
 .hypothesis/
 venv/
 .venv/
+# Local environment and secret files (issue #1244). Keep .env.example tracked.
 .env
+.env.*
+*.env
+!.env.example
+.secrets/
 # Rust build outputs
 target/
 target_local/

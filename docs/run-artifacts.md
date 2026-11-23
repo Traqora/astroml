@@ -51,6 +51,84 @@ outputs/runs/gcn-cora-001/
   (independent of key order). Equal fingerprints mean the same settings on
   the same inputs.
 
+## Reproducing a saved run (issue #1223)
+
+This section explains how to reproduce a saved run. A v1 run artifact records
+enough information to repeat a run's **configuration and inputs** from a local
+directory. The `config` and `inputs` objects in `run.json` are the source of
+truth. `metrics.json` records the result; it is not an input to the repeated
+run.
+
+### Steps
+
+1. Read the run with `read_run_artifacts(root, run_id)`. The reader rejects a
+   missing, corrupt, unsupported-schema, or mismatched-run-id directory.
+2. Recompute the fingerprint from the saved `config` and `inputs` before using
+   them. A mismatch means the artifact changed and must not be reproduced.
+3. Run the same code with the saved settings, the same input contents, and the
+   same dependency versions. Supply the same random seed when the training
+   entry point accepts one.
+4. Store the repeat under a **new run id** with `write_run_artifacts` and check
+   that its fingerprint equals the saved fingerprint. `replayed_metrics` is the
+   value returned by the repeated training and evaluation call.
+
+```python
+from astroml.artifacts.run_artifacts import (
+    compute_fingerprint,
+    read_run_artifacts,
+    write_run_artifacts,
+)
+
+root = "outputs/runs"
+saved = read_run_artifacts(root, "gcn-cora-001")
+config = saved["run"]["config"]
+inputs = saved["run"]["inputs"]
+fingerprint = saved["run"]["fingerprint"]
+
+if compute_fingerprint(config, inputs) != fingerprint:
+    raise RuntimeError("saved config and inputs do not match the fingerprint")
+
+repeat = write_run_artifacts(
+    root,
+    "gcn-cora-001-replay",
+    config=config,
+    inputs=inputs,
+    metrics=replayed_metrics,
+)
+assert repeat.fingerprint == fingerprint
+```
+
+The saved `config` is plain JSON, not a command line, Hydra override file, or
+source-code revision. Record any extra detail needed to repeat the run in
+`config` or `inputs` (for example, a dataset hash or seed).
+
+### Failure cases
+
+* `RunArtifactError`: the saved directory is missing, corrupt, incomplete, has
+  an unsupported `schema_version`, or belongs to another run id. Stop; there
+  is no trustworthy configuration to reproduce.
+* Fingerprint mismatch: the saved `config` or `inputs` no longer match
+  `run.json`. Stop and obtain a valid artifact.
+* `RunConflictError`: the chosen id already exists. `same_inputs is True`
+  identifies a re-run with identical settings; `False` is an id collision.
+  Use a new id unless replacing the saved run is intentional.
+* `InvalidRunInputError`: the new id is unsafe or the supplied config, inputs,
+  or metrics are not strict JSON.
+
+### Boundaries
+
+* Reproduction uses only the local filesystem and the Python standard library.
+  It works without torch, MLflow, a database, cloud or object storage, Horizon,
+  Redis, or any other optional service.
+* The artifact contains configuration, input identifiers, and metrics. It does
+  not contain raw dataset bytes, model weights, checkpoints, a dependency
+  lockfile, or a source revision; preserve those separately when they matter.
+* Equal fingerprints prove equal `config` and `inputs` only. They do not prove
+  identical code, dependencies, hardware, randomness, or metrics.
+* Bit-for-bit reproducibility is not a v1 guarantee: the baseline `train()`
+  does not seed RNGs and uses a GPU when available (see
+  [baseline-model-assumptions.md](baseline-model-assumptions.md)).
+
 ## Atomic writes (issue #1219)
 
 All files are first written into a hidden staging directory

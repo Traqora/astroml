@@ -82,6 +82,7 @@ from api.routers import (
     onboarding_router,
     query_router,
     rate_limit_router,
+    readiness_router,
     reports_router,
     search_router,
     stream_router,
@@ -338,6 +339,7 @@ app.include_router(auth_router)
 app.include_router(audit_router)
 app.include_router(compliance_router)
 app.include_router(rate_limit_router)
+app.include_router(readiness_router)
 app.include_router(errors_router)
 app.include_router(contact_router)
 app.include_router(transactions_router)

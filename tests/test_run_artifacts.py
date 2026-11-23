@@ -121,6 +121,100 @@ class TestMetricsFile:
             read_run_artifacts(tmp_path, "run-1")
 
 
+# ── #1222: schema validation on read ─────────────────────────────────────────
+
+
+def _tamper(path: Path, change) -> None:
+    """Apply a change to a stored JSON document for negative tests."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    change(data)
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+class TestReadSchemaValidation:
+    def test_valid_run_passes_full_schema_validation(self, tmp_path: Path) -> None:
+        """A round-tripped run satisfies every schema rule."""
+        result = _write(tmp_path)
+        loaded = read_run_artifacts(tmp_path, "run-1")
+        assert loaded["run"]["fingerprint"] == result.fingerprint
+        assert loaded["metrics"]["metrics"] == METRICS
+
+    @pytest.mark.parametrize("name", [RUN_FILE, METRICS_FILE])
+    def test_missing_required_field_is_rejected(self, tmp_path: Path, name: str) -> None:
+        """Either file missing its fingerprint is rejected."""
+        result = _write(tmp_path)
+        target = result.run_file if name == RUN_FILE else result.metrics_file
+        _tamper(target, lambda data: data.pop("fingerprint"))
+
+        with pytest.raises(RunArtifactError, match="missing required field 'fingerprint'"):
+            read_run_artifacts(tmp_path, "run-1")
+
+    @pytest.mark.parametrize(
+        ("name", "field", "bad_value"),
+        [
+            (RUN_FILE, "config", []),
+            (RUN_FILE, "inputs", "Cora"),
+            (RUN_FILE, "artifacts", {"metrics": "other.json"}),
+            (METRICS_FILE, "metrics", []),
+        ],
+    )
+    def test_wrong_field_type_or_reference_is_rejected(
+        self, tmp_path: Path, name: str, field: str, bad_value: object
+    ) -> None:
+        """Wrong types and wrong artifact references are rejected."""
+        result = _write(tmp_path)
+        target = result.run_file if name == RUN_FILE else result.metrics_file
+        _tamper(target, lambda data: data.__setitem__(field, bad_value))
+
+        with pytest.raises(RunArtifactError, match="schema|must be|artifacts"):
+            read_run_artifacts(tmp_path, "run-1")
+
+    def test_invalid_created_at_is_rejected(self, tmp_path: Path) -> None:
+        """created_at must be an ISO-8601 timestamp."""
+        result = _write(tmp_path)
+        _tamper(result.run_file, lambda data: data.__setitem__("created_at", "yesterday"))
+
+        with pytest.raises(RunArtifactError, match="ISO-8601"):
+            read_run_artifacts(tmp_path, "run-1")
+
+    def test_fingerprint_mismatch_between_files_is_rejected(self, tmp_path: Path) -> None:
+        """The two files must describe the same config and inputs."""
+        result = _write(tmp_path)
+        _tamper(result.metrics_file, lambda data: data.__setitem__("fingerprint", "0" * 64))
+
+        with pytest.raises(RunArtifactError, match="different fingerprints"):
+            read_run_artifacts(tmp_path, "run-1")
+
+    def test_tampered_config_is_rejected_by_recomputed_fingerprint(self, tmp_path: Path) -> None:
+        """A stored fingerprint must match the stored config and inputs."""
+        result = _write(tmp_path)
+        _tamper(result.run_file, lambda data: data["config"].__setitem__("lr", 0.5))
+
+        with pytest.raises(RunArtifactError, match="fingerprint does not match"):
+            read_run_artifacts(tmp_path, "run-1")
+
+    def test_non_finite_value_in_stored_document_is_rejected(self, tmp_path: Path) -> None:
+        """Strict JSON parsing rejects NaN even when written by an external tool."""
+        result = _write(tmp_path)
+        result.metrics_file.write_text(
+            result.metrics_file.read_text(encoding="utf-8").replace("0.81", "NaN"),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(RunArtifactError, match="cannot read|not strict JSON"):
+            read_run_artifacts(tmp_path, "run-1")
+
+    def test_extra_fields_are_allowed_within_schema_version_1(self, tmp_path: Path) -> None:
+        """Unknown fields are forward-compatible within a schema version."""
+        result = _write(tmp_path)
+        _tamper(result.run_file, lambda data: data.__setitem__("tool_version", "1.2.3"))
+        _tamper(result.metrics_file, lambda data: data.__setitem__("notes", "extra"))
+
+        loaded = read_run_artifacts(tmp_path, "run-1")
+        assert loaded["run"]["tool_version"] == "1.2.3"
+        assert loaded["metrics"]["notes"] == "extra"
+
+
 # ── #1219: atomic writes ─────────────────────────────────────────────────────
 
 

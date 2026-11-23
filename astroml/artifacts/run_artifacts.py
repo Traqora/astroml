@@ -20,6 +20,9 @@ Guarantees (see ``docs/run-artifacts.md``):
 * **Machine-readable metrics (#1216).** ``metrics.json`` is strict JSON
   (``NaN``/``Infinity`` are rejected, not written as invalid JSON) with a
   ``schema_version`` so consumers can detect format changes.
+* **Validated reads (#1222).** :func:`read_run_artifacts` checks the required
+  fields and types in both files and verifies that their fingerprints agree
+  with each other and with ``config`` + ``inputs``.
 
 Local filesystem only; it uses the standard library, so it works in the v1
 workflow without torch, cloud storage or any other optional service.
@@ -36,7 +39,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, ClassVar, Mapping
+from typing import Any, ClassVar, Mapping, cast
 
 from astroml.utils.exceptions import AstroMLError
 
@@ -62,6 +65,7 @@ RUN_FILE = "run.json"
 METRICS_FILE = "metrics.json"
 
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_FINGERPRINT_RE = re.compile(r"^[0-9a-f]{64}$")
 _STAGING_SUFFIX = ".staging"
 _REPLACED_SUFFIX = ".replaced"
 
@@ -233,6 +237,111 @@ def _read_fingerprint(run_dir: Path) -> str | None:
         return None
 
 
+def _reject_json_constant(token: str) -> None:
+    """Reject non-standard JSON tokens such as ``NaN`` and ``Infinity``."""
+    raise ValueError(f"non-standard JSON token {token}")
+
+
+def _load_document(path: Path, name: str, run_id: str) -> dict[str, Any]:
+    """Read one artifact file as a strict-JSON object with the common fields checked."""
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle, parse_constant=_reject_json_constant)
+    except FileNotFoundError as exc:
+        raise RunArtifactError(
+            f"Run {run_id!r} is incomplete: {name} is missing in {path.parent}."
+        ) from exc
+    except (OSError, ValueError) as exc:
+        raise RunArtifactError(f"Run {run_id!r}: cannot read {path}: {exc}") from exc
+
+    if not isinstance(data, dict):
+        raise RunArtifactError(f"Run {run_id!r}: {name} must be a JSON object.")
+    if type(data.get("schema_version")) is not int or data["schema_version"] != SCHEMA_VERSION:
+        raise RunArtifactError(
+            f"Run {run_id!r}: {name} has unsupported schema_version "
+            f"{data.get('schema_version')!r} (expected {SCHEMA_VERSION})."
+        )
+    if data.get("run_id") != run_id:
+        raise RunArtifactError(f"Run {run_id!r}: {name} belongs to run {data.get('run_id')!r}.")
+    try:
+        _canonical_json(data)
+    except InvalidRunInputError as exc:
+        raise RunArtifactError(f"Run {run_id!r}: {name} is not strict JSON: {exc}") from exc
+    return data
+
+
+def _require(document: Mapping[str, Any], key: str, expected: type, name: str, run_id: str) -> Any:
+    """Return a required field of the expected type or raise a schema error."""
+    if key not in document:
+        raise RunArtifactError(f"Run {run_id!r}: {name} is missing required field {key!r}.")
+    value = document[key]
+    if expected is int:
+        valid = type(value) is int
+    elif expected is dict:
+        valid = isinstance(value, dict)
+    else:
+        valid = isinstance(value, expected)
+    if not valid:
+        raise RunArtifactError(
+            f"Run {run_id!r}: {name} field {key!r} must be {expected.__name__}, "
+            f"got {type(value).__name__}."
+        )
+    return value
+
+
+def _validate_document_schema(document: Mapping[str, Any], name: str, run_id: str) -> str:
+    """Validate the fields of one artifact document and return its fingerprint."""
+    fingerprint = cast(str, _require(document, "fingerprint", str, name, run_id))
+    if not _FINGERPRINT_RE.fullmatch(fingerprint):
+        raise RunArtifactError(
+            f"Run {run_id!r}: {name} field 'fingerprint' must be a lowercase SHA-256 hex digest."
+        )
+
+    if name == RUN_FILE:
+        created_at = _require(document, "created_at", str, name, run_id)
+        try:
+            datetime.fromisoformat(created_at)
+        except ValueError as exc:
+            raise RunArtifactError(
+                f"Run {run_id!r}: {name} field 'created_at' is not an ISO-8601 timestamp."
+            ) from exc
+        _require(document, "config", dict, name, run_id)
+        _require(document, "inputs", dict, name, run_id)
+        artifacts = _require(document, "artifacts", dict, name, run_id)
+        if artifacts.get("metrics") != METRICS_FILE:
+            raise RunArtifactError(
+                f"Run {run_id!r}: {name} field 'artifacts' must list {METRICS_FILE!r}."
+            )
+        return fingerprint
+
+    _require(document, "metrics", dict, name, run_id)
+    return fingerprint
+
+
+def _validate_run_relationships(
+    run_document: Mapping[str, Any],
+    metrics_document: Mapping[str, Any],
+    run_fingerprint: str,
+    metrics_fingerprint: str,
+) -> None:
+    """Check that both files describe the same config and inputs."""
+    if run_fingerprint != metrics_fingerprint:
+        raise RunArtifactError(
+            f"Run {run_document['run_id']!r}: {RUN_FILE} and {METRICS_FILE} have "
+            "different fingerprints."
+        )
+    try:
+        expected = compute_fingerprint(run_document["config"], run_document["inputs"])
+    except InvalidRunInputError as exc:
+        raise RunArtifactError(
+            f"Run {run_document['run_id']!r}: config or inputs are not strict JSON: {exc}"
+        ) from exc
+    if run_fingerprint != expected:
+        raise RunArtifactError(
+            f"Run {run_document['run_id']!r}: fingerprint does not match config and inputs."
+        )
+
+
 # ── Public API ───────────────────────────────────────────────────────────────
 
 
@@ -346,39 +455,37 @@ def _publish(stage: Path, final: Path, run_id: str, fingerprint: str, overwrite:
 
 
 def read_run_artifacts(root: str | os.PathLike[str], run_id: str) -> dict[str, Any]:
-    """Load and validate a run written by :func:`write_run_artifacts`.
+    """Load and fully validate a run written by :func:`write_run_artifacts`.
+
+    Both files must be strict-JSON objects with ``schema_version``, ``run_id``
+    and ``fingerprint``. ``run.json`` must additionally contain ``created_at``
+    (ISO-8601), ``config`` and ``inputs`` objects and an ``artifacts`` object
+    naming ``metrics.json``; ``metrics.json`` must contain a ``metrics`` object.
+    Extra fields are allowed, but the two fingerprints must match each other
+    and the SHA-256 of the canonical JSON of ``config`` + ``inputs``.
 
     Returns:
         ``{"run": <run.json>, "metrics": <metrics.json>}``.
 
     Raises:
-        RunArtifactError: a file is missing, is not valid JSON, has an
-            unsupported ``schema_version``, or belongs to a different run id.
+        InvalidRunInputError: ``run_id`` is not a safe directory name.
+        RunArtifactError: a file is missing, corrupt or does not satisfy the
+            v1 schema, or the fingerprint does not match its contents.
     """
     validate_run_id(run_id)
     run_dir = Path(root) / run_id
-    loaded: dict[str, Any] = {}
-    for key, name in (("run", RUN_FILE), ("metrics", METRICS_FILE)):
-        file = run_dir / name
-        try:
-            with open(file, "r", encoding="utf-8") as handle:
-                data = json.load(handle)
-        except FileNotFoundError as exc:
-            raise RunArtifactError(
-                f"Run {run_id!r} is incomplete: {name} is missing in {run_dir}."
-            ) from exc
-        except (OSError, ValueError) as exc:
-            raise RunArtifactError(f"Run {run_id!r}: cannot read {file}: {exc}") from exc
-        if not isinstance(data, dict) or data.get("schema_version") != SCHEMA_VERSION:
-            raise RunArtifactError(
-                f"Run {run_id!r}: {name} has unsupported schema_version "
-                f"{data.get('schema_version') if isinstance(data, dict) else None!r} "
-                f"(expected {SCHEMA_VERSION})."
-            )
-        if data.get("run_id") != run_id:
-            raise RunArtifactError(f"Run {run_id!r}: {name} belongs to run {data.get('run_id')!r}.")
-        loaded[key] = data
-    return loaded
+    documents = {
+        key: _load_document(run_dir / name, name, run_id)
+        for key, name in (("run", RUN_FILE), ("metrics", METRICS_FILE))
+    }
+    run_document = documents["run"]
+    metrics_document = documents["metrics"]
+    run_fingerprint = _validate_document_schema(run_document, RUN_FILE, run_id)
+    metrics_fingerprint = _validate_document_schema(metrics_document, METRICS_FILE, run_id)
+    _validate_run_relationships(
+        run_document, metrics_document, run_fingerprint, metrics_fingerprint
+    )
+    return documents
 
 
 def remove_stale_staging(root: str | os.PathLike[str]) -> list[Path]:

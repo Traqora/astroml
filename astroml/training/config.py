@@ -10,6 +10,11 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from astroml.storage import ArtifactStorageConfig
+from astroml.training.early_stopping import (
+    EARLY_STOPPING_MONITORS,
+    EarlyStoppingMonitor,
+    default_mode,
+)
 
 
 class EarlyStoppingConfig(BaseModel):
@@ -22,13 +27,24 @@ class EarlyStoppingConfig(BaseModel):
     )
     min_delta: float = Field(
         default=1e-4,
+        ge=0.0,
+        allow_inf_nan=False,
         description="Minimum change in monitored quantity to qualify as an improvement.",
     )
-    monitor: str = Field(default="val_loss", description="Quantity to be monitored.")
-    mode: Literal["min", "max"] = Field(
-        default="min",
-        description="One of `min`, `max`. In `min` mode, training will stop when the quantity monitored has stopped decreasing; in `max` mode it will stop when the quantity monitored has stopped increasing.",
+    monitor: EarlyStoppingMonitor = Field(
+        default="val_loss",
+        description=f"Quantity to be monitored: {', '.join(EARLY_STOPPING_MONITORS)}.",
     )
+    mode: Literal["min", "max"] | None = Field(
+        default=None,
+        description="One of `min`, `max`; defaults to the direction implied by `monitor`.",
+    )
+
+    @model_validator(mode="after")
+    def _resolve_mode(self) -> EarlyStoppingConfig:
+        if self.mode is None:
+            self.mode = default_mode(self.monitor)
+        return self
 
 
 class TemporalSplitConfig(BaseModel):

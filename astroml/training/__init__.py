@@ -12,6 +12,10 @@ __all__ = [
     "EarlyStoppingConfig",
     "TemporalSplitConfig",
     "OptimizerConfig",
+    "set_seed",
+    "validate_seed",
+    "EarlyStopper",
+    "EARLY_STOPPING_MONITORS",
     "ONNXConverter",
     "ONNXOptimizer",
     "QuantizationConfig",
@@ -43,6 +47,13 @@ _LAZY = {
     "EarlyStoppingConfig": ("astroml.training.config", "EarlyStoppingConfig"),
     "TemporalSplitConfig": ("astroml.training.config", "TemporalSplitConfig"),
     "OptimizerConfig": ("astroml.training.config", "OptimizerConfig"),
+    "set_seed": ("astroml.training.seed", "set_seed"),
+    "validate_seed": ("astroml.training.seed", "validate_seed"),
+    "EarlyStopper": ("astroml.training.early_stopping", "EarlyStopper"),
+    "EARLY_STOPPING_MONITORS": (
+        "astroml.training.early_stopping",
+        "EARLY_STOPPING_MONITORS",
+    ),
     "ContinuousLearningPipeline": (
         "astroml.training.continuous_learning",
         "ContinuousLearningPipeline",
@@ -67,7 +78,7 @@ _LAZY = {
 }
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     if name in _LAZY:
         module_path, attr = _LAZY[name]
         module = import_module(module_path)

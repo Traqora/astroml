@@ -86,6 +86,13 @@ class ScoreResponse(BaseModel):
     scores: Dict[str, float]
 
 
+class ModelReadinessResponse(BaseModel):
+    status: Literal["ok"] = "ok"
+    service: Literal["fraud"] = "fraud"
+    checkpoint: str
+    ready: bool = True
+
+
 class FraudAlertOut(BaseModel):
     id: int
     account_id: str

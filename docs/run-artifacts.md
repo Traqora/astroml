@@ -51,6 +51,28 @@ outputs/runs/gcn-cora-001/
   (independent of key order). Equal fingerprints mean the same settings on
   the same inputs.
 
+### Validation on read (issue #1222)
+
+`read_run_artifacts` validates the whole directory before returning it, not
+just the schema version. Both files must be strict-JSON objects and carry:
+
+| Field | `run.json` | `metrics.json` | Rule |
+| --- | --- | --- | --- |
+| `schema_version` | required | required | must equal `1` |
+| `run_id` | required | required | must equal the requested run id |
+| `fingerprint` | required | required | lowercase 64-character SHA-256 hex, identical in both files |
+| `created_at` | required | – | ISO-8601 timestamp parseable by `datetime.fromisoformat` |
+| `config`, `inputs` | required | – | JSON objects |
+| `artifacts` | required | – | object whose `metrics` value is `metrics.json` |
+| `metrics` | – | required | JSON object |
+
+The stored fingerprint must also equal the fingerprint recomputed from
+`config` and `inputs`, so a run that describes its settings or results
+inconsistently is rejected with `RunArtifactError`. Extra fields are ignored
+within schema version 1, which lets a writer add metadata without breaking
+existing readers. Validation is local and standard library only: no torch,
+database or network service is consulted.
+
 ## Atomic writes (issue #1219)
 
 All files are first written into a hidden staging directory

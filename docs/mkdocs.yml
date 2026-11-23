@@ -37,6 +37,7 @@ nav:
     - Disaster-Recovery Drill: runbooks/disaster_recovery_drill.md
   - Environment Drift: environment-drift.md
   - V1 Persistent Volumes: v1-persistent-volumes.md
+  - V1 Run Artifacts: run-artifacts.md
   - V1 Errors: v1-errors.md
 
 markdown_extensions:

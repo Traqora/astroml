@@ -1,4 +1,4 @@
-"""Tests for astroml.artifacts.run_artifacts (issues #1216, #1219, #1220).
+"""Tests for astroml.artifacts.run_artifacts (issues #1216, #1219, #1220, #1223).
 
 Standard library only: these run in the v1 workflow without torch or any
 optional service.
@@ -285,3 +285,52 @@ class TestRunIdConflicts:
         assert a == b
         assert a != compute_fingerprint({"x": 1, "y": 3}, {"d": "a"})
         assert a != compute_fingerprint({"x": 1, "y": 2}, {"d": "b"})
+
+
+class TestReproduceSavedRun:
+    def test_saved_config_and_inputs_can_be_replayed_under_a_new_id(self, tmp_path: Path) -> None:
+        original = _write(tmp_path)
+        saved = read_run_artifacts(tmp_path, "run-1")
+        config = saved["run"]["config"]
+        inputs = saved["run"]["inputs"]
+        fingerprint = saved["run"]["fingerprint"]
+
+        assert compute_fingerprint(config, inputs) == fingerprint
+
+        replay = _write(
+            tmp_path,
+            "run-1-replay",
+            config=config,
+            inputs=inputs,
+            metrics=saved["metrics"]["metrics"],
+        )
+        assert replay.fingerprint == original.fingerprint
+        assert read_run_artifacts(tmp_path, "run-1-replay")["run"]["config"] == CONFIG
+
+    def test_replaying_with_the_original_id_reports_a_rerun(self, tmp_path: Path) -> None:
+        _write(tmp_path)
+        saved = read_run_artifacts(tmp_path, "run-1")
+
+        with pytest.raises(RunConflictError) as exc_info:
+            _write(
+                tmp_path,
+                "run-1",
+                config=saved["run"]["config"],
+                inputs=saved["run"]["inputs"],
+                metrics=saved["metrics"]["metrics"],
+            )
+
+        assert exc_info.value.same_inputs is True
+
+    def test_changed_saved_inputs_are_detected_before_replay(self, tmp_path: Path) -> None:
+        result = _write(tmp_path)
+        data = json.loads(result.run_file.read_text(encoding="utf-8"))
+        data["inputs"]["snapshot_sha256"] = "modified"
+        result.run_file.write_text(json.dumps(data), encoding="utf-8")
+
+        saved = read_run_artifacts(tmp_path, "run-1")
+
+        assert (
+            compute_fingerprint(saved["run"]["config"], saved["run"]["inputs"])
+            != saved["run"]["fingerprint"]
+        )

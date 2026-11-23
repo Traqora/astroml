@@ -626,6 +626,35 @@ docker network prune
 docker system prune -a
 ```
 
+### Clean local reset
+
+Use the volume-preserving reset for normal local recovery and v1 development:
+
+```bash
+make reset-local
+```
+
+This runs `docker compose down --remove-orphans` without `--volumes`, then
+starts only `postgres`, `redis`, and `api`. It recreates containers and
+application configuration without deleting database or feature-store state.
+Optional profiles (GPU, CPU training, monitoring, production, development,
+and Soroban) are out of scope and are not started.
+
+Before recycling containers, Docker must be running and the local Compose
+project must be the repository's `docker-compose.yml`. Recommended resources
+for this core workflow are 2 CPU cores and 4 GB RAM.
+
+For a full destructive reset, first back up required data, then run:
+
+```bash
+bash scripts/reset-local.sh --destroy-user-data
+```
+
+The script prompts for the exact phrase `DELETE_LOCAL_USER_DATA`; `make
+reset-local-data` uses the same guard. Both named and bind-mounted user data
+must be treated separately: this workflow removes Compose named volumes but
+does not delete repository files or bind-mounted directories.
+
 ### Backups
 
 #### Database Backup

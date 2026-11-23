@@ -132,10 +132,7 @@ class ModelStore:
 
         enriched = collect_metadata(
             model=model_object,
-            dataset=dataset,
-            training_duration=training_duration,
-            training_config=training_config,
-            sample_input=sample_input,
+            training_duration=training_duration_secs,
         )
 
         # Save metadata sidecar

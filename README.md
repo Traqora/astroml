@@ -704,12 +704,17 @@ service is unavailable.
 
 ## 📌 Roadmap
 
+The following are **not yet supported**; the consolidated list with status and
+notes lives in [docs/ROADMAP.md](docs/ROADMAP.md).
+
 - [ ] Real-time streaming ingestion
 - [ ] Temporal GNN models
 - [ ] Contrastive learning pipelines
-- [ ] Feature store
-- [ ] Model benchmarking suite
-- [ ] Docker deployment
+
+> The feature store, the model benchmarking suite, and Docker deployment were
+> previously listed here as to-dos. They have shipped — see
+> [docs/ROADMAP.md](docs/ROADMAP.md#already-supported-removed-from-the-to-do-list)
+> — and are no longer roadmap items.
 
 ---
 

@@ -54,6 +54,12 @@ jobs:
       - name: Check documentation links
         run: python scripts/check_doc_links.py
 
+      - name: Check release-workflow documentation links
+        # The release notes embedded in .github/workflows/release.yml link to
+        # the v1 onboarding docs. Verify they resolve so a release never ships
+        # a broken doc link.
+        run: python scripts/check_release_doc_links.py
+
       - name: Check i18n locale registry
         run: python scripts/check_i18n_locales.py
 

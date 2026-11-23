@@ -694,29 +694,13 @@ cargo test --lib security -- --nocapture
 - Efficient iteration patterns
 - Avoid unnecessary computations
 
-## Future Enhancements
+## Roadmap
 
-### Planned Features
-
-1. **Event Logging**
-   - Emit events for all state changes
-   - Enable off-chain monitoring
-   - Improve transparency
-
-2. **Time-Based Expiry**
-   - Automatic report expiry
-   - Reputation decay over time
-   - Appeal time limits
-
-3. **Multi-Sig Admin**
-   - Require multiple admin signatures
-   - Distributed governance
-   - Enhanced security
-
-4. **Staking Mechanism**
-   - Validator staking requirements
-   - Slashing for malicious behavior
-   - Economic incentives
+Planned contract features — event logging, time-based expiry, multi-sig
+admin, and a staking mechanism — are **not yet supported**. They are tracked
+in the consolidated [ROADMAP.md](ROADMAP.md) so the onboarding path describes
+only the current contract surface. See
+[Roadmap — Soroban fraud registry contract](ROADMAP.md#soroban-fraud-registry-contract).
 
 ## Support
 

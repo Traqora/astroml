@@ -2,6 +2,57 @@
 
 This guide collects common issues encountered while installing, configuring, ingesting data, training models, or running the API.
 
+For the clean-machine install path itself, follow
+[ONBOARDING.md](ONBOARDING.md). For which CI/CD and local workflows need
+PostgreSQL, see [CI_DATABASE_REQUIREMENTS.md](CI_DATABASE_REQUIREMENTS.md).
+Features that are not yet supported are listed in [ROADMAP.md](ROADMAP.md).
+
+## Supported boundaries
+
+The documented v1 workflow is:
+
+1. A fresh virtual environment with `pip install -e ".[dev]"`.
+2. Targeted `pytest <path>` runs (not `make test`).
+3. PostgreSQL **only** for ingestion, DB-backed graph, and API-session tests;
+   everything else runs with no database service.
+
+What is **out of scope** for the v1 path, and therefore not supported by this
+guide:
+
+- `make install`, `make dev-setup`, and `make test` as one-shot commands — see
+  the failures below for why each is broken and what to run instead.
+- The full `docker compose up -d` stack for a unit-test loop. Start only
+  `postgres redis` when you need the database.
+- Running tests that import optional dependencies (`fastapi`, `polars`,
+  `torch_geometric`) without installing the matching requirements file.
+
+## Installation failures
+
+These are the install commands that fail on a clean machine, why they fail,
+and the command that works instead. Each is documented because a contributor
+following the README in order hits one of them first.
+
+| Symptom | Likely cause | Suggested fix |
+| --- | --- | --- |
+| `make install` fails with a pip usage error | The `Makefile` defines `install:` twice; GNU Make keeps the last recipe, which is `pip install -e "[dev]"` and is missing the `.` package path | Run `pip install -e ".[dev]"` directly instead of `make install` |
+| `make dev-setup` fails with exit 126 | It starts the entire stack, then runs `scripts/seed_data.sh` and `scripts/health_check.sh`, which are committed non-executable and only `echo` placeholders | Bring up only what you need: `docker compose up -d postgres redis`, then the explicit steps in [ONBOARDING.md](ONBOARDING.md) |
+| `make test` aborts during collection | `pytest tests/` stops at collection: modules fail to import because `astroml/cache/graph_cache.py` does not compile, and optional dependencies are absent | Run a targeted path, or `pytest tests/ -q --continue-on-collection-errors` for a real signal; compare against a pristine checkout before treating a failure as yours |
+| `ModuleNotFoundError: No module named 'astroml'` | The package is not installed in the active interpreter | Activate the venv and run `pip install -e ".[dev]"`; do not rely on `make install` |
+| `ModuleNotFoundError: No module named 'fastapi'` (or `polars`, `torch_geometric`) | The CPU/full requirements do not declare the API or optional ML extras | Install `requirements-api.txt` for API tests, `requirements-train.txt` for GPU graph models; install requirement files in **separate** pip invocations to avoid `error: resolution-too-deep` |
+| `pip` fails with `error: resolution-too-deep` | Two requirement graphs were resolved in one `pip install -r a.txt -r b.txt` call | Install each requirements file in its own `pip install -r ...` command |
+| `python` points to the wrong interpreter | Multiple Python versions are installed | Use the interpreter that owns the active virtual environment |
+| Import errors after pulling a new branch | Dependencies changed or the package is not installed in editable mode | Reinstall dependencies and run `pip install -e .` |
+
+## Configuration failures
+
+| Symptom | Likely cause | Suggested fix |
+| --- | --- | --- |
+| `DATABASE_URL` is set but the app ignores it | The app reads `ASTROML_DATABASE_URL`, not `DATABASE_URL`; `resolve_database_url()` prefers the env var over the YAML file | `export ASTROML_DATABASE_URL="postgresql://astroml:astroml_password@localhost:5432/astroml"` |
+| Database connection refused / authentication failed | `config/database.yaml` ships `host: localhost` with an **empty** password, which does not match the compose service (`astroml_password`) | Set `ASTROML_DATABASE_URL` explicitly, or edit [config/database.yaml](../config/database.yaml) to match |
+| Works on the host, fails inside compose | `localhost` is right for a Python process on your machine; inside the compose network the host is `postgres` | Use `POSTGRES_HOST=postgres` inside compose (see `.env.example`) and `localhost` on the host |
+| Migrations did not apply after a schema change | `migrations/00_init.sql` only runs the **first time the data volume is initialised**; an older volume keeps the old schema | `docker compose down -v postgres` to recreate the volume, then `docker compose up -d postgres` |
+| `ASTROML_DATABASE_URL` is ignored | The variable was not exported in the current shell | Export it in the active shell before running the command |
+
 ## Installation Issues
 
 | Symptom | Likely cause | Suggested fix |
@@ -56,5 +107,8 @@ When reporting an issue, gather the following:
 
 - [README.md](../README.md)
 - [CONTRIBUTING.md](../CONTRIBUTING.md)
-- [docs/CONFIGURATION.md](./CONFIGURATION.md)
+- [ONBOARDING.md](ONBOARDING.md)
+- [CONFIGURATION.md](CONFIGURATION.md)
+- [CI_DATABASE_REQUIREMENTS.md](CI_DATABASE_REQUIREMENTS.md) — which workflows need PostgreSQL
+- [ROADMAP.md](ROADMAP.md) — features that are not yet supported
 - [SECURITY.md](../SECURITY.md)

@@ -138,6 +138,19 @@ jobs:
 
           - `linux/amd64`
           - `linux/arm64`
+
+          ## Documentation
+
+          These links are checked by `scripts/check_release_doc_links.py` in
+          the docs workflow, so a release never ships a link to a page that no
+          longer exists.
+
+          - [Quick Start](QUICKSTART_GUIDE.md) — run the pipeline end to end on synthetic data.
+          - [Onboarding](docs/ONBOARDING.md) — from a clean checkout to an open PR.
+          - [Configuration](docs/CONFIGURATION.md) — database, feature store, and training config.
+          - [Troubleshooting](docs/TROUBLESHOOTING.md) — common install, configuration, and runtime failures.
+          - [Which workflows need PostgreSQL](docs/CI_DATABASE_REQUIREMENTS.md) — run only what you need.
+          - [Roadmap](docs/ROADMAP.md) — features that are not yet supported.
           EOF
 
       - name: Create GitHub Release

@@ -25,6 +25,11 @@ AstroML is a comprehensive machine learning framework for the Stellar network, p
 ### Autonomous Agents
 - [LLM Agent Framework](agent-framework.md)
 
+### Roadmap & Operations
+- [Troubleshooting](TROUBLESHOOTING.md)
+- [Which workflows need PostgreSQL](CI_DATABASE_REQUIREMENTS.md)
+- [Roadmap](ROADMAP.md)
+
 ### Configuration & Experiments
 - [Configuration Reference](CONFIGURATION.md)
 - [V1 Errors](v1-errors.md)

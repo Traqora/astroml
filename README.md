@@ -286,6 +286,11 @@ Verify your Python version before proceeding:
 python --version   # must print 3.10 or higher
 ```
 
+Before running quick start, create or use a PostgreSQL database and provide its
+connection through `config/database.yaml` or `ASTROML_DATABASE_URL`. The database
+must include the AstroML schema. Quick start does not require Redis, MLflow, the
+API server, or a GPU.
+
 ### Requirements files
 
 Several `requirements` files are provided — pick the profile that matches your workflow:
@@ -345,12 +350,17 @@ python -m astroml.quick_start
 python -m astroml.quick_start --num-ledgers 200 --num-accounts 100 --epochs 20 --seed 42
 ```
 
-### Option 3: Using CLI
+The canonical command is the top-level CLI module:
 
 ```bash
-# Run quick start command
 python -m astroml quickstart --num-ledgers 100 --num-accounts 50 --epochs 10 --seed 42
 ```
+
+Use `python -m astroml.cli quickstart --help` to verify the supported flags.
+The defaults are `--num-ledgers 100`, `--num-accounts 50`, `--epochs 10`, and
+`--seed 42`. Ledger, account, and epoch values must be greater than zero.
+Make is optional; `make quickstart` and `make quickstart-verbose` run the same
+CLI implementation.
 
 ### What Quick Start Does
 

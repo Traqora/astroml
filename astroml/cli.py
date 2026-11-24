@@ -158,21 +158,27 @@ def _add_quickstart_subcommand(
         "quickstart",
         help="Run quick start: ingestion → graph → train pipeline with sample data",
     )
+    def positive_int(value: str) -> int:
+        parsed = int(value)
+        if parsed <= 0:
+            raise argparse.ArgumentTypeError("value must be greater than zero")
+        return parsed
+
     quickstart.add_argument(
         "--num-ledgers",
-        type=int,
+        type=positive_int,
         default=100,
         help="Number of sample ledgers to generate (default: 100)",
     )
     quickstart.add_argument(
         "--num-accounts",
-        type=int,
+        type=positive_int,
         default=50,
         help="Number of sample accounts (default: 50)",
     )
     quickstart.add_argument(
         "--epochs",
-        type=int,
+        type=positive_int,
         default=10,
         help="Training epochs (default: 10)",
     )

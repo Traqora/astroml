@@ -77,7 +77,7 @@ quickstart.add_argument("--seed", type=int, default=42)
 **Usage:**
 
 ```bash
-python -m astroml quickstart --num-ledgers 100 --num-accounts 50 --epochs 10 --seed 42
+python -m astroml.cli quickstart --num-ledgers 100 --num-accounts 50 --epochs 10 --seed 42
 ```
 
 ### Output Structure

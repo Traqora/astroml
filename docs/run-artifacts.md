@@ -51,6 +51,28 @@ outputs/runs/gcn-cora-001/
   (independent of key order). Equal fingerprints mean the same settings on
   the same inputs.
 
+### Validation on read (issue #1222)
+
+`read_run_artifacts` validates the whole directory before returning it, not
+just the schema version. Both files must be strict-JSON objects and carry:
+
+| Field | `run.json` | `metrics.json` | Rule |
+| --- | --- | --- | --- |
+| `schema_version` | required | required | must equal `1` |
+| `run_id` | required | required | must equal the requested run id |
+| `fingerprint` | required | required | lowercase 64-character SHA-256 hex, identical in both files |
+| `created_at` | required | – | ISO-8601 timestamp parseable by `datetime.fromisoformat` |
+| `config`, `inputs` | required | – | JSON objects |
+| `artifacts` | required | – | object whose `metrics` value is `metrics.json` |
+| `metrics` | – | required | JSON object |
+
+The stored fingerprint must also equal the fingerprint recomputed from
+`config` and `inputs`, so a run that describes its settings or results
+inconsistently is rejected with `RunArtifactError`. Extra fields are ignored
+within schema version 1, which lets a writer add metadata without breaking
+existing readers. Validation is local and standard library only: no torch,
+database or network service is consulted.
+
 ## Reproducing a saved run (issue #1223)
 
 This section explains how to reproduce a saved run. A v1 run artifact records
@@ -62,9 +84,12 @@ run.
 ### Steps
 
 1. Read the run with `read_run_artifacts(root, run_id)`. The reader rejects a
-   missing, corrupt, unsupported-schema, or mismatched-run-id directory.
-2. Recompute the fingerprint from the saved `config` and `inputs` before using
-   them. A mismatch means the artifact changed and must not be reproduced.
+   missing, corrupt, unsupported-schema, or mismatched-run-id directory, and
+   one whose fingerprint does not match its `config` and `inputs` (see
+   *Validation on read* above).
+2. Optionally recompute the fingerprint from the saved `config` and `inputs`
+   before using them. A mismatch means the artifact changed and must not be
+   reproduced.
 3. Run the same code with the saved settings, the same input contents, and the
    same dependency versions. Supply the same random seed when the training
    entry point accepts one.
@@ -105,7 +130,8 @@ source-code revision. Record any extra detail needed to repeat the run in
 ### Failure cases
 
 * `RunArtifactError`: the saved directory is missing, corrupt, incomplete, has
-  an unsupported `schema_version`, or belongs to another run id. Stop; there
+  an unsupported `schema_version`, belongs to another run id, or fails
+  validation (including a fingerprint mismatch). Stop; there
   is no trustworthy configuration to reproduce.
 * Fingerprint mismatch: the saved `config` or `inputs` no longer match
   `run.json`. Stop and obtain a valid artifact.
@@ -126,7 +152,9 @@ source-code revision. Record any extra detail needed to repeat the run in
 * Equal fingerprints prove equal `config` and `inputs` only. They do not prove
   identical code, dependencies, hardware, randomness, or metrics.
 * Bit-for-bit reproducibility is not a v1 guarantee: the baseline `train()`
-  does not seed RNGs and uses a GPU when available (see
+  seeds RNGs (`seed=42` by default), which makes reruns repeatable on the same
+  device and library versions, but it uses a GPU when available and GPU
+  kernels may be nondeterministic (see
   [baseline-model-assumptions.md](baseline-model-assumptions.md)).
 
 ## Atomic writes (issue #1219)

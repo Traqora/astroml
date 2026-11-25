@@ -16,9 +16,20 @@ python train.py training.lr=0.001
 # Use debug experiment
 python train.py experiment=debug
 
+# Pin every random generator for a reproducible run
+python train.py --seed 123
+
 # Override multiple parameters
 python train.py model.hidden_dims=[128,64] training.lr=0.01 training.epochs=300
 ```
+
+`--seed` overrides `experiment.seed` for that invocation. The value must be an
+integer in `[0, 2**32 - 1]`; invalid values raise `ValueError` before dataset
+loading or model initialisation. Seeding covers Python `random`, NumPy,
+PyTorch CPU/CUDA, cuDNN flags and `PYTHONHASHSEED` for child processes. Repeat
+runs are reproducible on the same device and library versions; see
+[baseline-model-assumptions.md](baseline-model-assumptions.md) for the v1
+boundary.
 
 ### Hyperparameter Sweeps
 
@@ -100,8 +111,39 @@ early_stopping:
   patience: 50
   min_delta: 1e-4
   monitor: "val_loss"
-  mode: "min"
+  mode: null
 ```
+
+`monitor` accepts exactly four names: `train_loss`, `train_accuracy`,
+`val_loss` and `val_accuracy`. Loss monitors default to `mode: min`; accuracy
+monitors default to `mode: max`. An explicit `mode` overrides that default.
+`min_delta` must be finite and non-negative, and `patience` must be a non-negative
+integer.
+
+The stopper checks the monitor once per training epoch in the Hydra path and
+once per validation evaluation in the baseline path (`eval_every` in
+`astroml.training.train_gcn.train`). An improvement is a decrease larger than
+`min_delta` in `min` mode, or an increase larger than `min_delta` in `max` mode.
+After `patience` consecutive evaluations without such an improvement, training
+stops and the best epoch is recorded in `results.yaml`. `patience: 0` disables
+stopping, which is the way to run all configured epochs.
+
+```bash
+# Stop when validation accuracy has not improved for 10 epochs
+python train.py training.early_stopping.monitor=val_accuracy \
+  training.early_stopping.mode=max training.early_stopping.patience=10
+```
+
+The same rule is available to the documented baseline:
+
+```python
+from astroml.training.config import EarlyStoppingConfig
+from astroml.training.train_gcn import train
+
+train(early_stopping=EarlyStoppingConfig(monitor="val_loss", patience=10))
+```
+
+No database, metrics server or remote tracker is required for early stopping.
 
 ### Data Config (`configs/data/cora.yaml`)
 

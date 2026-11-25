@@ -24,6 +24,8 @@ TRAIN_SRC = ROOT / "astroml" / "training" / "train_gcn.py"
 REQUIRED_SECTIONS = [
     "## Model",
     "## Training protocol",
+    "## Deterministic setup (issue #1206)",
+    "## Early stopping (issue #1208)",
     "## Input contract",
     "## Output contract",
     "## Supported boundaries",
@@ -87,6 +89,7 @@ def code_baseline() -> dict[str, object]:
         "weight_decay": adam_kwargs["weight_decay"],
         "epochs": defaults["epochs"],
         "eval_every": defaults["eval_every"],
+        "seed": defaults["seed"],
         "layers": conv_layers,
     }
 
@@ -142,11 +145,21 @@ def test_document_states_the_input_contract_the_code_enforces() -> None:
     # ...and those validators really are called by train().
     source = TRAIN_SRC.read_text(encoding="utf-8")
     assert "validate_edge_index(" in source and "validate_masks(" in source
+    assert "set_seed(seed)" in source
+    assert code_baseline()["seed"] == 42
 
 
 def test_document_calls_out_what_is_not_supported() -> None:
     text = _doc_text()
-    for needle in ("Transductive", "Inductive", "not seeded", "Bit-for-bit"):
+    for needle in (
+        "Transductive",
+        "Inductive",
+        "seed=42",
+        "PYTHONHASHSEED",
+        "val_loss",
+        "patience",
+        "Bit-for-bit",
+    ):
         assert needle.lower() in text.lower(), f"boundary {needle!r} is not documented"
 
 

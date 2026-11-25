@@ -51,6 +51,7 @@ AstroML is a comprehensive machine learning framework for the Stellar network, p
 - [GitOps Workflow](gitops-workflow.md)
 
 ### Operations
+- [Supported v1 Inference API](v1-inference-api.md)
 - [API Authentication for Deployed Inference](API_AUTHENTICATION.md)
 - [API Errors and Operator Actions](API_ERRORS.md)
 - [Alerting](ALERTING.md)

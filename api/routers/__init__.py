@@ -34,6 +34,7 @@ from api.routers.v1 import (
     onboarding_router,
     query_router,
     rate_limit_router,
+    readiness_router,
     reports_router,
     search_router,
     stream_router,

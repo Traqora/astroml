@@ -10,21 +10,22 @@ Usage:
 """
 
 import argparse
-import os
 import logging
+import os
 import sys
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
+import hydra
 import torch
 import torch.nn.functional as F
+from hydra.utils import get_original_cwd, instantiate
 from omegaconf import DictConfig, OmegaConf
-import hydra
-from hydra.utils import instantiate, get_original_cwd
 
-from astroml.models.gcn import GCN
 from astroml.tracking import MLflowTracker
 from astroml.training.config import TrainingConfig, validate_training_config_data
+from astroml.training.early_stopping import EarlyStopper
+from astroml.training.seed import set_seed
 from astroml.training.temporal_split import TemporalSplitter
 
 # Set up logging
@@ -54,19 +55,8 @@ def set_device(device_config: str) -> torch.device:
 
 
 def set_random_seed(seed: int) -> None:
-    """Set deterministic random seeds for Python, NumPy, and PyTorch."""
-    import random as _random
-    import numpy as _np
-
-    _random.seed(seed)
-    _np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-    os.environ["PYTHONHASHSEED"] = str(seed)
+    """Set deterministic seeds for Python, NumPy and PyTorch via v1 setup."""
+    set_seed(seed)
 
 
 def apply_temporal_masks(data: Any, cfg: DictConfig) -> Any:
@@ -262,11 +252,19 @@ def train(cfg: DictConfig) -> Dict[str, Any]:
     # Training loop
     logger.info(f"Starting training for {cfg.training.epochs} epochs")
 
+    stopper = EarlyStopper.from_config(cfg.training.early_stopping)
+    logger.info(
+        "Early stopping: monitor=%s mode=%s patience=%d min_delta=%s",
+        stopper.monitor,
+        stopper.mode,
+        stopper.patience,
+        stopper.min_delta,
+    )
+
     best_val_acc = 0.0
-    patience_counter = 0
     best_model_path = Path(cfg.experiment.save_dir) / "best_model.pth"
 
-    for epoch in range(cfg.training.epochs):
+    for epoch in range(1, cfg.training.epochs + 1):
         # Train
         train_loss = train_epoch(model, data, optimizer, device)
 
@@ -278,8 +276,10 @@ def train(cfg: DictConfig) -> Dict[str, Any]:
         tracker.log_metrics(
             {
                 "train_loss": train_loss,
+                "train_accuracy": train_metrics["accuracy"],
                 "train_acc": train_metrics["accuracy"],
                 "val_loss": val_metrics["loss"],
+                "val_accuracy": val_metrics["accuracy"],
                 "val_acc": val_metrics["accuracy"],
             },
             step=epoch,
@@ -294,22 +294,24 @@ def train(cfg: DictConfig) -> Dict[str, Any]:
                 f"Val Acc: {val_metrics['accuracy']:.4f}"
             )
 
-        # Early stopping
-        if val_metrics["accuracy"] > best_val_acc:
-            best_val_acc = val_metrics["accuracy"]
-            patience_counter = 0
+        monitor_metrics = {
+            "train_loss": train_loss,
+            "train_accuracy": train_metrics["accuracy"],
+            "val_loss": val_metrics["loss"],
+            "val_accuracy": val_metrics["accuracy"],
+        }
+        should_stop = stopper.step(monitor_metrics, epoch=epoch)
+        best_val_acc = max(best_val_acc, val_metrics["accuracy"])
 
-            # Save best model
-            if cfg.training.save_best_only:
-                torch.save(model.state_dict(), best_model_path)
-        else:
-            patience_counter += 1
+        if stopper.last_improved and cfg.training.save_best_only:
+            torch.save(model.state_dict(), best_model_path)
 
-        if (
-            cfg.training.early_stopping.patience > 0
-            and patience_counter >= cfg.training.early_stopping.patience
-        ):
-            logger.info(f"Early stopping at epoch {epoch}")
+        if should_stop:
+            logger.info(
+                "Early stopping at epoch %d after %d evaluations without improvement",
+                epoch,
+                stopper.patience,
+            )
             break
 
     # Final evaluation
@@ -322,6 +324,9 @@ def train(cfg: DictConfig) -> Dict[str, Any]:
             "test_acc": test_metrics["accuracy"],
             "test_loss": test_metrics["loss"],
             "best_val_acc": best_val_acc,
+            "best_monitored_value": (
+                float(stopper.best_value) if stopper.best_value is not None else 0.0
+            ),
         }
     )
 
@@ -343,7 +348,10 @@ def train(cfg: DictConfig) -> Dict[str, Any]:
         "test_accuracy": test_metrics["accuracy"],
         "test_loss": test_metrics["loss"],
         "best_val_accuracy": best_val_acc,
-        "epochs_trained": epoch + 1,
+        "best_monitored_metric": stopper.monitor,
+        "best_monitored_value": stopper.best_value,
+        "epochs_trained": epoch,
+        **stopper.state_dict(),
     }
 
 

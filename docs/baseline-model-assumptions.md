@@ -39,7 +39,7 @@ source, so this page cannot silently drift.
 | Loss             | negative log-likelihood (`NodeClassificationObjective(log_input=True)`) on the train mask |
 | Reported metrics | `accuracy` and `macro_f1`, on validation during training and on the test mask at the end |
 | Batching         | none: the whole graph is processed every step |
-| Randomness       | **not seeded** by `train()`; see "Not guaranteed"   |
+| Randomness       | seeded by `train()` with `seed=42` before dataset loading and model initialisation |
 
 ## Input contract
 
@@ -54,6 +54,39 @@ source, so this page cannot silently drift.
 forward pass, so a wrong shape or dtype, an out-of-range or negative node id,
 or overlapping masks raises `ValueError` up front instead of producing a
 plausible-looking but meaningless metric.
+
+## Deterministic setup (issue #1206)
+
+`train(seed=42)` calls `astroml.training.seed.set_seed` before loading Cora or
+constructing the GCN. The seed sets Python `random`, NumPy, PyTorch CPU and all
+CUDA devices, the cuDNN deterministic flags and `PYTHONHASHSEED` for child
+processes. It must be an integer in `[0, 2**32 - 1]`; anything else raises
+`ValueError` before any generator is touched. Pass `seed=None` to keep the
+caller's existing random state. Passing no argument keeps the documented v1
+default of `42`.
+
+The Hydra path (`python train.py`) uses the same utility through
+`experiment.seed` or the top-level `--seed` flag, which overrides it. NumPy
+and PyTorch are optional to the utility itself: when one is missing, the other
+generators are still seeded. No database, network service or cloud artifact
+store is involved.
+
+## Early stopping (issue #1208)
+
+`train()` accepts an `EarlyStoppingConfig` and uses the shared
+`astroml.training.early_stopping.EarlyStopper`. The supported monitors are
+`train_loss`, `train_accuracy`, `val_loss` and `val_accuracy`; the default is
+`val_loss` with `mode="min"`, `patience=50` and `min_delta=1e-4`. Loss monitors
+default to `min`, accuracy monitors to `max`, and an explicit `mode` overrides
+the default.
+
+The baseline evaluates every `eval_every` epochs and on the final epoch, so the
+stopper checks the monitor on that cadence rather than on every optimizer step.
+`val_loss` is computed from the same objective and validation mask as the
+reported validation accuracy. A run stops after `patience` consecutive
+evaluations without an improvement greater than `min_delta`; `patience=0`
+disables stopping. The returned `TrainingReport` contains every epoch that ran,
+including the stopping epoch, so a shortened run remains inspectable.
 
 ## Output contract
 
@@ -86,10 +119,11 @@ Not supported (use a different model or extend the baseline first):
 
 ## Not guaranteed
 
-* **Bit-for-bit reproducibility.** `train()` does not set a random seed and
-  uses GPU kernels when available, so two runs differ slightly. Compare
-  models by repeated runs, and record the config and input identifiers with
-  every run (`run.json`) so differences are explainable.
+* **Bit-for-bit reproducibility across hardware or library versions.** The
+  seed makes reruns reproducible on the same device and library versions, but
+  GPU kernels and BLAS implementations can still differ across machines.
+  Record the config and input identifiers with every run (`run.json`) so
+  differences are explainable.
 * Absolute accuracy. Cora numbers do not transfer to ledger graphs.
 
 ## Where older docs disagree

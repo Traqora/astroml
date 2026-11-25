@@ -16,6 +16,7 @@ from astroml.ingestion.enhanced_stream import (
     EnhancedStreamConfig,
     RateLimitTracker,
 )
+from astroml.utils.exceptions import ParseError, SourceUnavailableError
 
 
 class TestRateLimitTracker:
@@ -217,6 +218,59 @@ class TestEnhancedStellarStream:
             # Should record failure and sleep
             assert stream.health_monitor.consecutive_failures == 1
             mock_sleep.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_permanent_ingestion_error_is_not_retried(self, stream):
+        stream._running = True
+        builder = MagicMock()
+        builder.limit.return_value = builder
+        builder.call.side_effect = ParseError("invalid transaction payload")
+
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            with pytest.raises(ParseError):
+                async for _record in stream._stream_with_retry(builder):
+                    pass
+
+        assert builder.call.call_count == 1
+        mock_sleep.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_permanent_horizon_client_error_is_not_retried(self, stream):
+        stream._running = True
+        builder = MagicMock()
+        builder.limit.return_value = builder
+        error = BaseHorizonError(response=MagicMock())
+        error.status = 400
+        builder.call.side_effect = error
+
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            with pytest.raises(BaseHorizonError):
+                async for _record in stream._stream_with_retry(builder):
+                    pass
+
+        assert builder.call.call_count == 1
+        mock_sleep.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_retryable_ingestion_error_retries_then_recovers(self, stream):
+        stream._running = True
+        record = {"paging_token": "123", "id": "record-1"}
+        builder = MagicMock()
+        builder.limit.return_value = builder
+        builder.call.side_effect = [
+            SourceUnavailableError("Horizon unavailable"),
+            {"_embedded": {"records": [record]}},
+        ]
+
+        received = []
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            async for item in stream._stream_with_retry(builder):
+                received.append(item)
+                stream._running = False
+
+        assert received == [record]
+        assert builder.call.call_count == 2
+        mock_sleep.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_stream_effects_basic(self, stream):

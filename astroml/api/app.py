@@ -36,6 +36,7 @@ from astroml.api.routers import (
     validation,
 )
 from astroml.api.scheduler import start_scheduler, stop_scheduler
+from astroml.serving.model_loader import ModelLoader
 
 # ─── Database setup ───────────────────────────────────────────────────────────
 
@@ -46,6 +47,7 @@ DATABASE_URL = os.environ.get(
 
 _engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
 _session_factory: async_sessionmaker = async_sessionmaker(_engine, expire_on_commit=False)
+_model_loader = ModelLoader()
 
 
 # ─── Lifespan ────────────────────────────────────────────────────────────────
@@ -53,7 +55,12 @@ _session_factory: async_sessionmaker = async_sessionmaker(_engine, expire_on_com
 
 @asynccontextmanager
 async def lifespan(_application: FastAPI) -> AsyncGenerator[None, None]:
-    """Start the batch scheduler on startup; stop it cleanly on shutdown."""
+    """Load the configured model once, then start and stop the batch scheduler."""
+    _application.state.model_loader = _model_loader
+    artifact_path = os.environ.get("MODEL_ARTIFACT_PATH")
+    if artifact_path:
+        model_name = os.environ.get("MODEL_NAME", "default")
+        _application.state.model = _model_loader.load_model(model_name, artifact_path)
     start_scheduler(_session_factory)
     try:
         yield

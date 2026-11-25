@@ -16,6 +16,7 @@ Input and output files support either:
 
 import argparse
 import json
+import os
 import pathlib
 import random
 from dataclasses import dataclass
@@ -85,6 +86,38 @@ def _write_transactions(path: pathlib.Path, txs: list[dict[str, Any]], fmt: str)
     with path.open("w", encoding="utf-8") as f:
         for tx in txs:
             f.write(json.dumps(tx) + "\n")
+
+
+def _validate_injection_paths(
+    input_path: pathlib.Path,
+    output_path: pathlib.Path,
+    summary_path: pathlib.Path | None,
+) -> None:
+    if not input_path.is_file():
+        raise FileNotFoundError(f"Input ledger must be an existing file: {input_path}")
+    if not os.access(input_path, os.R_OK):
+        raise PermissionError(f"Input ledger is not readable: {input_path}")
+
+    destinations = [output_path, *([summary_path] if summary_path is not None else [])]
+    resolved_paths = [input_path.resolve(), *(path.resolve() for path in destinations)]
+    if len(set(resolved_paths)) != len(resolved_paths):
+        raise ValueError("input, output, and summary paths must be different files")
+
+    for destination in destinations:
+        if destination.exists() and not destination.is_file():
+            raise IsADirectoryError(f"Output destination is not a file: {destination}")
+        if destination.exists() and not os.access(destination, os.W_OK):
+            raise PermissionError(f"Output destination is not writable: {destination}")
+        parent = destination.parent
+        while not parent.exists() and parent != parent.parent:
+            parent = parent.parent
+        if not parent.is_dir():
+            raise NotADirectoryError(f"Output parent is not a directory: {parent}")
+        if not os.access(parent, os.W_OK | os.X_OK):
+            raise PermissionError(f"Output parent is not writable: {parent}")
+
+    for destination in destinations:
+        destination.parent.mkdir(parents=True, exist_ok=True)
 
 
 def _max_timestamp(transactions: list[dict[str, Any]], timestamp_field: str) -> datetime:
@@ -233,6 +266,8 @@ def run_injection(
     """Load input ledger, inject fraud patterns, and save output ledger."""
     in_path = pathlib.Path(input_path)
     out_path = pathlib.Path(output_path)
+    summary_destination = pathlib.Path(summary_path) if summary_path else None
+    _validate_injection_paths(in_path, out_path, summary_destination)
     txs, fmt = _load_transactions(in_path)
 
     augmented, summary = inject_synthetic_fraud(
@@ -248,8 +283,8 @@ def run_injection(
 
     _write_transactions(out_path, augmented, fmt)
 
-    if summary_path:
-        pathlib.Path(summary_path).write_text(
+    if summary_destination is not None:
+        summary_destination.write_text(
             json.dumps(summary.__dict__, indent=2),
             encoding="utf-8",
         )

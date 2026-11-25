@@ -498,9 +498,16 @@ class EnhancedStellarStream:
                         builder = builder.cursor(cursor)
 
             except BaseHorizonError as e:
-                if getattr(e, "status", None) == 429:
+                status_code = getattr(e, "status", None)
+                if status_code == 429:
                     await self._handle_rate_limit(e)
                     continue
+
+                if status_code is not None and 400 <= status_code < 500:
+                    logger.error(
+                        "Permanent Horizon ingestion failure: status=%s", status_code
+                    )
+                    raise
 
                 retry_count += 1
                 await self._handle_connection_error(e)
@@ -521,6 +528,14 @@ class EnhancedStellarStream:
                 continue
 
             except AstroMLError as e:
+                if not e.retryable:
+                    logger.error(
+                        "Permanent ingestion failure: code=%s message=%s",
+                        e.code,
+                        e.message,
+                    )
+                    raise
+
                 retry_count += 1
                 logger.exception("Unexpected error (attempt %d): %s", retry_count, e)
 

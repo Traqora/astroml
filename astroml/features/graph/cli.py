@@ -142,7 +142,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.memory_profile:
         print(profile.summary())
     else:
-        print(f"Built snapshot: nodes={profile.n_nodes} edges={profile.n_edges}")
+        print(
+            f"Built snapshot: nodes={profile.n_nodes} edges={profile.n_edges} "
+            f"duration={profile.duration_s:.3f}s"
+        )
 
     return 0
 

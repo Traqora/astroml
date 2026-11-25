@@ -387,6 +387,7 @@ class SnapshotWindow:
     end: datetime
     edges: list[Edge]
     nodes: set[str]
+    build_duration_s: float | None = field(default=None, compare=False)
 
     def lineage(
         self, *, snapshot_id: str | None = None, seed: int | None = None
@@ -789,6 +790,7 @@ def _build_snapshot_window(
     from astroml.db.schema import NormalizedTransaction
     from astroml.db.session import get_session
 
+    build_started = time.perf_counter()
     attempt = 0
     while True:
         attempt += 1
@@ -827,13 +829,17 @@ def _build_snapshot_window(
             # alive together at peak.
             del result
 
-            return SnapshotWindow(
+            duration = time.perf_counter() - build_started
+            window = SnapshotWindow(
                 index=index,
                 start=window_start,
                 end=window_end,
                 edges=edges,
                 nodes=nodes,
+                build_duration_s=duration,
             )
+            _log_snapshot_build(index, duration, len(nodes), len(edges))
+            return window
         except Exception as exc:
             if attempt > max_retries:
                 logger.error(
@@ -858,6 +864,20 @@ def _build_snapshot_window(
 
 
 SNAPSHOT_MAX_ATTEMPTS = 3
+
+
+def _log_snapshot_build(
+    index: int, duration_s: float, node_count: int, edge_count: int
+) -> None:
+    logger.info(
+        "graph snapshot built",
+        extra={
+            "window_index": index,
+            "duration_seconds": duration_s,
+            "node_count": node_count,
+            "edge_count": edge_count,
+        },
+    )
 
 
 def _build_snapshot_window_with_retry(

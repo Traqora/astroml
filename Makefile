@@ -33,10 +33,10 @@ help:
 	@echo ""
 
 quickstart:
-	python -m astroml.quick_start
+	python -m astroml.cli quickstart
 
 quickstart-verbose:
-	python -m astroml.quick_start --num-ledgers 200 --num-accounts 100 --epochs 20
+	python -m astroml.cli quickstart --num-ledgers 200 --num-accounts 100 --epochs 20
 
 test:
 	pytest tests/ -v --continue-on-collection-errors

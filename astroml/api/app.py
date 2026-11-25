@@ -34,6 +34,7 @@ from astroml.api.routers import (
     fraud,
     model_registry,
     validation,
+    v1_inference,
 )
 from astroml.api.scheduler import start_scheduler, stop_scheduler
 
@@ -84,6 +85,7 @@ app.include_router(federated.router)
 app.include_router(model_registry.router)
 app.include_router(validation.router)
 app.include_router(feature_selection.router)
+app.include_router(v1_inference.router)
 
 
 @app.get("/health", tags=["ops"])

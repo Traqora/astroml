@@ -243,6 +243,8 @@ def write_run_artifacts(
     config: Mapping[str, Any],
     inputs: Mapping[str, Any],
     metrics: Mapping[str, Any],
+    dataset_id: str | None = None,
+    snapshot_id: str | None = None,
     overwrite: bool = False,
     created_at: datetime | None = None,
 ) -> RunArtifacts:
@@ -254,6 +256,8 @@ def write_run_artifacts(
         config: Hyper-parameters / settings that produced the run.
         inputs: Identifiers of the inputs (dataset name, snapshot hash, ...).
         metrics: Result metrics. Must be strict JSON: finite numbers only.
+        dataset_id: Optional stable dataset identifier, also recorded in inputs.
+        snapshot_id: Optional stable snapshot identifier, also recorded in inputs.
         overwrite: Replace an existing run with the same id instead of raising.
         created_at: Timestamp to record (UTC now by default).
 
@@ -264,8 +268,26 @@ def write_run_artifacts(
             The existing run is untouched.
     """
     validate_run_id(run_id)
+    recorded_inputs = dict(inputs)
+    identifiers: dict[str, str | None] = {}
+    for key, explicit_value in (
+        ("dataset_id", dataset_id),
+        ("snapshot_id", snapshot_id),
+    ):
+        input_value = recorded_inputs.get(key)
+        if explicit_value is not None and input_value is not None and explicit_value != input_value:
+            raise InvalidRunInputError(
+                f"{key} conflicts between the explicit argument and inputs mapping"
+            )
+        value = explicit_value if explicit_value is not None else input_value
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise InvalidRunInputError(f"{key} must be a non-empty string when provided")
+        identifiers[key] = value
+        if value is not None:
+            recorded_inputs[key] = value
+
     # Validate everything before touching the filesystem.
-    fingerprint = compute_fingerprint(config, inputs)
+    fingerprint = compute_fingerprint(config, recorded_inputs)
     _canonical_json(metrics)
 
     created = (created_at or datetime.now(timezone.utc)).isoformat()
@@ -286,7 +308,8 @@ def write_run_artifacts(
                 "created_at": created,
                 "fingerprint": fingerprint,
                 "config": dict(config),
-                "inputs": dict(inputs),
+                "inputs": recorded_inputs,
+                **identifiers,
                 "artifacts": {"metrics": METRICS_FILE},
             },
         )

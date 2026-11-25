@@ -22,6 +22,31 @@ run = read_run_artifacts("outputs/runs", "gcn-cora-001")
 run["metrics"]["metrics"]["test"]["accuracy"]
 ```
 
+## Dataset and snapshot identifiers (issue #1218)
+
+Pass the stable dataset and graph-snapshot identifiers explicitly when writing
+a run. They are stored as top-level fields in `run.json`, mirrored in `inputs`,
+and included in the fingerprint so changing either identifier produces a
+different run fingerprint:
+
+```python
+write_run_artifacts(
+    "outputs/runs",
+    "gcn-cora-002",
+    config={"model": "gcn"},
+    inputs={"split": "temporal-v1"},
+    dataset_id="stellar-transfers-v1",
+    snapshot_id="snapshot-2026-01-02",
+    metrics={"test": {"accuracy": 0.79}},
+)
+```
+
+For compatibility, the identifiers may instead already be present in
+`inputs`; the writer promotes them to top-level fields. If an explicit
+identifier conflicts with its `inputs` value, or is not a non-empty string,
+`InvalidRunInputError` is raised before anything is written. Runs without
+identifiers remain valid and store `null` for the top-level fields.
+
 ## Layout
 
 ```

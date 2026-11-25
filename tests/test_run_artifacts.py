@@ -84,6 +84,32 @@ class TestMetricsFile:
         assert loaded["metrics"]["metrics"] == METRICS
         assert loaded["run"]["config"] == CONFIG
 
+    def test_dataset_and_snapshot_ids_are_explicit_and_fingerprinted(
+        self, tmp_path: Path
+    ) -> None:
+        result = _write(tmp_path, dataset_id="dataset-v1", snapshot_id="snapshot-42")
+        run = read_run_artifacts(tmp_path, "run-1")["run"]
+
+        expected_inputs = {
+            **INPUTS,
+            "dataset_id": "dataset-v1",
+            "snapshot_id": "snapshot-42",
+        }
+        assert run["dataset_id"] == "dataset-v1"
+        assert run["snapshot_id"] == "snapshot-42"
+        assert run["inputs"] == expected_inputs
+        assert result.fingerprint == compute_fingerprint(CONFIG, expected_inputs)
+
+    def test_conflicting_explicit_dataset_id_is_rejected(self, tmp_path: Path) -> None:
+        with pytest.raises(InvalidRunInputError, match="dataset_id conflicts"):
+            _write(
+                tmp_path,
+                inputs={**INPUTS, "dataset_id": "from-inputs"},
+                dataset_id="explicit-value",
+            )
+
+        assert list(tmp_path.iterdir()) == []
+
     @pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
     def test_non_finite_metric_is_rejected_and_nothing_is_written(
         self, tmp_path: Path, bad: float

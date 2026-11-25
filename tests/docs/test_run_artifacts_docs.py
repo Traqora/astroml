@@ -29,6 +29,11 @@ REQUIRED_TOKENS = [
     "local filesystem",
     "without torch, MLflow",
     "Bit-for-bit reproducibility is not a v1 guarantee",
+    "fully resolved training settings",
+    'model_dump(mode="json")',
+    "schema-validated or filled with training defaults",
+    "Credential-shaped keys",
+    "secret values are not part of the v1 run artifact",
 ]
 
 REPRODUCTION_HEADING = "## Reproducing a saved run (issue #1223)\n"

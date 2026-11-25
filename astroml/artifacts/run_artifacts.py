@@ -64,6 +64,14 @@ METRICS_FILE = "metrics.json"
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _STAGING_SUFFIX = ".staging"
 _REPLACED_SUFFIX = ".replaced"
+_SENSITIVE_CONFIG_KEY_PARTS = (
+    "secret",
+    "password",
+    "credential",
+    "access_key",
+    "api_key",
+    "private_key",
+)
 
 
 class RunArtifactError(AstroMLError):
@@ -233,6 +241,42 @@ def _read_fingerprint(run_dir: Path) -> str | None:
         return None
 
 
+def _resolved_config(config: Any) -> dict[str, Any]:
+    """Return a JSON-ready snapshot, resolving model defaults when supported."""
+    if isinstance(config, Mapping):
+        return dict(config)
+
+    model_dump = getattr(config, "model_dump", None)
+    if callable(model_dump):
+        try:
+            resolved = model_dump(mode="json")
+        except (TypeError, ValueError) as exc:
+            raise InvalidRunInputError(
+                "config must be a mapping or support model_dump(mode='json')"
+            ) from exc
+        if isinstance(resolved, Mapping):
+            return dict(resolved)
+
+    raise InvalidRunInputError(
+        "config must be a mapping or support model_dump(mode='json')"
+    )
+
+
+def _redact_config_secrets(value: Any) -> Any:
+    """Redact credential-shaped keys before config values enter run artifacts."""
+    if isinstance(value, Mapping):
+        redacted = {}
+        for key, item in value.items():
+            normalized_key = str(key).lower().replace("-", "_")
+            is_sensitive = any(part in normalized_key for part in _SENSITIVE_CONFIG_KEY_PARTS)
+            is_token = normalized_key == "token" or normalized_key.endswith("_token")
+            redacted[key] = "[REDACTED]" if is_sensitive or is_token else _redact_config_secrets(item)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_config_secrets(item) for item in value]
+    return value
+
+
 # ── Public API ───────────────────────────────────────────────────────────────
 
 
@@ -240,7 +284,7 @@ def write_run_artifacts(
     root: str | os.PathLike[str],
     run_id: str,
     *,
-    config: Mapping[str, Any],
+    config: Any,
     inputs: Mapping[str, Any],
     metrics: Mapping[str, Any],
     overwrite: bool = False,
@@ -251,7 +295,9 @@ def write_run_artifacts(
     Args:
         root: Directory that holds all runs (created if missing).
         run_id: Unique run identifier; see :func:`validate_run_id`.
-        config: Hyper-parameters / settings that produced the run.
+        config: Resolved hyper-parameters / settings that produced the run. A
+            mapping is stored as supplied; model objects with
+            ``model_dump(mode="json")`` are serialized with their defaults.
         inputs: Identifiers of the inputs (dataset name, snapshot hash, ...).
         metrics: Result metrics. Must be strict JSON: finite numbers only.
         overwrite: Replace an existing run with the same id instead of raising.
@@ -264,8 +310,9 @@ def write_run_artifacts(
             The existing run is untouched.
     """
     validate_run_id(run_id)
-    # Validate everything before touching the filesystem.
-    fingerprint = compute_fingerprint(config, inputs)
+    # Resolve and validate everything before touching the filesystem.
+    config_data = _redact_config_secrets(_resolved_config(config))
+    fingerprint = compute_fingerprint(config_data, inputs)
     _canonical_json(metrics)
 
     created = (created_at or datetime.now(timezone.utc)).isoformat()
@@ -285,7 +332,7 @@ def write_run_artifacts(
                 "run_id": run_id,
                 "created_at": created,
                 "fingerprint": fingerprint,
-                "config": dict(config),
+                "config": config_data,
                 "inputs": dict(inputs),
                 "artifacts": {"metrics": METRICS_FILE},
             },

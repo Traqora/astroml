@@ -90,7 +90,7 @@ class PipelineTask:
 
 @dataclass
 class TaskExecutionResult:
-    """Record of a task execution."""
+    """Record a task execution and its exception type/message when it fails."""
 
     task_id: str
     status: TaskStatus
@@ -100,11 +100,16 @@ class TaskExecutionResult:
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: datetime | None = None
     duration_seconds: float = 0.0
+    error_type: str | None = None
 
 
 @dataclass
 class PipelineRun:
-    """State and history of a pipeline DAG execution."""
+    """State and history of a pipeline DAG execution.
+
+    ``error`` and ``error_type`` summarize the first failed task; individual
+    task failures remain available in ``task_results``.
+    """
 
     run_id: str
     pipeline_name: str
@@ -114,6 +119,8 @@ class PipelineRun:
     completed_at: datetime | None = None
     duration_seconds: float = 0.0
     context: dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    error_type: str | None = None
 
 
 class DAGDefinition:
@@ -263,6 +270,9 @@ class LocalPipelineOrchestrator:
 
                 if result.status == TaskStatus.FAILED:
                     run.status = PipelineRunStatus.FAILED
+                    if run.error is None:
+                        run.error = f"Task {task_id} failed: {result.error or 'unknown error'}"
+                        run.error_type = result.error_type
 
             if run.status != PipelineRunStatus.FAILED:
                 run.status = PipelineRunStatus.COMPLETED
@@ -270,6 +280,8 @@ class LocalPipelineOrchestrator:
         except Exception as exc:
             logger.error("Pipeline run %s failed with exception: %s", run_id, exc)
             run.status = PipelineRunStatus.FAILED
+            run.error = str(exc)
+            run.error_type = type(exc).__name__
 
         finally:
             run.completed_at = datetime.now(timezone.utc)
@@ -323,6 +335,7 @@ class LocalPipelineOrchestrator:
                         task_id=task.task_id,
                         status=TaskStatus.FAILED,
                         error=str(exc),
+                        error_type=type(exc).__name__,
                         attempts=attempts,
                         completed_at=datetime.now(timezone.utc),
                         duration_seconds=time.time() - start_time,

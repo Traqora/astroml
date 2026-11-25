@@ -84,6 +84,45 @@ class TestMetricsFile:
         assert loaded["metrics"]["metrics"] == METRICS
         assert loaded["run"]["config"] == CONFIG
 
+    def test_pydantic_training_config_persists_resolved_defaults(self, tmp_path: Path) -> None:
+        from astroml.training.config import TrainingConfig
+
+        config = TrainingConfig(lr=0.02)
+        result = _write(tmp_path, config=config)
+
+        saved = read_run_artifacts(tmp_path, "run-1")["run"]["config"]
+        assert saved["epochs"] == 200
+        assert saved["lr"] == 0.02
+        assert saved["artifact_storage"]["backend"] == "local"
+        assert result.fingerprint == compute_fingerprint(saved, INPUTS)
+
+    def test_config_credentials_are_redacted(self, tmp_path: Path) -> None:
+        from astroml.training.config import TrainingConfig
+
+        config = TrainingConfig(
+            artifact_storage={
+                "backend": "s3",
+                "s3": {
+                    "bucket": "training-artifacts",
+                    "aws_access_key_id": "access-value",
+                    "aws_secret_access_key": "secret-value",
+                },
+            }
+        )
+        result = _write(tmp_path, config=config)
+
+        saved = read_run_artifacts(tmp_path, "run-1")["run"]["config"]
+        assert saved["artifact_storage"]["s3"]["aws_access_key_id"] == "[REDACTED]"
+        assert saved["artifact_storage"]["s3"]["aws_secret_access_key"] == "[REDACTED]"
+        assert "access-value" not in result.run_file.read_text(encoding="utf-8")
+        assert "secret-value" not in result.run_file.read_text(encoding="utf-8")
+
+    def test_config_resolution_failure_writes_nothing(self, tmp_path: Path) -> None:
+        with pytest.raises(InvalidRunInputError, match="model_dump"):
+            _write(tmp_path, config=object())
+
+        assert list(tmp_path.iterdir()) == []
+
     @pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
     def test_non_finite_metric_is_rejected_and_nothing_is_written(
         self, tmp_path: Path, bad: float

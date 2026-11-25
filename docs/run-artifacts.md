@@ -6,6 +6,32 @@ what was run, on which inputs, and what came out. The API lives in
 library and the local filesystem, so it works without torch, cloud storage,
 MLflow or any other optional service.
 
+Each call stores the supplied configuration snapshot in `run.json`. To save
+the fully resolved training settings, pass a validated `TrainingConfig` model;
+its defaults and nested settings are serialized in JSON mode:
+
+```python
+from astroml.artifacts.run_artifacts import write_run_artifacts
+from astroml.training.config import TrainingConfig
+
+config = TrainingConfig(epochs=200, lr=0.01)
+write_run_artifacts(
+    "outputs/runs",
+    "gcn-cora-001",
+    config=config,
+    inputs={"dataset": "Cora"},
+    metrics={"test": {"accuracy": 0.79}},
+)
+```
+
+Plain mappings are also supported and are recorded as supplied; they are not
+schema-validated or filled with training defaults. A config that is neither a
+mapping nor supports `model_dump(mode="json")` raises
+`InvalidRunInputError` before a run directory is created.
+Credential-shaped keys such as `aws_secret_access_key`, `api_key`, and
+`token` are replaced with `[REDACTED]` before the config is fingerprinted or
+written; secret values are not part of the v1 run artifact.
+
 ```python
 from astroml.artifacts.run_artifacts import write_run_artifacts, read_run_artifacts
 

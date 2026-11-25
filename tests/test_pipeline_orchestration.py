@@ -106,6 +106,9 @@ class TestDAGAndOrchestrator:
 
         assert run.status == PipelineRunStatus.FAILED
         assert run.task_results["failing_task"].status == TaskStatus.FAILED
+        assert run.task_results["failing_task"].error_type == "ZeroDivisionError"
+        assert run.error == "Task failing_task failed: division by zero"
+        assert run.error_type == "ZeroDivisionError"
         assert run.task_results["downstream_task"].status == TaskStatus.SKIPPED
 
     def test_operator_overloading_chaining(self):

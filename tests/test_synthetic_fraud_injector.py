@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from astroml.ingestion.synthetic_fraud_injector import (
     SybilConfig,
     WashLoopConfig,
@@ -85,3 +87,66 @@ def test_run_injection_keeps_jsonl_format_and_writes_summary(tmp_path):
 
     written_summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert written_summary["injected_transactions"] == 3
+
+
+def _run_empty_injection(input_path, output_path, summary_path=None):
+    return run_injection(
+        input_path=str(input_path),
+        output_path=str(output_path),
+        summary_path=str(summary_path) if summary_path is not None else None,
+        seed=1,
+        sybil=SybilConfig(clusters=0),
+        wash=WashLoopConfig(loops=0),
+        source_field="source_account",
+        dest_field="destination_account",
+        amount_field="amount",
+        timestamp_field="created_at",
+    )
+
+
+def test_missing_input_fails_before_creating_output(tmp_path):
+    output_path = tmp_path / "output.json"
+
+    with pytest.raises(FileNotFoundError, match="existing file"):
+        _run_empty_injection(tmp_path / "missing.json", output_path)
+
+    assert not output_path.exists()
+
+
+def test_input_and_output_cannot_be_the_same_file(tmp_path):
+    input_path = tmp_path / "ledger.json"
+    input_path.write_text("[]", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="must be different files"):
+        _run_empty_injection(input_path, input_path)
+
+    assert input_path.read_text(encoding="utf-8") == "[]"
+
+
+def test_output_destination_must_be_a_file_path(tmp_path):
+    input_path = tmp_path / "ledger.json"
+    input_path.write_text("[]", encoding="utf-8")
+    output_path = tmp_path / "output"
+    output_path.mkdir()
+
+    with pytest.raises(IsADirectoryError, match="not a file"):
+        _run_empty_injection(input_path, output_path)
+
+
+def test_output_parent_must_be_a_directory(tmp_path):
+    input_path = tmp_path / "ledger.json"
+    input_path.write_text("[]", encoding="utf-8")
+    parent_file = tmp_path / "not-a-directory"
+    parent_file.write_text("x", encoding="utf-8")
+
+    with pytest.raises(NotADirectoryError, match="not a directory"):
+        _run_empty_injection(input_path, parent_file / "output.json")
+
+
+def test_output_and_summary_cannot_overwrite_the_same_file(tmp_path):
+    input_path = tmp_path / "ledger.json"
+    input_path.write_text("[]", encoding="utf-8")
+    output_path = tmp_path / "result.json"
+
+    with pytest.raises(ValueError, match="must be different files"):
+        _run_empty_injection(input_path, output_path, output_path)

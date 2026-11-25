@@ -126,5 +126,12 @@ This change defines the types. Using them at existing call sites is tracked sepa
 Until those land, parsers still raise their original `KeyError`/`ValueError`, and routers that
 build a response from `str(exc)` are unchanged.
 
+The enhanced Horizon stream retries `AstroMLError` failures only when
+`retryable` is true. `SourceUnavailableError` is retryable; `ParseError` and
+other permanent errors stop the stream immediately. Transport connection
+errors and Horizon rate limits retain their dedicated retry/backoff handling.
+See [v1 operations](v1-operations.md) for the corresponding path and snapshot
+operational behavior.
+
 To inspect a failed v1 run, read the service logs (`docker compose logs <service>`) and match the
 error `code` above; keep internal `context` out of client responses.

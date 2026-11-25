@@ -1,11 +1,16 @@
 """Regression tests for snapshot orchestration retry (issue #979)."""
 
+import logging
 from datetime import datetime, timezone
 
 import pytest
 
 from astroml.features.graph import snapshot
-from astroml.features.graph.snapshot import SnapshotWindow, _build_snapshot_window_with_retry
+from astroml.features.graph.snapshot import (
+    SnapshotWindow,
+    _build_snapshot_window_with_retry,
+    _log_snapshot_build,
+)
 
 START = datetime(2024, 1, 1, tzinfo=timezone.utc)
 END = datetime(2024, 1, 2, tzinfo=timezone.utc)
@@ -59,3 +64,14 @@ def test_no_retry_on_success(monkeypatch):
 def test_rejects_invalid_max_attempts():
     with pytest.raises(ValueError):
         _build_snapshot_window_with_retry(0, START, END, 10, max_attempts=0)
+
+
+def test_snapshot_build_log_reports_duration_and_graph_size(caplog):
+    with caplog.at_level(logging.INFO):
+        _log_snapshot_build(index=3, duration_s=0.25, node_count=7, edge_count=11)
+
+    record = next(record for record in caplog.records if record.message == "graph snapshot built")
+    assert record.window_index == 3
+    assert record.duration_seconds == 0.25
+    assert record.node_count == 7
+    assert record.edge_count == 11

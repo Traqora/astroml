@@ -1,6 +1,6 @@
 # AstroML Benchmarking Suite
 
-The AstroML benchmarking suite provides a standardized framework for evaluating Graph Neural Network (GNN) models on Stellar ledger data. This document explains how to use the benchmarking suite effectively.
+The AstroML benchmarking suite provides a scaffold for evaluating Graph Neural Network (GNN) models. Its built-in link-prediction workflow uses synthetic data and does not load real Stellar ledger data.
 
 ## Overview
 
@@ -158,6 +158,27 @@ data_config = DataConfig(
     edge_noise=0.1         # Noise level for edges
 )
 ```
+
+## Offline Temporal Dataset
+
+The link-prediction workflow provides a deterministic, in-memory fixture without database, DVC, or artifact-store dependencies:
+
+```python
+from astroml.training.synthetic_dataset import generate_synthetic_ledger_dataset
+
+dataset = generate_synthetic_ledger_dataset(seed=42)
+dataset.save_metadata("artifacts/synthetic-ledger.json")
+```
+
+The generator creates directed edges without self-loops over integer timestamps in `[1, num_ledgers]`, plus seeded standard-normal node features. Metadata is written as a local JSON sidecar using `SnapshotLineage`, including node and edge counts, the configured time window, observed first/last timestamps, and seed. Empty datasets are supported and record observed timestamps as `null`. Non-empty graphs require at least two accounts. Synthetic features are not derived from edges and the fixture is not representative Stellar data.
+
+The training CLI can persist the same metadata alongside a run:
+
+```bash
+python -m astroml.training.train_link_prediction --metadata-path artifacts/synthetic-ledger.json
+```
+
+Negative sampling uses directed non-self pairs. The requested sample count is capped by the number of eligible pairs, and random draws are bounded by `target_count * max_attempts`; a dense graph may therefore yield fewer negatives than requested, while a graph with no eligible pairs yields an empty tensor. Evaluation is defined for empty or single-class labels: AUC is the neutral sentinel `0.5`; average precision is `0.0` with no positives and `1.0` when every label is positive. These sentinel values indicate that ranking quality cannot be compared for that split.
 
 ## Training Configuration
 

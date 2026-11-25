@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import random
 
 import pytest
@@ -100,6 +101,116 @@ class TestSampleNegativeEdges:
             num_nodes=20, positive_set=set(), num_samples=30, rng=random.Random(1)
         )
         assert len(negs) == len(set(negs))
+
+    def test_empty_and_saturated_graphs_return_no_negatives(self):
+        assert sample_negative_edges(0, set(), 10, rng=random.Random(0)) == []
+        saturated_pairs = {(u, v) for u in range(3) for v in range(3) if u != v}
+        assert sample_negative_edges(3, saturated_pairs, 10, rng=random.Random(0)) == []
+
+    def test_dense_graph_returns_only_feasible_negative_pairs(self):
+        positives = {(0, 1), (1, 0), (0, 2), (2, 0), (1, 2)}
+        negatives = sample_negative_edges(
+            num_nodes=3,
+            positive_set=positives,
+            num_samples=10,
+            max_attempts=100,
+            rng=random.Random(3),
+        )
+        assert negatives == [(2, 1)]
+
+    def test_invalid_sampling_bounds_raise(self):
+        with pytest.raises(ValueError, match="num_nodes"):
+            sample_negative_edges(-1, set(), 1)
+        with pytest.raises(ValueError, match="num_samples"):
+            sample_negative_edges(2, set(), -1)
+
+
+class TestSyntheticLedgerDataset:
+    def test_generation_is_reproducible_and_metadata_persists(self, tmp_path):
+        from astroml.training.synthetic_dataset import generate_synthetic_ledger_dataset
+
+        dataset = generate_synthetic_ledger_dataset(
+            num_accounts=5, num_edges=15, num_ledgers=8, feature_dim=4, seed=10
+        )
+        repeated = generate_synthetic_ledger_dataset(
+            num_accounts=5, num_edges=15, num_ledgers=8, feature_dim=4, seed=10
+        )
+
+        assert dataset.edges == repeated.edges
+        assert torch.equal(dataset.node_features, repeated.node_features)
+        assert dataset.features_for({"account_1": 0, "account_0": 1}).shape == (2, 4)
+
+        metadata_path = dataset.save_metadata(tmp_path / "metadata" / "dataset.json")
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        assert metadata["node_count"] == 5
+        assert metadata["edge_count"] == 15
+        assert metadata["first_timestamp"] == min(edge.timestamp for edge in dataset.edges)
+        assert metadata["last_timestamp"] == max(edge.timestamp for edge in dataset.edges)
+        assert metadata["seed"] == 10
+        assert dataset.lineage.start.timestamp() == 1
+        assert dataset.lineage.end.timestamp() == 8
+
+    def test_empty_dataset_has_empty_bounds_and_rejects_impossible_edges(self):
+        from astroml.training.synthetic_dataset import generate_synthetic_ledger_dataset
+
+        dataset = generate_synthetic_ledger_dataset(
+            num_accounts=0, num_edges=0, num_ledgers=1, feature_dim=4
+        )
+        assert dataset.node_features.shape == (0, 4)
+        assert dataset.lineage.first_timestamp is None
+        assert dataset.lineage.last_timestamp is None
+
+        with pytest.raises(ValueError, match="at least two accounts"):
+            generate_synthetic_ledger_dataset(num_accounts=1, num_edges=1)
+
+
+class _FixedScoreModel:
+    def eval(self):
+        return self
+
+    def encode(self, node_features, edge_index):
+        return node_features.new_zeros((node_features.shape[0], 1))
+
+    def decode(self, embeddings, edge_index):
+        return embeddings.new_zeros((edge_index.shape[1],))
+
+
+class TestLinkPredictionEvaluationBoundaries:
+    def test_empty_evaluation_returns_defined_metrics(self):
+        task = LinkPredictionTask([], n_future=1)
+        split = LedgerSplit(context_edges=[], future_edges=[], node_index={})
+
+        assert task.evaluate(_FixedScoreModel(), split, torch.empty((0, 1))) == {
+            "auc": 0.5,
+            "avg_precision": 0.0,
+        }
+
+    def test_single_class_evaluation_returns_defined_metrics(self):
+        task = LinkPredictionTask([], n_future=1)
+        positive_edges = [Edge("a", "b", 1), Edge("b", "a", 1)]
+        split = LedgerSplit(
+            context_edges=[],
+            future_edges=positive_edges,
+            node_index={"a": 0, "b": 1},
+        )
+
+        assert task.evaluate(_FixedScoreModel(), split, torch.zeros((2, 1))) == {
+            "auc": 0.5,
+            "avg_precision": 1.0,
+        }
+
+    def test_two_class_evaluation_returns_ranked_metrics(self):
+        task = LinkPredictionTask([], n_future=1, seed=0)
+        split = LedgerSplit(
+            context_edges=[],
+            future_edges=[Edge("a", "b", 1)],
+            node_index={"a": 0, "b": 1, "c": 2},
+        )
+
+        assert task.evaluate(_FixedScoreModel(), split, torch.zeros((3, 1))) == {
+            "auc": 0.5,
+            "avg_precision": 0.5,
+        }
 
 
 # ---------------------------------------------------------------------------

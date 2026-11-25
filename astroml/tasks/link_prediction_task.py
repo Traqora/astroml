@@ -107,15 +107,35 @@ def sample_negative_edges(
 
     Returns:
         List of ``(src, dst)`` integer pairs.
+
+    The requested count is capped at the number of eligible directed pairs.
+    Sampling uses at most ``min(num_samples, available_pairs) * max_attempts``
+    random draws, so dense graphs can return fewer than the requested count.
     """
+    if num_nodes < 0:
+        raise ValueError(f"num_nodes must be non-negative, got {num_nodes}")
+    if num_samples < 0:
+        raise ValueError(f"num_samples must be non-negative, got {num_samples}")
+    if max_attempts < 1:
+        raise ValueError(f"max_attempts must be at least one, got {max_attempts}")
+    if any(u < 0 or v < 0 or u >= num_nodes or v >= num_nodes for u, v in positive_set):
+        raise ValueError("positive_set contains node indices outside [0, num_nodes)")
+    if num_nodes < 2 or num_samples == 0:
+        return []
+
     if rng is None:
         rng = random.Random()
 
+    available_pairs = num_nodes * (num_nodes - 1) - sum(u != v for u, v in positive_set)
+    target_count = min(num_samples, available_pairs)
+    if target_count == 0:
+        return []
+
     negatives: list[tuple[int, int]] = []
     seen: set[tuple[int, int]] = set(positive_set)
-    budget = num_samples * max_attempts
+    budget = target_count * max_attempts
 
-    while len(negatives) < num_samples and budget > 0:
+    while len(negatives) < target_count and budget > 0:
         u = rng.randrange(num_nodes)
         v = rng.randrange(num_nodes)
         budget -= 1
@@ -334,12 +354,12 @@ class LinkPredictionTask:
         Returns:
             Dict with ``"auc"`` and ``"avg_precision"`` keys.
         """
-        from sklearn.metrics import average_precision_score, roc_auc_score
-
         model.eval()
         with torch.no_grad():
             context_edge_index = split.to_edge_index(split.context_edges, device=self.device)
             pos_edge_index = split.to_edge_index(split.future_edges, device=self.device)
+            if pos_edge_index.size(1) == 0:
+                return {"auc": 0.5, "avg_precision": 0.0}
             neg_edge_index = self.sample_negatives(split)
 
             z = model.encode(node_features, context_edge_index)
@@ -357,15 +377,16 @@ class LinkPredictionTask:
             ]
         )
 
-        metrics: dict[str, float] = {}
-        try:
-            metrics["auc"] = float(roc_auc_score(labels, scores))
-        except ValueError:
-            metrics["auc"] = 0.5
+        positive_count = int(np.count_nonzero(labels))
+        if positive_count == 0:
+            return {"auc": 0.5, "avg_precision": 0.0}
+        if positive_count == len(labels):
+            return {"auc": 0.5, "avg_precision": 1.0}
 
-        try:
-            metrics["avg_precision"] = float(average_precision_score(labels, scores))
-        except ValueError:
-            metrics["avg_precision"] = 0.0
+        from sklearn.metrics import average_precision_score, roc_auc_score
+
+        metrics: dict[str, float] = {}
+        metrics["auc"] = float(roc_auc_score(labels, scores))
+        metrics["avg_precision"] = float(average_precision_score(labels, scores))
 
         return metrics

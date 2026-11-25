@@ -293,6 +293,7 @@ class LinkPredictionTask:
         Returns:
             Scalar loss value for this step.
         """
+        self._validate_node_features(model, split, node_features)
         model.train()
         optimizer.zero_grad()
 
@@ -309,6 +310,31 @@ class LinkPredictionTask:
         optimizer.step()
 
         return loss.item()
+
+    @staticmethod
+    def _validate_node_features(
+        model: nn.Module, split: LedgerSplit, node_features: torch.Tensor
+    ) -> None:
+        if not isinstance(node_features, torch.Tensor) or node_features.ndim != 2:
+            shape = (
+                tuple(node_features.shape)
+                if isinstance(node_features, torch.Tensor)
+                else type(node_features).__name__
+            )
+            raise ValueError(f"node_features must have shape [N, F], got {shape}")
+        if node_features.shape[0] != split.num_nodes:
+            raise ValueError(
+                f"node_features row count must match split.num_nodes={split.num_nodes}, "
+                f"got {node_features.shape[0]}"
+            )
+        input_dim = getattr(model, "input_dim", None)
+        if input_dim is not None and node_features.shape[1] != input_dim:
+            raise ValueError(
+                f"node_features width must match model input_dim={input_dim}, "
+                f"got {node_features.shape[1]}"
+            )
+        if not node_features.is_floating_point():
+            raise TypeError("node_features must have a floating-point dtype")
 
     # ------------------------------------------------------------------
     # Evaluation
@@ -336,6 +362,7 @@ class LinkPredictionTask:
         """
         from sklearn.metrics import average_precision_score, roc_auc_score
 
+        self._validate_node_features(model, split, node_features)
         model.eval()
         with torch.no_grad():
             context_edge_index = split.to_edge_index(split.context_edges, device=self.device)
@@ -369,3 +396,5 @@ class LinkPredictionTask:
             metrics["avg_precision"] = 0.0
 
         return metrics
+
+

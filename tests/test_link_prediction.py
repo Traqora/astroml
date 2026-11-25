@@ -191,13 +191,30 @@ class TestSampleNegatives:
             assert (neg[0, i].item(), neg[1, i].item()) not in future_pairs
 
 
+class TestLinkPredictionTrainingContract:
+    def test_train_step_rejects_features_with_wrong_model_width(self):
+        edges = [Edge("a", "b", 1), Edge("b", "c", 1), Edge("a", "c", 2)]
+        split = LedgerSplit(
+            context_edges=edges[:2],
+            future_edges=edges[2:],
+            node_index={"a": 0, "b": 1, "c": 2},
+        )
+        task = LinkPredictionTask(edges, n_future=1)
+        model = torch.nn.Linear(4, 1)
+        model.input_dim = 4
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+
+        with pytest.raises(ValueError, match="model input_dim=4"):
+            task.train_step(model, optimizer, split, torch.randn(3, 3))
+
+
 # ---------------------------------------------------------------------------
 # LinkPredictor model (unit tests — no GCN forward, just decoder logic)
 # ---------------------------------------------------------------------------
 
 
 class TestLinkPredictorDecoder:
-    """Test the decoder and loss without running a full GCN forward."""
+    """Test encoder, decoder, and loss contracts."""
 
     def _dummy_embeddings(self, n=8, dim=16) -> torch.Tensor:
         torch.manual_seed(0)
@@ -214,6 +231,84 @@ class TestLinkPredictorDecoder:
         edge_index = torch.tensor([[0, 1, 2], [1, 2, 3]], dtype=torch.long)
         scores = model.decode(z, edge_index)
         assert scores.shape == (3,)
+
+    def test_encode_and_forward_shapes(self):
+        try:
+            from astroml.models.link_prediction import LinkPredictor
+        except ImportError:
+            pytest.skip("torch_geometric not installed")
+
+        model = LinkPredictor(input_dim=8, hidden_dims=[16], embedding_dim=12)
+        x = torch.randn(4, 8)
+        edge_index = torch.tensor([[0, 1], [1, 2]], dtype=torch.long)
+        query_edge_index = torch.tensor([[0, 2, 1], [2, 3, 0]], dtype=torch.long)
+
+        embeddings = model.encode(x, edge_index)
+        scores = model(x, edge_index, query_edge_index)
+
+        assert embeddings.shape == (4, 12)
+        assert scores.shape == (3,)
+
+    def test_encode_rejects_mismatched_feature_width(self):
+        try:
+            from astroml.models.link_prediction import LinkPredictor
+        except ImportError:
+            pytest.skip("torch_geometric not installed")
+
+        model = LinkPredictor(input_dim=8, hidden_dims=[16], embedding_dim=12)
+        with pytest.raises(ValueError, match="input_dim=8"):
+            model.encode(torch.randn(4, 7), torch.zeros((2, 0), dtype=torch.long))
+
+    def test_decode_rejects_noncanonical_edge_shape(self):
+        try:
+            from astroml.models.link_prediction import LinkPredictor
+        except ImportError:
+            pytest.skip("torch_geometric not installed")
+
+        model = LinkPredictor(input_dim=8, hidden_dims=[16], embedding_dim=12)
+        with pytest.raises(ValueError, match=r"shape \[2, E\]"):
+            model.decode(torch.randn(4, 12), torch.zeros((0, 2), dtype=torch.long))
+
+    def test_model_rejects_nonpositive_dimensions(self):
+        try:
+            from astroml.models.link_prediction import LinkPredictor
+        except ImportError:
+            pytest.skip("torch_geometric not installed")
+
+        with pytest.raises(ValueError, match="positive integers"):
+            LinkPredictor(input_dim=0, hidden_dims=[16], embedding_dim=12)
+
+
+class TestTemporalTrainingPartition:
+    def test_final_temporal_split_is_held_out(self):
+        pytest.importorskip("torch_geometric")
+        from astroml.training.train_link_prediction import _partition_train_eval_splits
+
+        train_split = LedgerSplit([], [Edge("a", "b", 1)], {"a": 0, "b": 1})
+        overlapping_split = LedgerSplit(
+            [], [Edge("a", "b", 3), Edge("b", "a", 4)], {"a": 0, "b": 1}
+        )
+        eval_split = LedgerSplit([], [Edge("a", "b", 4)], {"a": 0, "b": 1})
+        splits = [train_split, overlapping_split, eval_split]
+        training_splits, eval_split = _partition_train_eval_splits(splits)
+
+        assert training_splits == [train_split]
+        assert eval_split is splits[-1]
+
+    def test_partition_requires_a_training_and_eval_split(self):
+        pytest.importorskip("torch_geometric")
+        from astroml.training.train_link_prediction import _partition_train_eval_splits
+
+        with pytest.raises(RuntimeError, match="At least two temporal splits"):
+            _partition_train_eval_splits([object()])
+
+    def test_partition_rejects_only_overlapping_training_windows(self):
+        pytest.importorskip("torch_geometric")
+        from astroml.training.train_link_prediction import _partition_train_eval_splits
+
+        split = LedgerSplit([], [Edge("a", "b", 4)], {"a": 0, "b": 1})
+        with pytest.raises(RuntimeError, match="No training split ends"):
+            _partition_train_eval_splits([split, split])
 
     def test_mlp_decoder_shape(self):
         try:

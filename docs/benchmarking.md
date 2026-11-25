@@ -1,6 +1,6 @@
 # AstroML Benchmarking Suite
 
-The AstroML benchmarking suite provides a standardized framework for evaluating Graph Neural Network (GNN) models on Stellar ledger data. This document explains how to use the benchmarking suite effectively.
+The AstroML benchmarking suite provides an evaluation scaffold for Graph Neural Network (GNN) models. Its current default loader generates synthetic data; it does not load or validate real Stellar ledger data.
 
 ## Overview
 
@@ -53,7 +53,8 @@ The benchmarking suite supports the following GNN models:
 
 2. **Link Predictor**
    - Task: Link prediction
-   - Parameters: `in_channels`, `hidden_channels`, `num_layers`, `dropout`
+    - Parameters: `in_channels`, `hidden_channels`, `num_layers`, `dropout`
+    - The supported v1 link-prediction workflow is the dedicated temporal training command below; the generic benchmark runner is not a link-prediction evaluator.
 
 3. **SAGE Encoder (GraphSAGE)**
    - Task: Inductive node classification
@@ -158,6 +159,18 @@ data_config = DataConfig(
     edge_noise=0.1         # Noise level for edges
 )
 ```
+
+## V1 Link-Prediction Baseline
+
+Run the supported v1 path without a database or artifact service:
+
+```bash
+python -m astroml.training.train_link_prediction --epochs 10
+```
+
+This command uses a GCN encoder with `input_dim=32`, `hidden_dims=[64]`, and `embedding_dim=32`, followed by the dot-product decoder. Its contracts are `node_features: float[N, 32]`, context and query edge indices: `long[2, E]`, encoded embeddings: `float[N, 32]`, and raw query logits: `float[E]`. Invalid model dimensions, feature widths, or edge-index shapes fail with a clear error.
+
+The synthetic ledger edges and node features use fixed seeds for repeatable input generation. The dataset is only a smoke-test fixture: edges are randomly generated, node features are random and unrelated to edges, and it contains no real Stellar transactions, engineered ledger features, or representative class balance. Results from it are not evidence of real-world predictive quality. The final chronological window is reserved for evaluation. Earlier training windows whose positive edges overlap that window are excluded; at least one non-overlapping training window is required.
 
 ## Training Configuration
 

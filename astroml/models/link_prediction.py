@@ -25,6 +25,17 @@ from torch_geometric.nn import GCNConv
 from ..cache import cached_prediction
 
 
+def _validate_edge_index(edge_index: torch.Tensor, num_nodes: int, name: str) -> None:
+    if not isinstance(edge_index, torch.Tensor):
+        raise TypeError(f"{name} must be a torch.Tensor")
+    if edge_index.ndim != 2 or edge_index.shape[0] != 2:
+        raise ValueError(f"{name} must have shape [2, E], got {tuple(edge_index.shape)}")
+    if edge_index.dtype != torch.long:
+        raise TypeError(f"{name} must have dtype torch.long, got {edge_index.dtype}")
+    if edge_index.numel() and (edge_index.min() < 0 or edge_index.max() >= num_nodes):
+        raise ValueError(f"{name} indices must be between 0 and {num_nodes - 1}")
+
+
 class GCNEncoder(nn.Module):
     """GCN encoder that produces node embeddings.
 
@@ -43,9 +54,17 @@ class GCNEncoder(nn.Module):
         dropout: float = 0.5,
     ) -> None:
         super().__init__()
+        dimensions = [input_dim, *hidden_dims, embedding_dim]
+        if any(not isinstance(dim, int) or dim <= 0 for dim in dimensions):
+            raise ValueError("input_dim, hidden_dims, and embedding_dim must be positive integers")
+        if not 0.0 <= dropout < 1.0:
+            raise ValueError(f"dropout must be in [0, 1), got {dropout}")
+
+        self.input_dim = input_dim
+        self.embedding_dim = embedding_dim
         self.dropout = dropout
 
-        dims = [input_dim] + hidden_dims + [embedding_dim]
+        dims = dimensions
         self.convs = nn.ModuleList(
             [GCNConv(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]
         )
@@ -92,6 +111,10 @@ class LinkPredictor(nn.Module):
         decoder: Literal["dot", "mlp"] = "dot",
     ) -> None:
         super().__init__()
+        if decoder not in ("dot", "mlp"):
+            raise ValueError(f"decoder must be 'dot' or 'mlp', got {decoder!r}")
+        self.input_dim = input_dim
+        self.embedding_dim = embedding_dim
         self.decoder_type = decoder
         self.encoder = GCNEncoder(input_dim, hidden_dims, embedding_dim, dropout)
 
@@ -108,6 +131,16 @@ class LinkPredictor(nn.Module):
 
     def encode(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
         """Run the GCN encoder and return node embeddings ``[N, embedding_dim]``."""
+        if not isinstance(x, torch.Tensor) or x.ndim != 2:
+            shape = tuple(x.shape) if isinstance(x, torch.Tensor) else type(x).__name__
+            raise ValueError(f"node features must have shape [N, F], got {shape}")
+        if x.shape[1] != self.input_dim:
+            raise ValueError(
+                f"node feature width must match input_dim={self.input_dim}, got {x.shape[1]}"
+            )
+        if not x.is_floating_point():
+            raise TypeError("node features must have a floating-point dtype")
+        _validate_edge_index(edge_index, x.shape[0], "edge_index")
         return self.encoder(x, edge_index)
 
     def decode(self, z: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
@@ -120,6 +153,15 @@ class LinkPredictor(nn.Module):
         Returns:
             Raw logits ``[E]`` (apply sigmoid for probabilities).
         """
+        if not isinstance(z, torch.Tensor) or z.ndim != 2:
+            shape = tuple(z.shape) if isinstance(z, torch.Tensor) else type(z).__name__
+            raise ValueError(f"node embeddings must have shape [N, D], got {shape}")
+        if z.shape[1] != self.embedding_dim:
+            raise ValueError(
+                f"node embedding width must match embedding_dim={self.embedding_dim}, "
+                f"got {z.shape[1]}"
+            )
+        _validate_edge_index(edge_index, z.shape[0], "edge_index")
         src, dst = edge_index[0], edge_index[1]
         if self.decoder_type == "dot":
             return (z[src] * z[dst]).sum(dim=-1)
@@ -133,6 +175,11 @@ class LinkPredictor(nn.Module):
         Only suitable for small graphs / evaluation.  Returns a ``[N, N]``
         matrix of raw logits.
         """
+        if not isinstance(z, torch.Tensor) or z.ndim != 2 or z.shape[1] != self.embedding_dim:
+            shape = tuple(z.shape) if isinstance(z, torch.Tensor) else type(z).__name__
+            raise ValueError(
+                f"node embeddings must have shape [N, {self.embedding_dim}], got {shape}"
+            )
         if self.decoder_type == "dot":
             return z @ z.t()
         else:

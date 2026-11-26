@@ -20,7 +20,10 @@ from astroml.training.metrics import (
     TRAINING_EPOCHS_TOTAL,
     TRAINING_LOSS,
 )
+from astroml.training.config import EarlyStoppingConfig
+from astroml.training.early_stopping import EarlyStopper
 from astroml.training.metrics_server import start_metrics_server
+from astroml.training.seed import set_seed
 
 
 def train(
@@ -28,6 +31,8 @@ def train(
     report: TrainingReport | None = None,
     epochs: int = 200,
     eval_every: int = 20,
+    seed: int | None = 42,
+    early_stopping: EarlyStoppingConfig | None = None,
 ):
     """Train a GCN on Cora.
 
@@ -41,12 +46,20 @@ def train(
             :meth:`~astroml.tracking.training_report.TrainingReport.persist`.
         epochs: Number of epochs.
         eval_every: Validation cadence, in epochs.
+        seed: Seed applied to Python, NumPy and PyTorch before the dataset is
+            loaded and the model is initialised. Pass ``None`` to skip seeding.
+        early_stopping: Stopping rule. Defaults to ``val_loss`` with patience
+            50 and ``min_delta=1e-4``. A metric is checked once per validation
+            evaluation; ``patience=0`` disables stopping.
 
     Returns:
         The :class:`TrainingReport`, so a caller can persist or inspect it.
     """
     # Start Prometheus metrics server
     start_metrics_server()
+
+    if seed is not None:
+        set_seed(seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -64,6 +77,7 @@ def train(
 
     objective = objective or NodeClassificationObjective(log_input=True)
     report = report if report is not None else TrainingReport(objective)
+    stopper = EarlyStopper.from_config(early_stopping or EarlyStoppingConfig())
 
     model = GCN(
         input_dim=dataset.num_node_features,
@@ -94,17 +108,27 @@ def train(
 
         train_metrics = {"loss": float(loss)}
         val_metrics: dict[str, float] = {}
+        stopper_metrics: dict[str, float] | None = None
 
         if epoch % eval_every == 0 or epoch == epochs:
             model.eval()
             with torch.no_grad():
                 logits = model(data.x, data.edge_index)
+            val_loss = float(objective.loss(logits[data.val_mask], data.y[data.val_mask]))
             val_metrics = objective.evaluate(logits[data.val_mask], data.y[data.val_mask])
+            val_metrics["loss"] = val_loss
+            TRAINING_LOSS.labels(model_type="gcn", dataset="cora", phase="val").set(val_loss)
             TRAINING_ACCURACY.labels(model_type="gcn", dataset="cora", phase="val").set(
                 val_metrics.get("accuracy", 0.0)
             )
+            stopper_metrics = {
+                "train_loss": float(loss),
+                "val_loss": val_loss,
+                "val_accuracy": val_metrics.get("accuracy", 0.0),
+            }
             print(
                 f"Epoch {epoch:3d} | Loss: {loss.item():.4f} | "
+                f"Val Loss: {val_loss:.4f} | "
                 f"Val Acc: {val_metrics.get('accuracy', 0.0):.4f}"
             )
 
@@ -118,6 +142,13 @@ def train(
             val=val_metrics,
             duration_seconds=epoch_duration,
         )
+
+        if stopper_metrics is not None and stopper.step(stopper_metrics, epoch=epoch):
+            print(
+                f"Early stopping at epoch {epoch}: {stopper.monitor} did not improve for "
+                f"{stopper.patience} evaluations"
+            )
+            break
 
     model.eval()
     with torch.no_grad():

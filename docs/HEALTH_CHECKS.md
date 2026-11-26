@@ -20,6 +20,10 @@ connection pool health checks from Issue #550.
 The legacy `GET /health` and `GET /health/*` endpoints are unchanged; nothing
 that points at them needs to move.
 
+The minimum v1 service health metrics are uptime, request failures, feature-computation failures, and the ingestion heartbeat.
+They are available through `/healthz` without any optional monitoring service.
+Absent optional dependencies do not change this baseline.
+
 ## Response envelope
 
 Every probe answers with the same JSON shape:
@@ -222,3 +226,5 @@ See `docker-compose.yml` extension fields (`x-graceful-shutdown`,
 - Pool internals: `astroml/db/pool_health.py`
 - Probe implementation: `api/routers/healthz.py`
 - Heartbeat check: `astroml/observability/ingestion.py`
+
+Health probes read cached state only and never trigger ingestion, training, or other expensive work.

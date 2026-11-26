@@ -342,13 +342,11 @@ class CustomValidator:
 3. Test with small, representative datasets first
 4. Monitor quality scores to detect trends
 
-## Future Enhancements
+## Roadmap
 
-Planned improvements to the data quality validation framework:
-
-1. **Machine Learning Validation**: Add ML-based anomaly detection
-2. **Real-time Validation**: Support for streaming data validation
-3. **Custom Rule Engine**: Allow user-defined validation rules
-4. **Performance Optimization**: Parallel processing for large datasets
-5. **Enhanced Reporting**: More detailed analytics and visualization
-6. **Integration**: Better integration with data pipeline monitoring tools
+Planned improvements to the data quality validation framework — ML-based
+anomaly detection, real-time validation, a custom rule engine, parallel
+processing, enhanced reporting, and pipeline monitoring integration — are
+**not yet supported**. They are tracked in the consolidated
+[ROADMAP.md](ROADMAP.md) so the onboarding path describes only what works
+today. See [Roadmap — Data quality validation](ROADMAP.md#data-quality-validation).

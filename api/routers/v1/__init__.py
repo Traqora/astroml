@@ -30,6 +30,7 @@ from api.routers.v1.notifications import router as notifications_router
 from api.routers.v1.onboarding import router as onboarding_router
 from api.routers.v1.query import router as query_router
 from api.routers.v1.rate_limit import router as rate_limit_router
+from api.routers.v1.readiness import router as readiness_router
 from api.routers.v1.recommendations import router as recommendations_router
 from api.routers.v1.reports import router as reports_router
 from api.routers.v1.search import router as search_router
@@ -71,6 +72,7 @@ __all__ = [
     "reports_router",
     "alerts_router",
     "query_router",
+    "readiness_router",
     "explanations_router",
     "agents_router",
     "cost_router",

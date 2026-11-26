@@ -43,6 +43,7 @@ from api.middleware.errors import (
     request_validation_exception_handler,
     unhandled_exception_handler,
 )
+from api.middleware.size_limit import ContentSizeLimitMiddleware
 from api.middleware.https import (
     HSTSMiddleware,
     HTTPSRedirectMiddleware,
@@ -82,6 +83,7 @@ from api.routers import (
     onboarding_router,
     query_router,
     rate_limit_router,
+    readiness_router,
     reports_router,
     search_router,
     stream_router,
@@ -295,10 +297,11 @@ app.add_middleware(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_credentials=True,
+    allow_credentials=settings.cors_credentials,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
+app.add_middleware(ContentSizeLimitMiddleware, max_body_size=settings.max_request_body_size)
 
 
 def _route_template(request: Request) -> str:
@@ -338,6 +341,7 @@ app.include_router(auth_router)
 app.include_router(audit_router)
 app.include_router(compliance_router)
 app.include_router(rate_limit_router)
+app.include_router(readiness_router)
 app.include_router(errors_router)
 app.include_router(contact_router)
 app.include_router(transactions_router)

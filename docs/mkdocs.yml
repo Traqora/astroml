@@ -22,16 +22,24 @@ plugins:
 nav:
   - Home: index.md
   - API Reference: api/index.md
+  - Supported v1 Inference API: v1-inference-api.md
+  - API Authentication: API_AUTHENTICATION.md
+  - API Errors: API_ERRORS.md
   - Model Registry: model-registry.md
   - Feature Store: FEATURE_STORE.md
   - Model Cards: models/index.md
   - Pipelines: pipelines/index.md
   - Contributor Roadmap: contributor-roadmap.md
+  - Which Workflows Need PostgreSQL: CI_DATABASE_REQUIREMENTS.md
+  - Roadmap: ROADMAP.md
+  - Troubleshooting: TROUBLESHOOTING.md
   - Runbooks:
     - PostgreSQL Disaster Recovery: runbooks/postgres_disaster_recovery.md
     - Disaster-Recovery Drill: runbooks/disaster_recovery_drill.md
   - Environment Drift: environment-drift.md
   - V1 Persistent Volumes: v1-persistent-volumes.md
+  - V1 Run Artifacts: run-artifacts.md
+  - V1 Errors: v1-errors.md
 
 markdown_extensions:
   - admonition

@@ -286,6 +286,11 @@ Verify your Python version before proceeding:
 python --version   # must print 3.10 or higher
 ```
 
+Before running quick start, create or use a PostgreSQL database and provide its
+connection through `config/database.yaml` or `ASTROML_DATABASE_URL`. The database
+must include the AstroML schema. Quick start does not require Redis, MLflow, the
+API server, or a GPU.
+
 ### Requirements files
 
 Several `requirements` files are provided — pick the profile that matches your workflow:
@@ -345,12 +350,17 @@ python -m astroml.quick_start
 python -m astroml.quick_start --num-ledgers 200 --num-accounts 100 --epochs 20 --seed 42
 ```
 
-### Option 3: Using CLI
+The canonical command is the top-level CLI module:
 
 ```bash
-# Run quick start command
 python -m astroml quickstart --num-ledgers 100 --num-accounts 50 --epochs 10 --seed 42
 ```
+
+Use `python -m astroml.cli quickstart --help` to verify the supported flags.
+The defaults are `--num-ledgers 100`, `--num-accounts 50`, `--epochs 10`, and
+`--seed 42`. Ledger, account, and epoch values must be greater than zero.
+Make is optional; `make quickstart` and `make quickstart-verbose` run the same
+CLI implementation.
 
 ### What Quick Start Does
 
@@ -540,6 +550,29 @@ For the supported v1 Docker Compose deployment profile, including named
 volumes, recovery procedures, and resource expectations, see
 [V1 Persistent Volumes](docs/v1-persistent-volumes.md).
 
+### Clean local reset
+
+For a repeatable reset of the v1 local workflow, use:
+
+```bash
+make reset-local
+```
+
+This stops and recreates the API, PostgreSQL, and Redis containers with
+`docker compose` while preserving PostgreSQL, Redis, feature-store, logs,
+models, and other named volumes. It does not start optional GPU, monitoring,
+production, development, or full-profile services.
+
+The destructive equivalent is not run accidentally:
+
+```bash
+make reset-local-data
+```
+
+The command requires an explicit `DELETE_LOCAL_USER_DATA` confirmation and
+removes named project volumes. Back up data first. Docker must be running and
+at least 2 CPU cores and 4 GB RAM are recommended for the core v1 stack.
+
 ---
 
 ## 🤖 LLM Agent Framework
@@ -704,12 +737,17 @@ service is unavailable.
 
 ## 📌 Roadmap
 
+The following are **not yet supported**; the consolidated list with status and
+notes lives in [docs/ROADMAP.md](docs/ROADMAP.md).
+
 - [ ] Real-time streaming ingestion
 - [ ] Temporal GNN models
 - [ ] Contrastive learning pipelines
-- [ ] Feature store
-- [ ] Model benchmarking suite
-- [ ] Docker deployment
+
+> The feature store, the model benchmarking suite, and Docker deployment were
+> previously listed here as to-dos. They have shipped — see
+> [docs/ROADMAP.md](docs/ROADMAP.md#already-supported-removed-from-the-to-do-list)
+> — and are no longer roadmap items.
 
 ---
 
@@ -728,4 +766,4 @@ Please open issues for bugs or feature requests.
 ## 📜 License
 
 MIT License
-<<<<<<
+<<<<<

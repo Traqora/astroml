@@ -426,6 +426,61 @@ class TestRegistryIntegration:
             engine.dispose()
 
 
+class TestEnvironment:
+    """Package versions are recorded with every run (issue #1217)."""
+
+    def test_the_current_environment_is_captured_by_default(self):
+        report = TrainingReport(FakeObjective())
+
+        environment = report.to_dict()["environment"]
+        assert environment["python"]
+        assert "pytest" not in environment["packages"]  # only the tracked set
+        assert set(environment["packages"]) >= {"astroml", "torch", "torch-geometric", "numpy"}
+
+    def test_an_installed_package_is_recorded_with_its_version(self):
+        from importlib import metadata
+
+        report = TrainingReport(FakeObjective())
+        assert report.to_dict()["environment"]["packages"]["numpy"] == metadata.version("numpy")
+
+    def test_an_explicit_environment_is_recorded_as_given(self):
+        environment = {"python": "3.0.0", "packages": {"torch": "9.9.9"}}
+        report = TrainingReport(FakeObjective(), environment=environment)
+
+        assert report.to_dict()["environment"] == environment
+
+    def test_an_empty_environment_records_nothing(self):
+        report = TrainingReport(FakeObjective(), environment={})
+        assert report.to_dict()["environment"] == {}
+
+    def test_the_report_does_not_alias_the_callers_mapping(self):
+        environment = {"packages": {"torch": "1.0"}}
+        report = TrainingReport(FakeObjective(), environment=environment)
+
+        environment["python"] = "changed"
+        report.to_dict()["environment"]["injected"] = True
+
+        assert "python" not in report.to_dict()["environment"]
+        assert "injected" not in report.to_dict()["environment"]
+
+    def test_the_environment_survives_the_registry_json_round_trip(self):
+        registry = FakeRegistry()
+        report = TrainingReport(FakeObjective(), environment={"packages": {"torch": "2.15.0"}})
+        report.record(1, train={"loss": 0.5})
+
+        report.persist(registry, 1)
+        stored = json.loads(json.dumps(registry.stored[1]))
+
+        assert stored["training_report"]["environment"] == {"packages": {"torch": "2.15.0"}}
+
+    def test_the_environment_does_not_leak_into_the_flat_summary_metrics(self):
+        report = TrainingReport(FakeObjective(), environment={"python": "3.14"})
+        report.record(1, train={"loss": 0.5})
+
+        assert "environment" not in report.summary_metrics()
+        assert all(isinstance(value, float) for value in report.summary_metrics().values())
+
+
 class TestRegistryMetricsPersistence:
     """Regression test for ``update_model_version_metrics`` (issue #738).
 
@@ -521,3 +576,10 @@ class TestRegistryMetricsPersistence:
         finally:
             reader.close()
             engine.dispose()
+
+
+def test_final_metrics_and_duration_are_reported():
+    report = TrainingReport(FakeObjective())
+    report.record(1, train={"loss": 0.5}, val={"auc": 0.7}, duration_seconds=2.0)
+    assert report.summary_metrics()["final_train_loss"] == 0.5
+    assert report.summary_metrics()["final_val_auc"] == 0.7

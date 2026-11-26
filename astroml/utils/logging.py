@@ -1,4 +1,4 @@
-"""Centralized structured logging configuration (issues #195, #334, #568).
+"""Centralized structured logging configuration (issues #195, #334, #568, #960).
 
 Standardized log fields:
 - timestamp (ISO 8601)
@@ -7,6 +7,10 @@ Standardized log fields:
 - message
 - request_id (from context)
 - feature_name / ledger_id / etc. (contextual fields)
+
+All fields pass through :func:`mask_pii` before being serialized, so common
+PII (emails, phone numbers, SSNs, API keys/tokens) is redacted regardless of
+which module produced the log record.
 """
 
 from __future__ import annotations
@@ -15,19 +19,60 @@ import contextvars
 import json
 import logging
 import os
+import re
 import sys
 import uuid
-from typing import Any
+from typing import Any, Final
 
 _DEFAULT_LEVEL = "INFO"
 _DEFAULT_FORMAT = "json"
 _TEXT_FORMAT = "%(asctime)s %(levelname)-7s %(name)s - %(message)s"
+_EXCEPTION_FORMATTER = logging.Formatter()
 
 _correlation_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "correlation_id", default=None
 )
 _module_log_levels: dict[str, str] = {}
 _CONFIGURED = False
+
+#: Regex patterns for the PII we redact from log output before it is
+#: serialized. Applied in order; each substitution runs on the already
+#: partially-redacted text so patterns should not overlap.
+_PII_PATTERNS: Final[list[tuple[str, re.Pattern[str]]]] = [
+    ("[EMAIL]", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),
+    ("[SSN]", re.compile(r"\b\d{3}-\d{2}-\d{4}\b")),
+    (
+        "[PHONE]",
+        re.compile(r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"),
+    ),
+    (
+        "[CREDIT_CARD]",
+        re.compile(r"\b(?:\d[ -]?){13,16}\d\b"),
+    ),
+]
+
+#: ``key=value`` / ``key: value`` pairs whose value looks like a credential.
+_CREDENTIAL_ASSIGNMENT: Final[re.Pattern[str]] = re.compile(
+    r"(?i)\b(api[_-]?key|apikey|token|secret|password|passwd|pwd)\b(\s*[:=]\s*)\S+"
+)
+
+
+def mask_pii(text: str) -> str:
+    """Redact common PII (emails, phone numbers, SSNs, credentials) from ``text``.
+
+    Args:
+        text: Raw string that may contain PII.
+
+    Returns:
+        ``text`` with recognized PII patterns replaced by ``[TYPE]``
+        placeholders. Non-string or empty input is returned unchanged.
+    """
+    if not text:
+        return text
+    masked = _CREDENTIAL_ASSIGNMENT.sub(r"\1\2[REDACTED]", text)
+    for placeholder, pattern in _PII_PATTERNS:
+        masked = pattern.sub(placeholder, masked)
+    return masked
 
 
 class StructuredJsonFormatter(logging.Formatter):
@@ -36,15 +81,21 @@ class StructuredJsonFormatter(logging.Formatter):
             "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
             "level": record.levelname,
             "logger": record.name,
-            "message": record.getMessage(),
+            "message": mask_pii(record.getMessage()),
         }
         request_id = _correlation_id.get()
         if request_id:
             payload["request_id"] = request_id
-        if record.exc_info:
-            payload["exception"] = self.formatException(record.exc_info)
+        exception_text = getattr(record, "exc_text", None)
+        if exception_text:
+            payload["exception"] = mask_pii(exception_text)
+        elif record.exc_info:
+            payload["exception"] = mask_pii(self.formatException(record.exc_info))
         for key, value in record.__dict__.items():
             if key in payload:
+                continue
+            if key.lower() in {"password", "api_key", "token", "authorization"}:
+                payload[key] = "***REDACTED***"
                 continue
             if key in {
                 "args",
@@ -71,11 +122,13 @@ class StructuredJsonFormatter(logging.Formatter):
                 "taskName",
             }:
                 continue
+            if isinstance(value, str):
+                value = mask_pii(value)
             try:
                 json.dumps(value)
                 payload[key] = value
             except (TypeError, ValueError):
-                payload[key] = repr(value)
+                payload[key] = mask_pii(repr(value))
         return json.dumps(payload, default=str)
 
 
@@ -88,6 +141,7 @@ def configure_logging(
     resolved_level = (level or os.environ.get("ASTROML_LOG_LEVEL") or _DEFAULT_LEVEL).upper()
     resolved_format = (format or os.environ.get("ASTROML_LOG_FORMAT") or _DEFAULT_FORMAT).lower()
     handler = logging.StreamHandler(stream=sys.stderr)
+    handler.addFilter(SecretRedactionFilter())
     if resolved_format == "json":
         handler.setFormatter(StructuredJsonFormatter())
     else:
@@ -153,11 +207,82 @@ class CorrelationId:
             _correlation_id.reset(self.token)
 
 
+#: Patterns for values that must never reach a log sink (issue #1245).
+#: Compiled once so the hot logging path only pays for a substitution when a
+#: marker is actually present.
+_SECRET_MARKERS = (
+    "bearer",
+    "ak_",
+    "eyj",
+    "password",
+    "passwd",
+    "secret",
+    "token",
+    "credential",
+    "api_key",
+    "apikey",
+    "private_key",
+    "private-key",
+    "authorization",
+    "@",
+)
+
+_SECRET_PATTERNS = (
+    (re.compile(r"(?i)(://[^:/\s]+:)[^@\s]+(@)"), r"\1[REDACTED]\2"),
+    (re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{6,}"), "Bearer [REDACTED]"),
+    (
+        re.compile(r"\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}"),
+        "[REDACTED]",
+    ),
+    (re.compile(r"\bak_[A-Za-z0-9_-]{6,}"), "[REDACTED]"),
+    (
+        re.compile(
+            r"(?i)\b(password|passwd|pwd|secret(?:[_-]?key)?|"
+            r"jwt[_-]?secret(?:[_-]?key)?|token|api[_-]?key|authorization|"
+            r"credential|private[_-]?key)(\s*[=:]\s*)([^\s,;]+)"
+        ),
+        r"\1\2[REDACTED]",
+    ),
+)
+
+
 def sanitize_log_value(value: str, max_length: int = 1000) -> str:
+    """Strip control characters, bound length and redact credentials.
+
+    The signature is unchanged from the original helper so every existing
+    caller gains redaction without modification. Non-secret values pass through
+    untouched apart from newline removal and truncation.
+    """
     s = str(value).replace("\r", "").replace("\n", "")
+    lowered = s.lower()
+    if any(marker in lowered for marker in _SECRET_MARKERS):
+        for pattern, replacement in _SECRET_PATTERNS:
+            s = pattern.sub(replacement, s)
     if len(s) > max_length:
         s = s[:max_length] + "..."
     return s
+
+
+class SecretRedactionFilter(logging.Filter):
+    """Sanitize every record before a handler formats it.
+
+    Attached once in :func:`configure_logging`, so both the JSON and text
+    formatters and all ``exc_info=True`` call sites are covered without
+    touching dozens of individual log statements.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            record.msg = sanitize_log_value(record.getMessage())
+            record.args = ()
+            if record.exc_info:
+                formatted = _EXCEPTION_FORMATTER.formatException(record.exc_info)
+                record.exc_text = sanitize_log_value(formatted)
+            elif record.exc_text:
+                record.exc_text = sanitize_log_value(record.exc_text)
+        except Exception:  # noqa: BLE001 - logging must never break the request
+            return True
+        return True
 
 
 __all__ = [
@@ -171,6 +296,8 @@ __all__ = [
     "CorrelationId",
     "correlation_id",
     "sanitize_log_value",
+    "SecretRedactionFilter",
+    "mask_pii",
 ]
 
 # Backward-compatible alias

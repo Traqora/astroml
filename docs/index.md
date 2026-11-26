@@ -25,8 +25,16 @@ AstroML is a comprehensive machine learning framework for the Stellar network, p
 ### Autonomous Agents
 - [LLM Agent Framework](agent-framework.md)
 
+### Roadmap & Operations
+- [Troubleshooting](TROUBLESHOOTING.md)
+- [Which workflows need PostgreSQL](CI_DATABASE_REQUIREMENTS.md)
+- [Roadmap](ROADMAP.md)
+
 ### Configuration & Experiments
 - [Configuration Reference](CONFIGURATION.md)
+- [V1 Run Artifacts](run-artifacts.md)
+- [V1 Errors](v1-errors.md)
+- [V1 Baseline Model](v1-baseline-model.md)
 - [Experiment Configuration](experiment-configs.md)
 - [Hydra Config Management (ADR 004)](adr/004-hydra-config-management.md)
 
@@ -44,6 +52,9 @@ AstroML is a comprehensive machine learning framework for the Stellar network, p
 - [GitOps Workflow](gitops-workflow.md)
 
 ### Operations
+- [Supported v1 Inference API](v1-inference-api.md)
+- [API Authentication for Deployed Inference](API_AUTHENTICATION.md)
+- [API Errors and Operator Actions](API_ERRORS.md)
 - [Alerting](ALERTING.md)
 - [Health Checks](HEALTH_CHECKS.md)
 - [Metrics Reference](METRICS_REFERENCE.md)

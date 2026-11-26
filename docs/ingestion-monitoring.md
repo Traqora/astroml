@@ -6,6 +6,10 @@ monitor backfills and detect stalls.
 Each ingestion batch logs its duration and accepted/rejected record counts at INFO level.
 A batch that fails validation logs the same counts with an ERROR before ingestion stops.
 
+Both ingestion and training logs carry a `run_id` field so records from one v1 workflow run can be correlated.
+The identifier is created when the run starts and is reused unchanged by every stage.
+It is a plain string that can be indexed or filtered without optional services.
+
 ## Heartbeat check
 
 `astroml.observability.ingestion.check_ingestion_heartbeat` compares the

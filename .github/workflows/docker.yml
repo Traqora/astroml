@@ -44,3 +44,20 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Verify non-root runtime user (api image)
+        # Build api/Dockerfile locally on every event so the check always targets
+        # the API service image, not the root ./Dockerfile image (issue #1249).
+        run: |
+          docker build -t astroml-api-user-check -f api/Dockerfile .
+          RUNTIME_USER=$(docker run --rm --entrypoint id astroml-api-user-check -u)
+          docker rmi astroml-api-user-check >/dev/null 2>&1 || true
+          if [ "$RUNTIME_USER" = '0' ]; then
+            echo "FAIL: api image runs as root (uid=0)"
+            exit 1
+          fi
+          if [ "$RUNTIME_USER" != '1000' ]; then
+            echo "FAIL: api image runtime user uid=$RUNTIME_USER, expected 1000"
+            exit 1
+          fi
+          echo "PASS: api image runtime user uid=$RUNTIME_USER"

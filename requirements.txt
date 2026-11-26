@@ -31,6 +31,7 @@ hydra-core>=1.3.0
 omegaconf>=2.3.0
 
 # ── Security ────────────────────────────────────────────────────────────────
+# Backup encryption at rest (#958, #965): Fernet for backup archives.
 cryptography>=42.0.0
 
 # ── Networking / ingestion ─────────────────────────────────────────────────

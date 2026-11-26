@@ -13,11 +13,10 @@ from astroml.utils.exceptions import AstroMLError
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     import torch.nn as nn
+    from api.models.orm import ModelRegistry
 
-
-from api.models.orm import ModelRegistry
-from astroml.db.session import get_session
 from astroml.storage import ArtifactStore, create_artifact_store
+from astroml.utils.exceptions import AstroMLError
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +78,11 @@ class MLflowTracker:
                 "Install it with: pip install mlflow"
             )
             self.enabled = False
+            return
+        except Exception as exc:
+            logger.warning("MLflow unavailable; tracking disabled: %s", exc)
+            self.enabled = False
+            self._run = None
             return
 
         # Initialize artifact store if provided
@@ -273,6 +277,9 @@ class MLflowTracker:
             logger.warning("MLflow not enabled, skipping model registration")
             return None
 
+        from api.models.orm import ModelRegistry
+        from astroml.db.session import get_session
+
         db = get_session()
         try:
             # Sync metrics from MLflow run
@@ -338,6 +345,9 @@ class MLflowTracker:
         if not self.enabled:
             logger.warning("MLflow not enabled, cannot load run metadata")
             return None
+
+        from api.models.orm import ModelRegistry
+        from astroml.db.session import get_session
 
         db = get_session()
         try:

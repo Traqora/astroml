@@ -1,4 +1,30 @@
-"""FastAPI exception handlers emitting RFC 7807 problem+json responses."""
+"""FastAPI exception handlers emitting RFC 7807 problem+json responses.
+
+Validation error response shape (v1)
+-------------------------------------
+When a ``RequestValidationError`` is raised (HTTP 422), the ``details``
+array contains one item per field error, each with this shape::
+
+    {
+        "field":   "address.zip",   # dot-separated field path string
+        "message": "...",           # human-readable description
+        "code":    "missing"        # Pydantic error type string
+    }
+
+``field`` construction rules:
+
+- Pydantic provides a ``loc`` tuple of mixed ``str`` / ``int`` segments,
+  e.g. ``("body", "address", "zip")`` or ``("body", "items", 0)``.
+- Leading source-sentinel tokens (``"body"``, ``"query"``, ``"path"``,
+  ``"header"``) are stripped; they describe the input source, not the
+  field path.  ``("body", "email")`` → ``"email"``.
+- If the ``loc`` is empty after stripping, ``"__root__"`` is used.
+- Integer segments (list indices) are stringified: ``("body", "items", 0)``
+  → ``"items.0"``.
+
+``code`` values come directly from Pydantic's error ``type`` strings
+(e.g. ``"string_too_short"``, ``"missing"``, ``"int_parsing"``).
+"""
 
 from __future__ import annotations
 
@@ -9,6 +35,24 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from api.schemas.errors import PROBLEM_CONTENT_TYPE, problem_detail
+
+
+_LOCATION_SENTINELS = {"body", "query", "path", "header"}
+
+
+def _normalize_loc(loc: tuple | list) -> str:
+    """Convert a Pydantic ``loc`` tuple into a dot-separated field path.
+
+    The leading source-sentinel token (``"body"``, ``"query"``, ``"path"``,
+    or ``"header"``), if present, is stripped.  Integer segments (list
+    indices) are stringified.  Returns ``"__root__"`` when no segments
+    remain after stripping.
+    """
+    segments = list(loc)
+    if segments and segments[0] in _LOCATION_SENTINELS:
+        segments = segments[1:]
+    filtered = [str(s) for s in segments]
+    return ".".join(filtered) if filtered else "__root__"
 
 
 def _http_error_code(status_code: int) -> str:
@@ -57,9 +101,9 @@ async def request_validation_exception_handler(
     """Return validation errors with stable top-level keys."""
     details = [
         {
-            "loc": list(error.get("loc", [])),
+            "field": _normalize_loc(error.get("loc", ())),
             "message": error.get("msg", "Invalid request"),
-            "type": error.get("type", "validation_error"),
+            "code": error.get("type", "validation_error"),
         }
         for error in exc.errors()
     ]

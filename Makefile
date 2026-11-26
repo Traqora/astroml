@@ -1,4 +1,4 @@
-.PHONY: help quickstart test test-api lint lint-docs format clean install run-api canary-deploy canary-promote rollback-llm dependency-tree llm-test llm-eval llm-cost-check llm-validate-prompts llm-safety-scan security-audit secrets-scan complexity
+.PHONY: help quickstart test test-api lint lint-docs format clean reset-local reset-local-data install run-api canary-deploy canary-promote rollback-llm dependency-tree llm-test llm-eval llm-cost-check llm-validate-prompts llm-safety-scan security-audit secrets-scan complexity
 
 help:
 	@echo "AstroML Development Commands"
@@ -16,6 +16,8 @@ help:
 	@echo "make install             Install development dependencies"
 	@echo "make dependency-tree     Print the resolved dependency tree (pipdeptree)"
 	@echo "make clean               Clean build artifacts and cache"
+	@echo "make reset-local         Safely reset containers; preserve named volumes"
+	@echo "make reset-local-data    Reset containers and explicitly delete local data"
 	@echo "make run-api             Start the FastAPI dev server on localhost:8000"
 	@echo "make canary-deploy       Deploy LLM canary to Kubernetes"
 	@echo "make canary-promote      Promote canary to stable"
@@ -31,10 +33,10 @@ help:
 	@echo ""
 
 quickstart:
-	python -m astroml.quick_start
+	python -m astroml.cli quickstart
 
 quickstart-verbose:
-	python -m astroml.quick_start --num-ledgers 200 --num-accounts 100 --epochs 20
+	python -m astroml.cli quickstart --num-ledgers 200 --num-accounts 100 --epochs 20
 
 test:
 	pytest tests/ -v --continue-on-collection-errors
@@ -84,6 +86,12 @@ clean:
 	find . -type f -name "*.pyc" -delete
 	rm -rf .pytest_cache .mypy_cache build/ dist/ *.egg-info
 	rm -rf benchmark_results/quickstart .astroml_state_quickstart
+
+reset-local:
+	@bash scripts/reset-local.sh
+
+reset-local-data:
+	@bash scripts/reset-local.sh --destroy-user-data
 
 install:
 	pip install -e "[dev]"

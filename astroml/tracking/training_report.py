@@ -33,6 +33,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
+from astroml.utils.environment import collect_environment
+
 logger = logging.getLogger(__name__)
 
 __all__ = ["EpochRecord", "TrainingReport"]
@@ -98,6 +100,10 @@ class TrainingReport:
             registry row; beyond the cap the report keeps the first and the
             most recent epochs and records how many were dropped, which is
             what a convergence curve actually needs.
+        environment: Interpreter, platform and package versions to store with the
+            run (issue #1217). Defaults to a snapshot of the current process taken
+            when the report is created, which is when the run starts. Pass a
+            mapping to record a specific environment, or ``{}`` to record none.
     """
 
     def __init__(
@@ -107,6 +113,7 @@ class TrainingReport:
         monitor: str | None = None,
         higher_is_better: bool | None = None,
         max_epochs_retained: int = 500,
+        environment: Mapping[str, Any] | None = None,
     ) -> None:
         if max_epochs_retained < 2:
             raise ValueError("max_epochs_retained must be at least 2")
@@ -123,6 +130,9 @@ class TrainingReport:
         self._records: list[EpochRecord] = []
         self._dropped = 0
         self._started_at = datetime.now(timezone.utc)
+        self.environment: dict[str, Any] = (
+            collect_environment() if environment is None else dict(environment)
+        )
 
     # -- recording ----------------------------------------------------------
 
@@ -221,6 +231,7 @@ class TrainingReport:
             "monitor": self.monitor,
             "higher_is_better": self.higher_is_better,
             "started_at": self._started_at.isoformat(),
+            "environment": dict(self.environment),
             "epochs_recorded": len(self._records) + self._dropped,
             "epochs_retained": len(self._records),
             "epochs_dropped": self._dropped,

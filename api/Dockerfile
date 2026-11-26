@@ -17,8 +17,10 @@ RUN apt-get update && apt-get install -y \
 # — this build context intentionally keeps using the file directly.
 COPY api/requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --user -r requirements.txt
+# Install Python dependencies into a virtualenv to avoid root-relative paths
+RUN python -m venv /opt/venv
+ENV PATH=/opt/venv/bin:$PATH
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Stage 2: Runtime stage
 FROM python:3.11-slim
@@ -31,19 +33,23 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Python packages from builder stage
-COPY --from=builder /root/.local /root/.local
+# Create non-root user and group for runtime security (issue #1249)
+RUN groupadd --gid 1000 appgroup && \
+    useradd --uid 1000 --gid 1000 --create-home --shell /bin/false appuser
 
-# Make sure scripts in .local are usable
-ENV PATH=/root/.local/bin:$PATH
+# Copy virtualenv from builder stage (no root-relative paths)
+COPY --from=builder --chown=appuser:appgroup /opt/venv /opt/venv
+
+# Make sure scripts in the venv are usable
+ENV PATH=/opt/venv/bin:$PATH
 
 # Copy application code
-COPY api/ ./api/
-COPY astroml/ ./astroml/
-COPY migrations/ ./migrations/
+COPY --chown=appuser:appgroup api/ ./api/
+COPY --chown=appuser:appgroup astroml/ ./astroml/
+COPY --chown=appuser:appgroup migrations/ ./migrations/
 
-# Create logs directory
-RUN mkdir -p /app/logs
+# Create logs directory and ensure /app itself is owned by appuser
+RUN mkdir -p /app/logs && chown appuser:appgroup /app /app/logs
 
 # Expose ports
 EXPOSE 8000 8443
@@ -51,6 +57,9 @@ EXPOSE 8000 8443
 # Health check — readiness probe (issue #775, #569)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8000/healthz/ready || exit 1
+
+# Switch to non-root user before running (issue #1249)
+USER appuser
 
 # Run the application
 # For production with HTTPS, set environment variables:

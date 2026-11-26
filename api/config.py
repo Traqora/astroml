@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,9 +18,20 @@ class Settings(BaseSettings):
     api_reload: bool = False
     api_version: str = "1.0.0"
 
-    # CORS — allow Vite dev server by default
-    # In production, set CORS_ORIGINS environment variable to comma-separated list
-    cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    # CORS — deny all by default; set CORS_ORIGINS in production/dev .env
+    # e.g. CORS_ORIGINS=https://app.example.com,https://admin.example.com
+    cors_origins: list[str] = []
+    cors_credentials: bool = False
+
+    @model_validator(mode="after")
+    def _cors_wildcard_credentials_guard(self) -> "Settings":
+        if "*" in self.cors_origins and self.cors_credentials:
+            raise ValueError(
+                "cors_origins=['*'] combined with cors_credentials=True is not allowed. "
+                "Browsers reject credentialed requests to wildcard origins; "
+                "set explicit origins or disable cors_credentials."
+            )
+        return self
 
     # Content Security Policy
     csp_report_only: bool = True  # Use report-only mode in development
@@ -74,6 +86,11 @@ class Settings(BaseSettings):
     # LLM Settings (issue #440)
     llm_provider: str = "openai"
     llm_encryption_key: str = "change-me-in-production-llm-key-32b"
+
+    # Request / pagination limits (issue #1247)
+    max_request_body_size: int = 10 * 1024 * 1024  # 10 MB; env var MAX_REQUEST_BODY_SIZE
+    max_page_size: int = 100  # env var MAX_PAGE_SIZE
+    default_page_size: int = 20  # env var DEFAULT_PAGE_SIZE
 
 
 settings = Settings()

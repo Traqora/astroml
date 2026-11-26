@@ -16,18 +16,22 @@ The active model version from the registry takes precedence over
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import Date, cast, func, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from api.database import get_sync_db
+from api.auth.features import AccountFeatureContext, require_account_feature
+from api.config import settings
 from api.graphql import publish_fraud_alert
-from api.models.orm import ApiTransaction, FraudAlert
+from api.models.orm import ApiAccount, ApiTransaction, FraudAlert
 from api.schemas import (
     FraudAlertOut,
     FraudAlertsResponse,
@@ -42,6 +46,7 @@ from api.schemas import (
 )
 from api.services.alert_prioritization import alert_prioritizer
 from api.services.scorer import invalidate_scorer_cache, load_scorer
+from api.timeouts import set_sync_db_timeout
 from astroml.llm.explainer import FraudExplainer
 
 logger = logging.getLogger(__name__)
@@ -58,7 +63,12 @@ def _get_scorer():
 
 
 @router.post("/score", response_model=ScoreResponse)
-async def score_accounts(body: ScoreRequest):
+async def score_accounts(
+    body: ScoreRequest,
+    _account: Union[ApiAccount, AccountFeatureContext] = Depends(
+        require_account_feature("baseline_predictions")
+    ),
+):
     """Score up to 50 accounts for anomaly/fraud risk."""
     scorer = _get_scorer()
     if scorer is None:
@@ -90,13 +100,22 @@ def get_fraud_alerts(
     db: Session = Depends(get_sync_db),
 ):
     """Return paginated fraud alerts, optionally filtered by risk level."""
+    set_sync_db_timeout(db, settings.db_query_timeout_seconds)
     q = select(FraudAlert)
     if risk_level:
         q = q.where(FraudAlert.risk_level == risk_level)
     q = q.order_by(FraudAlert.detected_at.desc())
 
-    total = db.scalar(select(func.count()).select_from(q.subquery())) or 0
-    rows = db.scalars(q.offset((page - 1) * page_size).limit(page_size)).all()
+    try:
+        total = db.scalar(select(func.count()).select_from(q.subquery())) or 0
+        rows = db.scalars(q.offset((page - 1) * page_size).limit(page_size)).all()
+    except OperationalError as exc:
+        if "timeout" in str(exc).lower():
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "DB_TIMEOUT", "message": "Database query timed out", "details": {}},
+            ) from exc
+        raise
     return FraudAlertsResponse(
         data=[FraudAlertOut.model_validate(r) for r in rows],
         page=page,
@@ -108,24 +127,33 @@ def get_fraud_alerts(
 @router.get("/stats", response_model=FraudStatsResponse)
 def get_fraud_stats(db: Session = Depends(get_sync_db)):
     """Return aggregated fraud statistics."""
+    set_sync_db_timeout(db, settings.db_query_timeout_seconds)
 
     def _count(level: str) -> int:
         return (
             db.scalar(select(func.count(FraudAlert.id)).where(FraudAlert.risk_level == level)) or 0
         )
 
-    total = db.scalar(select(func.count(FraudAlert.id))) or 0
-    recent = db.scalars(select(FraudAlert).order_by(FraudAlert.detected_at.desc()).limit(10)).all()
+    try:
+        total = db.scalar(select(func.count(FraudAlert.id))) or 0
+        recent = db.scalars(select(FraudAlert).order_by(FraudAlert.detected_at.desc()).limit(10)).all()
 
-    daily = db.execute(
-        select(
-            cast(FraudAlert.detected_at, Date).label("day"),
-            func.avg(FraudAlert.risk_score).label("avg_score"),
-        )
-        .group_by("day")
-        .order_by("day")
-        .limit(14)
-    ).all()
+        daily = db.execute(
+            select(
+                cast(FraudAlert.detected_at, Date).label("day"),
+                func.avg(FraudAlert.risk_score).label("avg_score"),
+            )
+            .group_by("day")
+            .order_by("day")
+            .limit(14)
+        ).all()
+    except OperationalError as exc:
+        if "timeout" in str(exc).lower():
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "DB_TIMEOUT", "message": "Database query timed out", "details": {}},
+            ) from exc
+        raise
 
     return FraudStatsResponse(
         total_alerts=total,
@@ -142,17 +170,26 @@ def get_fraud_stats(db: Session = Depends(get_sync_db)):
 @router.get("/{id}/explanation", response_model=FraudExplanationOut)
 def get_fraud_explanation(id: int, db: Session = Depends(get_sync_db)):
     """Generate an explanation for a fraud alert, citing evidence."""
-    alert = db.get(FraudAlert, id)
-    if not alert:
-        raise HTTPException(status_code=404, detail="Alert not found")
+    set_sync_db_timeout(db, settings.db_query_timeout_seconds)
+    try:
+        alert = db.get(FraudAlert, id)
+        if not alert:
+            raise HTTPException(status_code=404, detail="Alert not found")
 
-    # Fetch recent transactions as evidence
-    txs = db.scalars(
-        select(ApiTransaction)
-        .where(ApiTransaction.source_account == alert.account_id)
-        .order_by(ApiTransaction.created_at.desc())
-        .limit(10)
-    ).all()
+        # Fetch recent transactions as evidence
+        txs = db.scalars(
+            select(ApiTransaction)
+            .where(ApiTransaction.source_account == alert.account_id)
+            .order_by(ApiTransaction.created_at.desc())
+            .limit(10)
+        ).all()
+    except OperationalError as exc:
+        if "timeout" in str(exc).lower():
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "DB_TIMEOUT", "message": "Database query timed out", "details": {}},
+            ) from exc
+        raise
 
     tx_dicts = [
         {
@@ -167,13 +204,28 @@ def get_fraud_explanation(id: int, db: Session = Depends(get_sync_db)):
 
     start_time = time.time()
 
-    explanation = explainer.generate_explanation(
-        alert_id=alert.id,
-        account_id=alert.account_id,
-        pattern=alert.pattern or "unknown",
-        score=alert.risk_score,
-        transactions=tx_dicts,
-    )
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(
+            explainer.generate_explanation,
+            alert_id=alert.id,
+            account_id=alert.account_id,
+            pattern=alert.pattern or "unknown",
+            score=alert.risk_score,
+            transactions=tx_dicts,
+        )
+        try:
+            explanation = future.result(timeout=settings.llm_timeout_seconds)
+        except concurrent.futures.TimeoutError:
+            future.cancel()
+            logger.warning(
+                "LLM explanation timed out after %ds for alert %d",
+                settings.llm_timeout_seconds,
+                id,
+            )
+            raise HTTPException(
+                status_code=504,
+                detail={"code": "UPSTREAM_TIMEOUT", "message": "LLM service timed out", "details": {}},
+            )
 
     end_time = time.time()
     elapsed_ms = (end_time - start_time) * 1000.0
@@ -195,12 +247,21 @@ def get_prioritized_alerts(
     db: Session = Depends(get_sync_db),
 ):
     """Get prioritized, deduplicated fraud alerts."""
-    # Fetch recent alerts
-    alerts = db.scalars(
-        select(FraudAlert)
-        .order_by(FraudAlert.detected_at.desc())
-        .limit(limit * 2)  # Fetch extra to account for deduplication
-    ).all()
+    set_sync_db_timeout(db, settings.db_query_timeout_seconds)
+    try:
+        # Fetch recent alerts
+        alerts = db.scalars(
+            select(FraudAlert)
+            .order_by(FraudAlert.detected_at.desc())
+            .limit(limit * 2)  # Fetch extra to account for deduplication
+        ).all()
+    except OperationalError as exc:
+        if "timeout" in str(exc).lower():
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "DB_TIMEOUT", "message": "Database query timed out", "details": {}},
+            ) from exc
+        raise
 
     total_processed = len(alerts)
 

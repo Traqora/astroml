@@ -608,3 +608,186 @@ Refer to:
 - astroml/quick_start.py - Implementation details
 - astroml/benchmarking/core.py - Benchmark framework
 - astroml/cli.py - CLI integration
+
+
+## Account Features (V1 API)
+
+The V1 API enforces per-account feature gating. Each account has an `enabled_features` list; a request to a gated endpoint is rejected with `403 FEATURE_NOT_ENABLED` when the required feature is absent. This is a **deny-by-default** posture — a new account with no features set cannot call any gated endpoint.
+
+### Feature-to-endpoint map
+
+| Feature name | Gated endpoints |
+|---|---|
+| `health` | `GET /health/db`, `GET /health/db/pool`, `GET /health/db/status` |
+| `model_readiness` | `GET /api/v1/models/{id}`, `POST /api/v1/models/{id}/activate`, `GET /api/v1/models/{id}/metrics` |
+| `baseline_predictions` | `POST /api/v1/fraud/score` |
+
+Basic liveness/readiness probes (`GET /health`, `/health/readiness`, `/health/liveness`) are **not** gated.
+
+### Enabling features for an account (admin only)
+
+```http
+PUT /api/v1/accounts/{public_key}/features
+Authorization: Bearer <admin-token>
+Content-Type: application/json
+
+{
+  "enabled_features": ["health", "model_readiness", "baseline_predictions"]
+}
+```
+
+**200 response:**
+
+```json
+{
+  "public_key": "GABC...",
+  "enabled_features": ["health", "model_readiness", "baseline_predictions"]
+}
+```
+
+Passing an empty list removes all features. The `ApiAccount` row must already exist (created by the ingestion pipeline). Use `GET /api/v1/accounts/{public_key}` to confirm the account exists before calling this endpoint.
+
+### Error responses
+
+**403 — feature not enabled:**
+
+```json
+{
+  "type": "https://astroml.dev/problems/FEATURE_NOT_ENABLED",
+  "title": "The 'baseline_predictions' feature is not enabled for account 'GABC...'.",
+  "status": 403,
+  "code": "FEATURE_NOT_ENABLED",
+  "detail": "The 'baseline_predictions' feature is not enabled for account 'GABC...'.",
+  "instance": "/api/v1/fraud/score",
+  "details": {
+    "feature": "baseline_predictions",
+    "enabled_features": ["health"]
+  }
+}
+```
+
+**404 — account not found (feature dependency):**
+
+```json
+{
+  "type": "https://astroml.dev/problems/ACCOUNT_NOT_FOUND",
+  "title": "No account found for user 'mykey'.",
+  "status": 404,
+  "code": "ACCOUNT_NOT_FOUND",
+  "detail": "No account found for user 'mykey'.",
+  "instance": "/api/v1/models/1",
+  "details": { "subject": "mykey" }
+}
+```
+
+**422 — unknown feature name in management request:**
+
+```json
+{
+  "type": "https://astroml.dev/problems/VALIDATION_ERROR",
+  "title": "Unknown feature name(s): ['turbo_mode'].",
+  "status": 422,
+  "code": "VALIDATION_ERROR",
+  "detail": "Unknown feature name(s): ['turbo_mode'].",
+  "instance": "/api/v1/accounts/GABC.../features",
+  "details": {
+    "unknown_features": ["turbo_mode"],
+    "known_features": ["baseline_predictions", "health", "model_readiness"]
+  }
+}
+```
+
+### Local development (AUTH_ENABLED=false)
+
+When `AUTH_ENABLED=false` (the default in local dev and tests), the feature check is bypassed and all features are treated as enabled. No `ApiAccount` row is required.
+
+
+## Request Timeouts (V1 API)
+
+All V1 endpoints that make database or external service calls enforce configurable timeouts. When a call exceeds its limit the endpoint returns a structured RFC 7807 error response.
+
+### Environment variables
+
+| Variable | Default | Range | Applies to |
+|---|---|---|---|
+| `DB_QUERY_TIMEOUT_SECONDS` | `5` | 1–300 | All gated DB queries (health DB endpoints, model readiness, fraud alerts/stats/explanation) |
+| `LLM_TIMEOUT_SECONDS` | `30` | 1–300 | `GET /api/v1/fraud/{id}/explanation` LLM call |
+| `EXTERNAL_HTTP_TIMEOUT_SECONDS` | `10` | 1–300 | Reserved for future outbound HTTP calls; no V1 endpoint uses this yet |
+
+Values outside the 1–300 range cause a `ValidationError` at startup and the app will not start.
+
+### Error responses
+
+**503 — database query timed out:**
+
+```json
+{
+  "type": "https://astroml.dev/problems/DB_TIMEOUT",
+  "title": "Database query timed out",
+  "status": 503,
+  "code": "DB_TIMEOUT",
+  "detail": "Database query timed out",
+  "instance": "/health/db",
+  "details": {}
+}
+```
+
+**504 — LLM service timed out:**
+
+```json
+{
+  "type": "https://astroml.dev/problems/UPSTREAM_TIMEOUT",
+  "title": "LLM service timed out",
+  "status": 504,
+  "code": "UPSTREAM_TIMEOUT",
+  "detail": "LLM service timed out",
+  "instance": "/api/v1/fraud/42/explanation",
+  "details": {}
+}
+```
+
+### Gated endpoints
+
+| Endpoint | Timeout type |
+|---|---|
+| `GET /health/db`, `GET /health/db/pool`, `GET /health/db/status` | `DB_QUERY_TIMEOUT_SECONDS` |
+| `GET /health/readiness` | `DB_QUERY_TIMEOUT_SECONDS` |
+| `GET /api/v1/models/{id}`, `POST /api/v1/models/{id}/activate`, `GET /api/v1/models/{id}/metrics` | `DB_QUERY_TIMEOUT_SECONDS` |
+| `GET /api/v1/fraud/alerts`, `GET /api/v1/fraud/stats`, `GET /api/v1/fraud/alerts/prioritized` | `DB_QUERY_TIMEOUT_SECONDS` |
+| `GET /api/v1/fraud/{id}/explanation` (DB queries) | `DB_QUERY_TIMEOUT_SECONDS` |
+| `GET /api/v1/fraud/{id}/explanation` (LLM call) | `LLM_TIMEOUT_SECONDS` |
+
+The DB timeout is enforced at the PostgreSQL level via `SET LOCAL statement_timeout`. It is a no-op on SQLite (used in local dev and tests).
+
+
+## Running the V1 API Locally
+
+### Start command
+
+```bash
+make run-api
+# equivalent to:
+uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload
+```
+
+For a no-config local run with SQLite and no auth:
+
+```bash
+AUTH_ENABLED=false DISABLE_SCHEDULER=true uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload
+```
+
+The API is ready when the console shows `Application startup complete.` Docs are at http://localhost:8000/docs.
+
+### Sample requests
+
+| Endpoint | Method | Feature required | No-auth default |
+|---|---|---|---|
+| `/health` | GET | None | `200 {"status":"ok"}` |
+| `/health/readiness` | GET | None | `200 {"status":"ready"}` |
+| `/health/db` | GET | `health` | `200` or `503 DB_TIMEOUT` |
+| `/api/v1/models` | GET | None | `200 {"data":[],...}` |
+| `/api/v1/models/{id}` | GET | `model_readiness` | `200` or `404` |
+| `/api/v1/fraud/score` | POST | `baseline_predictions` | `200 {"scores":{...}}` |
+| `/api/v1/fraud/alerts` | GET | None | `200 {"data":[],...}` |
+
+See [`docs/v1-local-run.md`](docs/v1-local-run.md) for full curl examples and expected responses.

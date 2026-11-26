@@ -67,10 +67,15 @@ class ApiAccount(Base):
     balance: Mapped[Optional[float]] = mapped_column(Numeric)
     home_domain: Mapped[Optional[str]] = mapped_column(String(253))
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    user_id: Mapped[Optional[int]] = mapped_column(_ID, nullable=True, unique=True)
+    enabled_features: Mapped[Optional[list]] = mapped_column(
+        JSON().with_variant(JSONB(), "postgresql"), nullable=True
+    )
 
     __table_args__ = (
         Index("ix_api_accounts_public_key", "public_key"),
         Index("ix_api_accounts_last_active", "last_active"),
+        Index("ix_api_accounts_user_id", "user_id"),
     )
 
 

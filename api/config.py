@@ -86,6 +86,9 @@ class Settings(BaseSettings):
     # LLM Settings (issue #440)
     llm_provider: str = "openai"
     llm_encryption_key: str = "change-me-in-production-llm-key-32b"
+    db_query_timeout_seconds: int = Field(5, ge=1, le=300)
+    external_http_timeout_seconds: int = Field(10, ge=1, le=300)  # TODO(#1231): Wire to actual outbound HTTP calls when added to V1 endpoints. Any V1 endpoint that makes outbound HTTP calls MUST use settings.external_http_timeout_seconds at that call site and add a corresponding test.
+    llm_timeout_seconds: int = Field(30, ge=1, le=300)
 
     # Request / pagination limits (issue #1247)
     max_request_body_size: int = 10 * 1024 * 1024  # 10 MB; env var MAX_REQUEST_BODY_SIZE

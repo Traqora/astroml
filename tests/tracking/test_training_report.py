@@ -576,3 +576,10 @@ class TestRegistryMetricsPersistence:
         finally:
             reader.close()
             engine.dispose()
+
+
+def test_final_metrics_and_duration_are_reported():
+    report = TrainingReport(FakeObjective())
+    report.record(1, train={"loss": 0.5}, val={"auc": 0.7}, duration_seconds=2.0)
+    assert report.summary_metrics()["final_train_loss"] == 0.5
+    assert report.summary_metrics()["final_val_auc"] == 0.7

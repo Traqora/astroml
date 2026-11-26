@@ -94,6 +94,9 @@ class StructuredJsonFormatter(logging.Formatter):
         for key, value in record.__dict__.items():
             if key in payload:
                 continue
+            if key.lower() in {"password", "api_key", "token", "authorization"}:
+                payload[key] = "***REDACTED***"
+                continue
             if key in {
                 "args",
                 "asctime",

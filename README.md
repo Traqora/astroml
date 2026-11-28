@@ -694,21 +694,7 @@ python -m astroml.training.train_gcn
 ## 🔬 Research Goals
 
 AstroML emphasizes:
-
-- Reproducibility
-- Modular experimentation
-- Scalable ingestion
-- Temporal graph learning
-- Production-ready ML pipelines
-
----
-
-## 🛠 Tech Stack
-
-- Python
-- PyTorch / PyTorch Geometric
-- PostgreSQL
-- NetworkX / graph tooling
+graph tooling
 
 ---
 
@@ -765,5 +751,4 @@ Please open issues for bugs or feature requests.
 
 ## 📜 License
 
-MIT License
-<<<<<
+MIT
